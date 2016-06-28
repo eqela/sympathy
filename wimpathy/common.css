@@ -1,0 +1,30 @@
+* {
+	margin: 0px;
+}
+
+body {
+	margin: 0px;
+	background: white;
+	color: black;
+	font-family: arial;
+	text-align: justify;
+	background: #FFFFFF;
+}
+
+#padget_content {
+	font-size: 20px;
+	padding-top: 48px;
+	padding-bottom: 48px;
+	width: 1024px;
+	margin: auto;
+}
+
+@media only screen and (max-width: 1040px) {
+	#padget_content {
+		width: 100%;
+		margin: 0;
+		padding-left: 8px;
+		padding-right: 8px;
+		box-sizing: border-box;
+	}
+}
