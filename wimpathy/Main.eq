@@ -68,30 +68,40 @@ public class Main : SympathyWebSiteApplicationWithUserDatabase
 		if(base.initialize() == false) {
 			return(false);
 		}
+		var themedir = get_datadir_file("theme");
+		var theme = WikiTheme.read(themedir, get_logger());
+		if(theme == null) {
+			log_warning("Failed to read wiki theme in directory: `%s'. Your site will not look good.".printf().add(themedir));
+			theme = new WikiTheme();
+		}
+		wikihandler.set_theme(theme);
 		backend = WikiDirectoryBackend.for_directory(get_datadir_file("wiki"));
+		backend.set_theme_directory(themedir);
 		userdb = UserDatabase.for_db(SQLiteDatabase.for_file(get_datadir_file("users.sqlite"), false, get_logger()));
 		if(userdb == null) {
-			log_error("No user database `users' found in data directory `%s'. Use symwikiadmin to initialize a wiki.".printf().add(get_datadir()));
-			return(false);
+			log_warning("No user database `users' found in data directory `%s'. Disabling API features.".printf().add(get_datadir()));
 		}
-		var apihandler = new HTTPRequestHandlerContainer();
-		apihandler.set_root_handler(StaticContentHandler.for_response(HTTPResponse.for_html_string("API")));
-		apihandler.set_default_handler(StaticContentHandler.for_response(HTTPResponse.for_html_string("API: Not found")));
-		apihandler.set_request_handler("content",
+		var cc = new HTTPRequestHandlerContainer();
+		cc.set_default_handler(wikihandler);
+		if(userdb != null) {
+			var apihandler = new HTTPRequestHandlerContainer();
+			apihandler.set_root_handler(StaticContentHandler.for_response(HTTPResponse.for_html_string("API")));
+			apihandler.set_default_handler(StaticContentHandler.for_response(HTTPResponse.for_html_string("API: Not found")));
+			apihandler.set_request_handler("content",
 			UserDatabaseHeaderSessionManager.for_handler(WikiEditorAPIHandler.for_directory(get_datadir_file("wiki")))
 				.set_require_authentication(true));
-		apihandler.set_request_handler("users",
-			UserDatabaseHeaderSessionManager.for_handler(UserDatabaseAdminAPIHandler.for_db(userdb))
-				.set_userdb(userdb)
-				.set_require_authentication(true)
-				.set_allowed_users(get_admin_users()));
-		apihandler.set_request_handler("sessions", UserDatabaseSessionAPIHandler.for_db(userdb));
+			apihandler.set_request_handler("users",
+				UserDatabaseHeaderSessionManager.for_handler(UserDatabaseAdminAPIHandler.for_db(userdb))
+					.set_userdb(userdb)
+					.set_require_authentication(true)
+					.set_allowed_users(get_admin_users()));
+			apihandler.set_request_handler("sessions", UserDatabaseSessionAPIHandler.for_db(userdb));
+			cc.set_request_handler("api", apihandler);
+		}
 		wikihandler.set_backend(backend);
+		wikihandler.add_resource_dir(themedir);
 		wikihandler.add_resource_dir(get_datadir_file("public"));
-		set_request_handler(new HTTPRequestHandlerContainer()
-			.set_default_handler(wikihandler)
-			.set_request_handler("api", apihandler)
-		);
+		set_request_handler(cc);
 		return(true);
 	}
 }

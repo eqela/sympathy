@@ -27,6 +27,7 @@ class WikiPageContentPadget : Padget
 	property String path;
 	property String app_title;
 	property WikiBackend backend;
+	property WikiTheme theme;
 	Array htmls;
 
 	public void execute(HTTPRequest req, HashTable data) {
@@ -60,11 +61,12 @@ class WikiPageContentPadget : Padget
 	}
 
 	public void get_html_content(StringBuffer sb) {
-		sb.append(TEXTFILE("WikiArticleHeader.html"));
+		sb.append(theme.get_article_header());
 		foreach(String html in htmls) {
 			sb.append("<div class=\"wikidocument\">");
 			sb.append(html);
 			sb.append("</div>");
 		}
+		sb.append(theme.get_article_footer());
 	}
 }

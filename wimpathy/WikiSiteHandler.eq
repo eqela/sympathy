@@ -26,13 +26,15 @@ public class WikiSiteHandler : PadgetSiteHandler
 {
 	property WikiBackend backend;
 	property HashTable site_config;
+	property WikiTheme theme;
 	String css;
 
 	public void get_css(StringBuffer sb) {
-		if(css == null) {
-			css = TEXTFILE("common.css");
-		}
-		sb.append(css);
+		sb.append(theme.get_css());
+	}
+
+	public override void get_html_header(StringBuffer sb) {
+		sb.append(theme.get_document_header());
 	}
 
 	public override void initialize_data(HashTable data) {
@@ -45,8 +47,7 @@ public class WikiSiteHandler : PadgetSiteHandler
 
 	public void initialize() {
 		base.initialize();
-		add_padget(new WikiFramePadget());
-		add_padget(new HighlightJSPadget());
+		add_padget(new WikiFramePadget().set_theme(theme));
 	}
 
 	public bool on_http_get(HTTPRequest req) {
@@ -64,6 +65,7 @@ public class WikiSiteHandler : PadgetSiteHandler
 			return;
 		}
 		padgets.add(new WikiPageContentPadget()
+			.set_theme(theme)
 			.set_app_title(get_site_title())
 			.set_path(req.get_url_path())
 			.set_backend(backend));

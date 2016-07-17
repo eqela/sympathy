@@ -1,6 +1,6 @@
 
 /*
- * This file is part of Sympathy
+ * This file is part of Jkop
  * Copyright (c) 2016 Job and Esther Technologies, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -9,28 +9,29 @@
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
-class WikiFramePadget : Padget
+public interface WikiDocument
 {
-	property WikiTheme theme;
-
-	public void get_html_page_header(StringBuffer sb) {
-		sb.append(theme.get_frame_header());
-	}
-
-	public void get_html_page_footer(StringBuffer sb) {
-		sb.append(theme.get_frame_footer());
-	}
+	public String get_title();
+	public String get_slogan();
+	public String get_intro();
+	public String get_author();
+	public String get_date();
+	public String get_banner_name();
+	public Array get_markup_strings();
+	public Array get_html_strings();
+	public Collection get_attachment_headers();
+	public Reader get_attachment(String name);
 }
