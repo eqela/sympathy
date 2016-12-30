@@ -1,0 +1,207 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is WebServer imports sympathy.app:
+
+import cape
+import capex
+import capex.console
+import sympathy
+
+func main(args as array<string>) static as int #main
+{
+	if(new this().execute(args) == false) {
+		return(1)
+	}
+	return(0)
+}
+
+prop siteDirectory as File
+prop dataDirectory as File
+prop themeDirectory as File
+prop publicDirectory as File
+prop siteData as DynamicMap
+prop urlPrefix as string
+prop defaultCategory as string
+prop categoryPathSuffix as string
+
+func printHeader(stdout as PrintWriter) override
+{
+	ConsoleApplication.printHeader(stdout, null)
+}
+
+func printVersion(stdout as PrintWriter, longFormat as bool) override
+{
+	ConsoleApplication.printVersion(stdout, longFormat)
+}
+
+func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
+{
+	if(base.configure(key, value, relativeTo, error)) {
+		return(true)
+	}
+	if(key == "siteDirectory") {
+		siteDirectory = FileInstance.forRelativePath(value, relativeTo)
+		return(true)
+	}
+	if(key == "dataDirectory") {
+		dataDirectory = FileInstance.forRelativePath(value, relativeTo)
+		return(true)
+	}
+	if(key == "themeDirectory") {
+		themeDirectory = FileInstance.forRelativePath(value, relativeTo)
+		return(true)
+	}
+	if(key == "publicDirectory") {
+		publicDirectory = FileInstance.forRelativePath(value, relativeTo)
+		return(true)
+	}
+	if(key == "urlPrefix") {
+		urlPrefix = value
+		return(true)
+	}
+	if(key == "defaultCategory") {
+		defaultCategory = value
+		return(true)
+	}
+	if(key == "categoryPathSuffix") {
+		categoryPathSuffix = value
+		return(true)
+	}
+	if(key == "siteData") {
+		siteData = JSONParser.parse(value) as DynamicMap
+		if(siteData == null) {
+			error.setMessage("Invalid value for `siteData'")
+			return(false)
+		}
+		return(true)
+	}
+	return(false)
+}
+
+func getNotFoundHtml(ctx as LoggingContext) as string
+{
+	if(themeDirectory == null) {
+		return(null)
+	}
+	var nf = themeDirectory.entry("notfound.html.t")
+	if(nf.isFile() == false) {
+		return(null)
+	}
+	var str = nf.getContentsString("UTF-8")
+	if(String.isEmpty(str)) {
+		return(null)
+	}
+	var dirs = new vector<File>
+	dirs += themeDirectory
+	var tt = TextTemplate.forHTMLString(str, dirs, ctx)
+	if(tt == null) {
+		return(null)
+	}
+	var dd = new DynamicMap()
+	dd.set("site", siteData)
+	return(tt.execute(dd))
+}
+
+func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
+{
+	if(base.initialize(ctx, server) == false) {
+		return(false)
+	}
+	server.updateServerName()
+	if(siteDirectory == null) {
+		siteDirectory = getConfigFileDirectory()
+	}
+	if(siteDirectory != null && siteDirectory.isDirectory() == false) {
+		Log.error(ctx, "Site directory does not exist: `" .. siteDirectory.getPath() .. "'")
+		return(false)
+	}
+	if(siteDirectory != null) {
+		if(dataDirectory == null) {
+			var d = siteDirectory.entry("data")
+			if(d.isDirectory()) {
+				dataDirectory = d
+			}
+		}
+		if(themeDirectory == null) {
+			var d = siteDirectory.entry("theme")
+			if(d.isDirectory()) {
+				themeDirectory = d
+			}
+			else {
+				Log.error(ctx, "Theme directory does not exist: `" .. d.getPath() .. "'")
+				return(false)
+			}
+		}
+		if(publicDirectory == null) {
+			var d = siteDirectory.entry("public")
+			if(d.isDirectory()) {
+				publicDirectory = d
+			}
+		}
+	}
+	if(dataDirectory == null) {
+		Log.error(ctx, "No valid data directory was specified. Either specify `siteDirectory' or `dataDirectory'")
+		return(false)
+	}
+	if(themeDirectory == null) {
+		Log.error(ctx, "No valid theme directory was specified.")
+		return(false)
+	}
+	var repository = ArticleRepositoryInDirectories.forDirectory(ctx, dataDirectory)
+	if(repository == null) {
+		Log.error(ctx, "Failed to create article repository for data directory: `" .. dataDirectory.getPath() .. "'")
+		return(false)
+	}
+	repository.setDefaultCategory(defaultCategory)
+	var templateData = new DynamicMap()
+	templateData.set("urlPrefix", urlPrefix)
+	templateData.set("site", siteData)
+	var handler = ArticleWebHandler.forRepository(repository)
+	handler.setCategoryPathSuffix(categoryPathSuffix)
+	handler.setTemplateData(templateData)
+	handler.setTemplateStorage(TemplateStorageUsingFiles.forHTMLTemplateDirectory(themeDirectory))
+	server.pushRequestHandler(handler)
+	var themeStaticHandler = HTTPServerDirectoryHandler.forDirectory(themeDirectory)
+	themeStaticHandler.setTemplateData(templateData)
+	themeStaticHandler.setListDirectories(false)
+	themeStaticHandler.setProcessTemplateFiles(true)
+	themeStaticHandler.setIndexFiles([ "index.html", "index.html.t" ])
+	server.pushRequestHandler(themeStaticHandler)
+	if(publicDirectory != null && publicDirectory.isDirectory()) {
+		var ph = HTTPServerDirectoryHandler.forDirectory(publicDirectory)
+		ph.setListDirectories(false)
+		ph.setProcessTemplateFiles(false)
+		ph.setIndexFiles([ "index.html" ])
+		server.pushRequestHandler(ph)
+	}
+	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+		var nf = getNotFoundHtml(ctx)
+		if(nf == null) {
+			next()
+		}
+		req.sendHTMLString(nf)
+	})
+	return(true)
+}

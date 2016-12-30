@@ -1,93 +1,95 @@
-Sympathy: A high performance dynamic web service platform
-=========================================================
+Sympathy Web Services
+=====================
 
-The Sympathy project provides a web server / service platform implementation
-that lets the web server and service logic run in a single process, with the entire
-functionality (including the HTTP server itself) compiled to a single language,
-which can be processor native machine language for maximum performance and
-optimized memory use. Running Sympathy based web services requires no particular
-installation or configuration tasks aside from running the actual executable.
-Sympathy supports Windows, OS X and Linux as execution platforms, with a very
-fast epoll-based implementation on Linux for production deployments.
+Overview
+--------
 
-Sympathy is fully developed in the EQ programming language (http://eqdn.tech/eq),
-and relies heavily on Jkop libraries (www.jkop.org), specifically Jkop EQ, as the
-underlying application framework.
+The Sympathy project provides applications that can be used to implement and
+provide web-based services on the Internet. Sympathy is fully implemented
+in the Sling programming language (http://eqdn.tech/sling/), and is intended to
+primarily be executed using the .NET platform (either Mono or Microsoft .NET).
+For more information about Sympathy, please visit the Sympathy pages on EQDN:
 
-Please also visit http://sympathy.ws for more information.
+http://eqdn.tech/sympathy/
 
----
+The following components are currently delivered as part of Sympathy:
 
-Components
-----------
+*artsy* - The "Article Server", provides functionality to run a website based
+on HTML and/or JSON that is implemented around the concept of "articles" that
+make up the bulk of the content. In practice, this could mean a blog site,
+a wiki, a news site, or a combination or hybrid of any of those.
 
-Sympathy includes the following sub-components:
+*artsc* - The "Article Server Compiler", used to verify, preprocess and index
+articles that are served by the article server.
 
-*presspathy* - A blog engine server that can be used to implement a blog site,
-news site, or something similar.
+*filesy* - A common web server that can serve any static files of any type from
+a directory specified by the user.
 
-*symadmin* - Administration tool that can be used to create an empty skeleton
-for a blog or a wiki site.
+*keepalive* - A service watchdog that can execute a server program, restarting the
+program if ever it dies (making sure servers will stay running).
 
-*symfiles* - A traditional web server implementation that can be used to serve
-static files.
+As per the Sympathy naming convention, all server program names end with the
+letter "y" (much like traditional Unix server program names end with the letter
+"d").
 
-*symmanager* - A background service manager that runs other processes in the
-background and keeps them running even in cases of crashes.
-
-*symvhsd* - A Virtual Host Server implementation that enables several sites to
-be serviced on a single server computer, dividing the traffic to different server
-processes based on the requested service / hostname.
-
-*wimpathy* - A wiki engine server that can be used to implement a "wiki-like"
-website that hosts dynamic, editable content.
-
-*sympathy-blog-manager* - A management tool for presspathy, used to manage
-and write blog posts and other content on the site (work in progress).
-
----
-
-Compiling
+Downloads
 ---------
 
-To compile Sympathy, you will need to get the latest Jkop EQ libraries from
-www.jkop.org and save the source tree on your filesystem. You will also need
-an EQ compiler, which you can download from: www.eqela.com/download
+For precompiled executables, please download from the Sympathy website:
 
-To compile all of the above-mentioned components, use the release.sh script:
+http://sympathy.ws
 
-```
-sh release.sh <target-platform> <path-to-jkop-eq-src>
-```
+Source code of Sympathy is available on Github:
 
-The "target-platform" should match your current running system, which would
-be one of "osx", "linuxx86" (32 bit Linux), "linuxx64" (64 bit Linux),
-"win7m32" (Windows 7 or higher, 32 bit) or "win7m64" (Windows 7 or higher, 64 bit).
+https://github.com/eqela/sympathy
 
-The "path-to-jkop-eq-src" represents the "src" subdirectory of the Jkop EQ
-libraries that you have downloaded. For example:
+Usage
+-----
+
+To share a directory over HTTP with filesy:
 
 ```
-sh release.sh linuxx64 ../jkop-eq/src 
+filesy -OcontentDirectory=directoryToShare
 ```
 
-This is assuming your eqc (EQ compiler) is in PATH. If not, you can specify the
-path to eqc via an environment variable:
+By default, all Sympathy servers use port 8080 for HTTP communications. This can be
+overridden with the listenPort directive:
 
 ```
-EQC=../edk_3.1.x.20150512/eqc sh release.sh linuxx64 ../jkop-eq/src
+filesy -OcontentDirectory=directoryToShare -OlistenPort=8081
 ```
 
-You may also compile individual components, for example:
+Use keepalive to keep the server running in the background:
 
 ```
-eqc -platform=../jkop-eq/src wimpathy
+keepalive -bg filesy -OcontentDirectory=directoryToShare -OlistenPort=8081
 ```
 
-(Note that you will need to specify the location to the Jkop EQ libraries
-as part of the compilation command, as shown above)
+For further information and deeper explanations, please see the complete
+Sympathy documentation on EQDN:
+
+http://eqdn.tech/sympathy/
+
+Compiling the server-side components
+------------------------------------
+
+To compile Sympathy servers, you will need to get the latest Jkop libraries (from
+http://www.jkop.org). You will also need the SAM Sling compiler in order to compile
+the Sling code: http://eqdn.tech/sling/
+
+To compile all of the above-mentioned components, use the build script:
+
+```
+./build-server.sh <sam-command> [path-to-jkop]
+```
+
+A working BASH shell is required to execute the script. The "sam-command"
+parameter specifies the command you would use (with any path components, if
+needed) to execute the sam compiler (eg. just "samce", if the command is in your
+PATH). The Jkop parameter is optional, as sam will use a default Jkop
+installation if none is specified.
 
 ---
 
 Sympathy is part of the Eqela technology stack. For more information, please
-visit www.eqela.com
+visit http://www.eqela.com

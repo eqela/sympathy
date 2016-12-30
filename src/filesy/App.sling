@@ -1,0 +1,98 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is WebServer imports sympathy.app:
+
+import cape
+import capex
+import capex.console
+import sympathy
+
+func main(args as array<string>) static as int #main
+{
+	if(new this().execute(args) == false) {
+		return(1)
+	}
+	return(0)
+}
+
+var contentDirectory as File
+var listDirectories = true
+var processTemplateFiles = false
+
+func printHeader(stdout as PrintWriter) override
+{
+	ConsoleApplication.printHeader(stdout, null)
+}
+
+func printVersion(stdout as PrintWriter, longFormat as bool) override
+{
+	ConsoleApplication.printVersion(stdout, longFormat)
+}
+
+func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
+{
+	if(base.configure(key, value, relativeTo, error)) {
+		return(true)
+	}
+	if(key == "contentDirectory") {
+		contentDirectory = FileInstance.forRelativePath(value, relativeTo)
+		return(true)
+	}
+	if(key == "listDirectories") {
+		listDirectories = Boolean.asBoolean(value)
+		return(true)
+	}
+	if(key == "processTemplateFiles") {
+		processTemplateFiles = Boolean.asBoolean(value)
+		return(true)
+	}
+	return(false)
+}
+
+func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
+{
+	if(base.initialize(ctx, server) == false) {
+		return(false)
+	}
+	server.updateServerName()
+	if(contentDirectory == null) {
+		Log.error(ctx, "No `contentDirectory' specified. Either use a config file or specify -OcontentDirectory=<directory>")
+		return(false)
+	}
+	if(contentDirectory.isDirectory() == false) {
+		Log.error(ctx, "Not a directory: `" .. contentDirectory.getPath() .. "'")
+		return(false)
+	}
+	var files = HTTPServerDirectoryHandler.forDirectory(contentDirectory)
+	files.setListDirectories(listDirectories)
+	files.setProcessTemplateFiles(processTemplateFiles)
+	files.setIndexFiles([
+		"index.html"
+	])
+	files.setServerURL(VALUE("sling_project_url"))
+	files.setServerName(VALUE("sling_project_title") .. "/" .. VALUE("sling_project_version"))
+	server.pushRequestHandler(files)
+	return(true)
+}

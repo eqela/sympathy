@@ -1,0 +1,191 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape imports capex imports capex.console:
+
+IFDEF("target_mono")
+{
+	depend "dll:Mono.Posix.dll"
+
+	class SignalMonitorThread is Runnable
+	{
+		prop app as parent
+		prop ctx as ConsoleApplicationContext
+
+		func run
+		{
+			Log.debug(ctx, "Signal monitor thread started.")
+			loop {
+				Log.debug(ctx, "Signal monitor thread waiting for signals.")
+				var index as int
+				lang "cs" {{{
+					Mono.Unix.UnixSignal[] signals = new Mono.Unix.UnixSignal[] {
+						new Mono.Unix.UnixSignal(Mono.Unix.Native.Signum.SIGTERM),
+						new Mono.Unix.UnixSignal(Mono.Unix.Native.Signum.SIGINT)
+					};
+					index = Mono.Unix.UnixSignal.WaitAny(signals);
+				}}}
+				if(index >= 0) {
+					app.onExitRequestSignal()
+					break
+				}
+			}
+			Log.debug(ctx, "Signal monitor thread ended.")
+		}
+	}
+}
+
+func main(args as array<string>) static as int #main
+{
+	if(new this().execute(args) == false) {
+		return(1)
+	}
+	return(0)
+}
+
+prop exitFlag = false
+prop process as Process
+var ctx as ConsoleApplicationContext
+
+func printUsage(stdout as PrintWriter)
+{
+	var flags = [
+		[ "bg|background", "Execute the command in the background" ],
+		[ "quiet", "Suppress all output messages from the keepalive process" ],
+		[ "debug", "Display debug information" ],
+		[ "h|help", "Usage information" ]
+	]
+	var parameters = [
+		[ "command", "The command to execute, along with any arguments" ]
+	]
+	ConsoleApplication.printUsage(stdout, null, parameters, flags, null)
+}
+
+func onExitRequestSignal
+{
+	Log.info(ctx, "Exit request signal was received.")
+	exitFlag = true
+	if(process != null) {
+		process.kill(5)
+	}
+}
+
+func execute(args as array<string>) as bool
+{
+	var stdout = Stdout.instance()
+	ctx = new ConsoleApplicationContext()
+	var showHelp = false
+	var background = false
+	var command as string
+	var commandArgs as vector<string>
+	foreach(arg in ConsoleApplication.parseCommandLineArguments(args)) {
+		if(command == null) {
+			if(arg.isFlag("help") || arg.isFlag("h")) {
+				showHelp = true
+				continue
+			}
+			if(arg.isFlag("bg") || arg.isFlag("background")) {
+				background = true
+				continue
+			}
+			if(arg.isFlag("debug")) {
+				if(ctx != null) {
+					ctx.setEnableDebugMessages(true)
+				}
+				continue
+			}
+			if(arg.isFlag("quiet")) {
+				ctx = null
+				continue
+			}
+		}
+		var str = arg.getComplete()
+		if(String.isEmpty(str)) {
+			continue
+		}
+		if(command == null) {
+			command = str
+			commandArgs = new vector<string>
+		}
+		else {
+			commandArgs += str
+		}
+	}
+	if(command == null || showHelp) {
+		ConsoleApplication.printHeader(stdout, null)
+		printUsage(stdout)
+		return(true)
+	}
+	if(background) {
+		var pl = ProcessLauncher.forSelf()
+		if(pl == null) {
+			Log.error(ctx, "Failed to create a process launcher")
+			return(false)
+		}
+		pl.addToParams("-quiet")
+		pl.addToParams(command)
+		foreach(arg in commandArgs) {
+			pl.addToParams(arg)
+		}
+		if(pl.start() == null) {
+			Log.error(ctx, "Failed to create a new background process")
+			return(false)
+		}
+		return(true)
+	}
+	var pl = ProcessLauncher.forCommand(command)
+	if(pl == null) {
+		Log.error(ctx, "Failed to create a process launcher for command: `" .. command .. "'")
+		return(false)
+	}
+	foreach(arg in commandArgs) {
+		pl.addToParams(arg)
+	}
+	IFDEF("target_mono")
+	{
+		Thread.start(new SignalMonitorThread().setCtx(ctx).setApp(this))
+	}
+	loop {
+		Log.info(ctx, "Executing: `" .. pl.toString() .. "'")
+		var startTime = SystemClock.asSeconds()
+		process = pl.start()
+		if(process == null) {
+			Log.error(ctx, "Process failed to start.")
+		}
+		else {
+			var r = process.waitForExit()
+			process = null
+			Log.info(ctx, "Process exited: " .. String.forInteger(r))
+		}
+		if(exitFlag) {
+			Log.info(ctx, "Exit has been requested. Ending process.")
+			break
+		}
+		if(SystemClock.asSeconds() - startTime < 5) {
+			Log.warning(ctx, "Process lived for less than five seconds. Waiting for five seconds before restarting ..")
+			CurrentThread.sleepSeconds(5)
+		}
+	}
+	return(true)
+}

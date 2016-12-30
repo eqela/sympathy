@@ -1,0 +1,331 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is ArticleRepository imports cape imports capex:
+
+class MyArticle is Article
+{
+	prop directory as File
+	prop fileTimeStamp as long
+	var contentTimeStamp as long
+	var contentHTML as string
+
+	func getContentHtml(resolver as RichTextDocumentReferenceResolver, callback as function<void,string>) override
+	{
+		var file = directory.entry("content.markup")
+		if(contentHTML != null) {
+			if(file.isFile() == false) {
+				contentHTML = null
+				callback(null)
+				return
+			}
+			if(file.hasChangedSince(contentTimeStamp)) {
+				contentHTML = null
+			}
+			else {
+				callback(contentHTML)
+				return
+			}
+		}
+		var data = file.getContentsString("UTF-8")
+		if(String.isEmpty(data)) {
+			callback(null)
+			return
+		}
+		contentTimeStamp = file.getLastModifiedTimeStamp()
+		var doc = RichTextDocument.forWikiMarkupString(data)
+		contentHTML = doc.toHtml(resolver)
+		callback(contentHTML)
+	}
+
+	func getAttachment(name as string, callback as function<void,string,buffer>) override
+	{
+		if(name == null) {
+			callback(null, null)
+			return
+		}
+		var f = directory.entry(name)
+		if(f.isFile() == false) {
+			callback(null, null)
+			return
+		}
+		// FIXME: Handle ETags
+		callback(MimeTypeRegistry.typeForFile(f), f.getContentsBuffer())
+	}
+}
+
+class ArticleList public
+{
+	prop fileTimeStamp as long
+	prop articleNames as vector<string>
+}
+
+class CategoryList
+{
+	prop fileTimeStamp as long
+	prop categories as DynamicMap
+}
+
+func forDirectory(ctx as LoggingContext, dir as File) static as this
+{
+	var v = new this()
+	v.setContext(ctx)
+	v.setDirectory(dir)
+	return(v)
+}
+
+prop context as LoggingContext
+prop directory as File
+var articleCache as DynamicMap
+var articleListCache as DynamicMap
+var categoryListCache as CategoryList
+prop defaultCategory as string
+
+ctor
+{
+	defaultCategory = "articles"
+	articleCache = new DynamicMap()
+	articleListCache = new DynamicMap()
+}
+
+func getCategoryMap as DynamicMap
+{
+	var file = directory.entry("categories.json")
+	if(categoryListCache != null) {
+		if(file.isFile() == false) {
+			categoryListCache = null
+			return(null)
+		}
+		if(file.hasChangedSince(categoryListCache.getFileTimeStamp())) {
+			categoryListCache = null
+		}
+		else {
+			return(categoryListCache.getCategories())
+		}
+	}
+	var data = JSONParser.parse(file.getContentsString("UTF-8")) as DynamicMap
+	if(data == null) {
+		return(null)
+	}
+	var cats = new DynamicMap()
+	var it = data.iterateKeys()
+	while(it != null) {
+		var id = it.next()
+		if(id == null) {
+			break
+		}
+		var c = new Category()
+		c.fromDynamicMap(data.getDynamicMap(id))
+		c.setId(id)
+		cats.set(id, c)
+	}
+	var list = new CategoryList()
+	list.setCategories(cats)
+	list.setFileTimeStamp(file.getLastModifiedTimeStamp())
+	categoryListCache = list
+	return(cats)
+}
+
+func getCategoryById(aid as string) as Category
+{
+	var id = aid
+	if(id == null) {
+		id = defaultCategory
+	}
+	if(id == null) {
+		return(null)
+	}
+	var cats = getCategoryMap()
+	if(cats == null) {
+		return(null)
+	}
+	return(cats.get(id) as Category)
+}
+
+func getArticleListForCategory(categoryName as string) as ArticleList
+{
+	var category = categoryName
+	if(category == null) {
+		category = defaultCategory
+	}
+	if(category == null) {
+		return(null)
+	}
+	var file = directory.entry(category .. ".index")
+	var cachedList = articleListCache.get(category) as ArticleList
+	if(cachedList != null) {
+		if(file.hasChangedSince(cachedList.getFileTimeStamp())) {
+			articleListCache.remove(category)
+		}
+		else {
+			return(cachedList)
+		}
+	}
+	if(file.isFile() == false) {
+		return(null)
+	}
+	var listData = JSONParser.parse(file.getContentsString("UTF-8")) as DynamicVector
+	if(listData == null) {
+		Log.error(context, "Failed to parse article list file: `" .. file.getPath() .. "'")
+		return(null)
+	}
+	articleListCache.set(category, listData)
+	var v = new ArticleList()
+	v.setFileTimeStamp(file.getLastModifiedTimeStamp())
+	var r = new vector<string>
+	foreach(o in listData.toVector()) {
+		var s = o as string
+		if(s != null) {
+			r += s
+		}
+	}
+	v.setArticleNames(r)
+	return(v)
+}
+
+func getCategories(callback as function<void,vector<Category>>)
+{
+	var map = getCategoryMap()
+	if(map == null) {
+		callback(null)
+		return
+	}
+	var v = new vector<Category>
+	var it = map.iterateValues()
+	while(it != null) {
+		var cat = it.next() as Category
+		if(cat == null) {
+			break
+		}
+		v += cat
+	}
+	callback(v)
+}
+
+func getArticleCount(category as string, callback as function<void,int>)
+{
+	var list = getArticleListForCategory(category)
+	if(list == null) {
+		callback(-1)
+		return
+	}
+	var names = list.getArticleNames()
+	if(names == null || Vector.getSize(names) < 0) {
+		callback(-1)
+		return
+	}
+	callback(Vector.getSize(names))
+}
+
+func getArticles(category as string, offset as int, limit as int, callback as function<void,Category,vector<Article>>)
+{
+	var list = getArticleListForCategory(category)
+	if(list == null) {
+		callback(null, null)
+		return
+	}
+	var v = new vector<Article>
+	var names = list.getArticleNames()
+	if(names != null) {
+		for(var n = 0; n<limit; n++) {
+			var name = Vector.getAt(names, offset + n)
+			if(name == null) {
+				break
+			}
+			var a = doGetArticleById(name)
+			if(a == null) {
+				var ma = new MyArticle()
+				ma.setTitle(name)
+				a = ma
+				var catname = category
+				if(catname == null) {
+					catname = defaultCategory
+				}
+				Log.warning(context, "Invalid article id in category `" .. catname .. "': `" .. name .. "'")
+			}
+			v += a
+		}
+	}
+	var cat = getCategoryById(category)
+	if(cat == null) {
+		cat = new Category()
+		cat.setId(category)
+		cat.setTitle(category)
+	}
+	callback(cat, v)
+}
+
+func doGetArticleById(id as string) as Article
+{
+	var dir = directory.entry(id)
+	if(dir.isDirectory() == false) {
+		articleCache.remove(id)
+		return(null)
+	}
+	var header = dir.entry("header.json")
+	var cachedArticle = articleCache.get(id) as MyArticle
+	if(cachedArticle != null) {
+		if(header.hasChangedSince(cachedArticle.getFileTimeStamp())) {
+			articleCache.remove(id)
+		}
+		else {
+			return(cachedArticle)
+		}
+	}
+	var headerData = JSONParser.parse(header.getContentsString("UTF-8")) as DynamicMap
+	if(headerData == null) {
+		Log.error(context, "Failed to parse article header file: `" .. header.getPath() .. "'")
+		return(null)
+	}
+	var article = new MyArticle()
+	article.fromDynamicMap(headerData)
+	article.setId(id)
+	article.setDirectory(dir)
+	article.setFileTimeStamp(header.getLastModifiedTimeStamp())
+	articleCache.set(id, article)
+	return(article)
+}
+
+func getArticleById(id as string, callback as function<void,Article>)
+{
+	callback(doGetArticleById(id))
+}
+
+func getArticleTitleSync(id as string) as string
+{
+	var article = doGetArticleById(id)
+	if(article != null) {
+		return(article.getTitle())
+	}
+	return(null)
+}
+
+func getCategoryTitleSync(id as string) as string
+{
+	var category = getCategoryById(id)
+	if(category != null) {
+		return(category.getTitle())
+	}
+	return(null)
+}
