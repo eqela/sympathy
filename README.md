@@ -80,7 +80,7 @@ the Sling code: http://eqdn.tech/sling/
 To compile all of the above-mentioned components, use the build script:
 
 ```
-./build-server.sh <sam-command> [path-to-jkop]
+./build-services.sh <sam-command> [path-to-jkop]
 ```
 
 A working BASH shell is required to execute the script. The "sam-command"

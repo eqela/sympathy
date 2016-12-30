@@ -55,7 +55,7 @@ function compileForTarget()
 	fi
 	cp -v "LICENSE" "README.md" "$OUTPUT/"
 	VERSION="$(mono "$OUTPUT"/artsy.exe -v)"
-	OUTPUTID="sympathy-server_${VERSION}_$1"
+	OUTPUTID="sympathy-web-services-${VERSION}_$1"
 	rm -rf "$OUTPUTDIR"/"$OUTPUTID" "$OUTPUTDIR"/"${OUTPUTID}".zip
 	mv -v "$OUTPUT" "$OUTPUTDIR"/"$OUTPUTID"
 	(cd "$OUTPUTDIR" ; zip -r "${OUTPUTID}.zip" "$OUTPUTID")
