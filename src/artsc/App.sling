@@ -398,9 +398,9 @@ func execute(args as array<string>) as bool
 	if(checkCategoryDeclarations(ctx, categoryMap, categoryDeclarations, cj, dataDir) == false) {
 		v = false
 	}
-	var it = categoryMap.iterateKeys()
-	while(it != null) {
-		var key = it.next()
+	var cit = categoryMap.iterateKeys()
+	while(cit != null) {
+		var key = cit.next()
 		if(key == null) {
 			break
 		}

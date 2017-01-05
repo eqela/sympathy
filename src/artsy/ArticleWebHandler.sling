@@ -182,7 +182,7 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 		if(pages < 1) {
 			pages = 1
 		}
-		var thisObject = this
+		var myObject = this
 		repository.getArticles(catId, pp * articlesPerPage, articlesPerPage, func(category as Category, results as vector<Article>) {
 			if(results == null) {
 				sendResponse(req, "error", JSONResponse.forErrorCode("queryFailed"))
@@ -231,7 +231,7 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 				var map = result.toDynamicMap()
 				processTimeStamp(map)
 				v += map
-				result.getIntroHtml(thisObject, func(html as string) {
+				result.getIntroHtml(myObject, func(html as string) {
 					map.set("introHtml", html)
 					onIntroHtmlRetrieved()
 				})
@@ -277,11 +277,11 @@ func onGETArticle(req as HTTPServerRequest, next as function)
 			req.sendRedirectAsDirectory()
 			return
 		}
-		var thisObject = this
+		var myObject = this
 		var map = article.toDynamicMap()
-		article.getIntroHtml(thisObject, func(introHtml as string) {
+		article.getIntroHtml(myObject, func(introHtml as string) {
 			map.set("introHtml", introHtml)
-			article.getContentHtml(thisObject, func(contentHtml as string) {
+			article.getContentHtml(myObject, func(contentHtml as string) {
 				map.set("contentHtml", contentHtml)
 				processTimeStamp(map)
 				sendResponse(req, "article", map)
