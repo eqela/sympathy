@@ -45,6 +45,8 @@ prop siteData as DynamicMap
 prop urlPrefix as string
 prop defaultCategory as string
 prop categoryPathSuffix as string
+prop apiSecret as string
+prop serverMode = "web"
 
 func printHeader(stdout as PrintWriter) override
 {
@@ -95,6 +97,14 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 			error.setMessage("Invalid value for `siteData'")
 			return(false)
 		}
+		return(true)
+	}
+	if(key == "serverMode") {
+		serverMode = value
+		return(true)
+	}
+	if(key == "apiSecret") {
+		apiSecret = value
 		return(true)
 	}
 	return(false)
@@ -175,33 +185,53 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 		return(false)
 	}
 	repository.setDefaultCategory(defaultCategory)
-	var templateData = new DynamicMap()
-	templateData.set("urlPrefix", urlPrefix)
-	templateData.set("site", siteData)
-	var handler = ArticleWebHandler.forRepository(repository)
-	handler.setCategoryPathSuffix(categoryPathSuffix)
-	handler.setTemplateData(templateData)
-	handler.setTemplateStorage(TemplateStorageUsingFiles.forHTMLTemplateDirectory(themeDirectory))
-	server.pushRequestHandler(handler)
-	var themeStaticHandler = HTTPServerDirectoryHandler.forDirectory(themeDirectory)
-	themeStaticHandler.setTemplateData(templateData)
-	themeStaticHandler.setListDirectories(false)
-	themeStaticHandler.setProcessTemplateFiles(true)
-	themeStaticHandler.setIndexFiles([ "index.html", "index.html.t" ])
-	server.pushRequestHandler(themeStaticHandler)
-	if(publicDirectory != null && publicDirectory.isDirectory()) {
-		var ph = HTTPServerDirectoryHandler.forDirectory(publicDirectory)
-		ph.setListDirectories(false)
-		ph.setProcessTemplateFiles(false)
-		ph.setIndexFiles([ "index.html" ])
-		server.pushRequestHandler(ph)
-	}
-	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
-		var nf = getNotFoundHtml(ctx)
-		if(nf == null) {
-			next()
+	if(serverMode == "web") {
+		var templateData = new DynamicMap()
+		templateData.set("urlPrefix", urlPrefix)
+		templateData.set("site", siteData)
+		var handler = ArticleWebHandler.forRepository(repository)
+		handler.setCategoryPathSuffix(categoryPathSuffix)
+		handler.setTemplateData(templateData)
+		handler.setTemplateStorage(TemplateStorageUsingFiles.forHTMLTemplateDirectory(themeDirectory))
+		server.pushRequestHandler(handler)
+		var themeStaticHandler = HTTPServerDirectoryHandler.forDirectory(themeDirectory)
+		themeStaticHandler.setTemplateData(templateData)
+		themeStaticHandler.setListDirectories(false)
+		themeStaticHandler.setProcessTemplateFiles(true)
+		themeStaticHandler.setIndexFiles([ "index.html", "index.html.t" ])
+		server.pushRequestHandler(themeStaticHandler)
+		if(publicDirectory != null && publicDirectory.isDirectory()) {
+			var ph = HTTPServerDirectoryHandler.forDirectory(publicDirectory)
+			ph.setListDirectories(false)
+			ph.setProcessTemplateFiles(false)
+			ph.setIndexFiles([ "index.html" ])
+			server.pushRequestHandler(ph)
 		}
-		req.sendHTMLString(nf)
-	})
+		server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+			var nf = getNotFoundHtml(ctx)
+			if(nf == null) {
+				next()
+			}
+			req.sendHTMLString(nf)
+		})
+	}
+	else if(serverMode == "api") {
+		if(apiSecret != null) {
+			server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+				var secret = req.getHeader("x-secret")
+				if(secret != null && secret == apiSecret) {
+					next()
+				}
+				else {
+					req.sendNotAllowed()
+				}
+			})
+		}
+		server.pushRequestHandler(ArticleAdminAPIHandler.forRepository(repository))
+	}
+	else {
+		Log.error(ctx, "Unsupported server mode: `" .. serverMode .. "'")
+		return(false)
+	}
 	return(true)
 }

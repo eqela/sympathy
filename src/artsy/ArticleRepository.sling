@@ -22,11 +22,15 @@
  * SOFTWARE.
  */
 
-interface imports capex:
+interface imports cape imports capex:
 
 func getCategories(callback as function<void,vector<Category>>)
 func getArticleCount(category as string, callback as function<void,int>)
+func getAllArticles(callback as function<void,vector<Article>>)
 func getArticles(category as string, offset as int, limit as int, callback as function<void,Category,vector<Article>>)
 func getArticleById(id as string, callback as function<void,Article>)
 func getArticleTitleSync(id as string) as string
 func getCategoryTitleSync(id as string) as string
+func addArticle(id as string, headers as DynamicMap, content as string, callback as function<void,Error>)
+func updateArticle(id as string, headers as DynamicMap, content as string, callback as function<void,Error>)
+func deleteArticle(id as string, callback as function<void,Error>)

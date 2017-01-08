@@ -137,6 +137,7 @@ func getIntroHtml(resolver as RichTextDocumentReferenceResolver, callback as fun
 	callback(introHtml)
 }
 
+func getContentMarkup(callback as function<void,string>) abstract
 func getContentHtml(resolver as RichTextDocumentReferenceResolver, callback as function<void,string>) abstract
 func getAttachment(name as string, callback as function<void,string,buffer>) abstract
 

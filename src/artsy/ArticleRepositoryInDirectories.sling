@@ -31,6 +31,11 @@ class MyArticle is Article
 	var contentTimeStamp as long
 	var contentHTML as string
 
+	func getContentMarkup(callback as function<void,string>) override
+	{
+		callback(directory.entry("content.markup").getContentsString("UTF-8"))
+	}
+
 	func getContentHtml(resolver as RichTextDocumentReferenceResolver, callback as function<void,string>) override
 	{
 		var file = directory.entry("content.markup")
@@ -238,6 +243,25 @@ func getArticleCount(category as string, callback as function<void,int>)
 	callback(Vector.getSize(names))
 }
 
+func getAllArticles(callback as function<void,vector<Article>>)
+{
+	var v = new vector<Article>
+	var it = directory.entries()
+	loop {
+		var f = it.next()
+		if(f == null) {
+			break
+		}
+		if(f.isDirectory()) {
+			var a = doGetArticleById(f.baseName())
+			if(a != null) {
+				v += a
+			}
+		}
+	}
+	callback(v)
+}
+
 func getArticles(category as string, offset as int, limit as int, callback as function<void,Category,vector<Article>>)
 {
 	var list = getArticleListForCategory(category)
@@ -328,4 +352,100 @@ func getCategoryTitleSync(id as string) as string
 		return(category.getTitle())
 	}
 	return(null)
+}
+
+func addArticle(id as string, headers as DynamicMap, content as string, callback as function<void,Error>)
+{
+	var dir = directory.entry(id)
+	if(dir.isDirectory()) {
+		if(callback != null) {
+			callback(Error.forCode("articleAlreadyExists"))
+		}
+		return
+	}
+	dir.createDirectoryRecursive()
+	if(dir.isDirectory() == false) {
+		if(callback != null) {
+			callback(Error.forCode("failedToCreateDirectory"))
+		}
+		return
+	}
+	if(headers != null) {
+		var hdrFile = dir.entry("header.json")
+		var str = JSONEncoder.encode(headers)
+		if(hdrFile.setContentsString(str, "UTF-8") == false) {
+			if(callback != null) {
+				callback(Error.forCode("failedToWriteFile"))
+			}
+			return
+		}
+	}
+	if(content != null) {
+		var contentFile = dir.entry("content.markup")
+		if(contentFile.setContentsString(content, "UTF-8") == false) {
+			if(callback != null) {
+				callback(Error.forCode("failedToWriteFile"))
+			}
+			return
+		}
+	}
+	if(callback != null) {
+		callback(null)
+	}
+}
+
+func updateArticle(id as string, headers as DynamicMap, content as string, callback as function<void,Error>)
+{
+	var dir = directory.entry(id)
+	if(dir.isDirectory() == false) {
+		if(callback != null) {
+			callback(Error.forCode("articleNotFound"))
+		}
+		return
+	}
+	if(headers != null) {
+		var hdrFile = dir.entry("header.json")
+		var str = JSONEncoder.encode(headers)
+		if(hdrFile.setContentsString(str, "UTF-8") == false) {
+			if(callback != null) {
+				callback(Error.forCode("failedToWriteFile"))
+			}
+			return
+		}
+	}
+	if(content != null) {
+		var contentFile = dir.entry("content.markup")
+		if(contentFile.setContentsString(content, "UTF-8") == false) {
+			if(callback != null) {
+				callback(Error.forCode("failedToWriteFile"))
+			}
+			return
+		}
+	}
+	articleCache.remove(id)
+	if(callback != null) {
+		callback(null)
+	}
+}
+
+func deleteArticle(id as string, callback as function<void,Error>)
+{
+	var dir = directory.entry(id)
+	if(dir.isDirectory() == false) {
+		if(callback != null) {
+			callback(Error.forCode("articleNotFound"))
+		}
+		return
+	}
+	dir.removeRecursive()
+	if(dir.isDirectory()) {
+		if(callback != null) {
+			callback(Error.forCode("failedToDelete"))
+		}
+		return
+	}
+	articleCache.remove(id)
+	if(callback != null) {
+		callback(null)
+	}
 }

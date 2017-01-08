@@ -1,0 +1,138 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is HTTPServerRequestHandler imports cape imports capex imports sympathy:
+
+func forRepository(repository as ArticleRepository) static as this
+{
+	var v = new this()
+	v.setRepository(repository)
+	return(v)
+}
+
+prop repository as ArticleRepository
+
+func isArticleIdValid(id as string) as bool
+{
+	return(String.validateCharacters(id, func(c as char) as bool {
+		return(c == '-' || Character.isLowercaseAlphaNumeric(c))
+	}))
+}
+
+func handleRequest(req as HTTPServerRequest, next as function)
+{
+	if(repository == null) {
+		next()
+		return
+	}
+	var rs = req.getCurrentResource()
+	var resource = req.popResource()
+	if(resource == null) {
+		next()
+		return
+	}
+	var statusResponseFunction = func(error as Error) {
+		if(error != null) {
+			req.sendJSONError(error)
+			return
+		}
+		req.sendJSONOK()
+	}
+	if(resource == "articles") {
+		var articleId = req.popResource()
+		if(articleId == null) {
+			if(req.isGET()) {
+				repository.getAllArticles(func(articles as vector<Article>) {
+					var v = new DynamicVector()
+					foreach(article in articles) {
+						v.append(article.toDynamicMap())
+					}
+					req.sendJSONObject(new DynamicMap()
+						.set("status", "ok")
+						.set("data", v))
+				})
+				return
+			}
+			else if(req.isPOST()) {
+				var data = req.getBodyJSONMap()
+				if(data == null) {
+					req.sendInvalidRequest()
+					return
+				}
+				var id = data.getString("id")
+				if(isArticleIdValid(id) == false) {
+					req.sendInvalidRequest("Invalid article ID")
+					return
+				}
+				var headers = data.getDynamicMap("headers")
+				if(headers == null) {
+					headers = new DynamicMap()
+				}
+				var content = data.getString("content")
+				if(content == null) {
+					content = ""
+				}
+				repository.addArticle(id, headers, content, statusResponseFunction)
+			}
+		}
+		else {
+			if(isArticleIdValid(articleId) == false) {
+				req.sendInvalidRequest("Invalid article ID")
+				return
+			}
+			if(req.isGET()) {
+				repository.getArticleById(articleId, func(article as Article) {
+					if(article == null) {
+						req.setCurrentResource(rs)
+						next()
+						return
+					}
+					var data = article.toDynamicMap()
+					article.getContentMarkup(func(content as string) {
+						data.set("contentMarkup", content)
+						req.sendJSONObject(new DynamicMap()
+							.set("status", "ok")
+							.set("data", data))
+					})
+				})
+				return
+			}
+			else if(req.isPUT()) {
+				var data = req.getBodyJSONMap()
+				if(data == null) {
+					req.sendInvalidRequest()
+					return
+				}
+				var headers = data.getDynamicMap("headers")
+				var content = data.getString("content")
+				repository.updateArticle(articleId, headers, content, statusResponseFunction)
+			}
+			else if(req.isDELETE()) {
+				repository.deleteArticle(articleId, statusResponseFunction)
+			}
+		}
+	}
+	req.setCurrentResource(rs)
+	next()
+}
