@@ -49,7 +49,10 @@ func handleRequest(req as HTTPServerRequest, next as function)
 	var rs = req.getCurrentResource()
 	var resource = req.popResource()
 	if(resource == null) {
-		next()
+		req.sendJSONObject(new DynamicMap()
+			.set("server", VALUE("title"))
+			.set("version", VALUE("version"))
+		)
 		return
 	}
 	var statusResponseFunction = func(error as Error) {

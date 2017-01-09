@@ -1,0 +1,61 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is ListItemWidget imports cape imports cave imports cave.ui:
+
+prop api as APIClient
+
+ctor(context as GuiApplicationContext)
+{
+	base(context)
+}
+
+func getWidgetTitle override as string
+{
+	return("Articles")
+}
+
+func createWidgetForRecord(record as DynamicMap) override as Widget
+{
+	var v = new LayerWidget(context)
+	v.addWidget(CanvasWidget.forColor(context, Color.forString("#EEEEEE")))
+	var box = new VerticalBoxWidget(context)
+	box.setWidgetMargin(context.getHeightValue("2mm"))
+	box.setWidgetSpacing(context.getHeightValue("1mm"))
+	box.addWidget(LabelWidget.forText(context, record.getString("title")).setWidgetFontBold(true))
+	box.addWidget(LabelWidget.forText(context, record.getString("id")))
+	v.addWidget(box)
+	var thisWidget = this
+	Widget.setWidgetClickHandler(v, func {
+		NavigationWidget.pushToContainer(thisWidget, new ArticleEditorFormWidget(context).setArticleId(record.getString("id")).setApi(api))
+	})
+	return(v)
+}
+
+func startDataQuery(callback as function<void,vector<DynamicMap>>) override
+{
+	api.getAllArticles(func(articles as vector<DynamicMap>) {
+		callback(articles)
+	})
+}

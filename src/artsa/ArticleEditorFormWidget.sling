@@ -1,0 +1,83 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is FormWidget is TitledWidget:
+
+import cape
+import cave
+import cave.ui
+
+prop api as APIClient
+prop articleId as string
+
+ctor(context as GuiApplicationContext)
+{
+	base(context)
+	setFillContainerWidget(true)
+	setEnableScrolling(false)
+}
+
+func getWidgetTitle as string
+{
+	return("Edit Article")
+}
+
+func getFormDeclaration override as FormDeclaration
+{
+	var v = new FormDeclaration()
+	v.startHorizontalContainer()
+	v.addTextInput("title", "Article Title", null).setWeight(2.0)
+	v.addTextInput("banner", "Filename of banner image", null).setWeight(1.0)
+	v.endHorizontalContainer()
+	v.addTextInput("slogan", "Article Slogan", null)
+	v.addTextAreaInput("intro", "Introduction Paragraph", null, 4)
+	v.addStringListInput("categories", "Categories", null)
+	v.addCodeInput("contentMarkup", "Article Text", null, 10).setWeight(1.0)
+	return(v)
+}
+
+func addActions override
+{
+	addAction("Save", func {
+		var data = getFormData()
+		var content = data.getString("contentMarkup")
+		data.remove("contentMarkup")
+		if(String.isEmpty(articleId)) {
+			; // FIXME: Come up with one?
+		}
+		api.updateArticle(articleId, data, content, func {
+			PRINT("YEHEY!")
+		})
+	})
+}
+
+func initializeWidget override
+{
+	base.initializeWidget()
+	if(String.isEmpty(articleId) == false && api != null) {
+		api.getArticleDetails(articleId, func(details as DynamicMap) {
+			setFormData(details)
+		})
+	}
+}

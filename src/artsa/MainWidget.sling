@@ -1,0 +1,59 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is NavigationWidget imports cape imports cave imports cave.ui:
+
+prop api as APIClient
+
+ctor(ctx as GuiApplicationContext)
+{
+	base(ctx)
+	setBackgroundColor(Color.white())
+}
+
+func createMainWidget override as Widget
+{
+	var logo = ImageWidget.forImageResource(context, "sympathy_logo")
+	logo.setWidgetImageScaleMethod(ImageWidget.FIT)
+	logo.setWidgetImageWidth(context.getHeightValue("100mm"))
+	return(AlignWidget.forWidget(context, logo, 0.5, 0.5))
+}
+
+func createSidebarWidget override as Widget
+{
+	var sb = new SidebarWidget(context)
+	sb.setWidgetBackgroundColor(Color.forString("#04383c"))
+	sb.setDefaultActionItemWidgetBackgroundColor(Color.forString("#44acb5"))
+	sb.setDefaultLabelItemWidgetBackgroundColor(Color.forString("#04383c"))
+	sb.addLabelItem("Sympathy")
+	sb.addActionItem("New Article", func {
+		hideSidebarWidget()
+		switchWidget(new ArticleEditorFormWidget(context).setApi(api))
+	})
+	sb.addActionItem("All Articles", func {
+		hideSidebarWidget()
+		switchWidget(new ArticleListWidget(context).setApi(api))
+	})
+	return(sb)
+}
