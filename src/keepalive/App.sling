@@ -133,7 +133,7 @@ func execute(args as array<string>) as bool
 		}
 	}
 	if(command == null || showHelp) {
-		ConsoleApplication.printHeader(stdout, null)
+		ConsoleApplication.PRINT_HEADER(stdout, null)
 		printUsage(stdout)
 		return(true)
 	}

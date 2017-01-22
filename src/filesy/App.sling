@@ -43,12 +43,12 @@ var processTemplateFiles = false
 
 func printHeader(stdout as PrintWriter) override
 {
-	ConsoleApplication.printHeader(stdout, null)
+	ConsoleApplication.PRINT_HEADER(stdout, null)
 }
 
 func printVersion(stdout as PrintWriter, longFormat as bool) override
 {
-	ConsoleApplication.printVersion(stdout, longFormat)
+	ConsoleApplication.PRINT_VERSION(stdout, longFormat)
 }
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
@@ -76,7 +76,7 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 	if(base.initialize(ctx, server) == false) {
 		return(false)
 	}
-	server.updateServerName()
+	server.UPDATE_SERVER_NAME()
 	if(contentDirectory == null) {
 		Log.error(ctx, "No `contentDirectory' specified. Either use a config file or specify -OcontentDirectory=<directory>")
 		return(false)

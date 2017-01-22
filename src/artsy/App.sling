@@ -50,12 +50,12 @@ prop serverMode = "web"
 
 func printHeader(stdout as PrintWriter) override
 {
-	ConsoleApplication.printHeader(stdout, null)
+	ConsoleApplication.PRINT_HEADER(stdout, null)
 }
 
 func printVersion(stdout as PrintWriter, longFormat as bool) override
 {
-	ConsoleApplication.printVersion(stdout, longFormat)
+	ConsoleApplication.PRINT_VERSION(stdout, longFormat)
 }
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
@@ -139,7 +139,7 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 	if(base.initialize(ctx, server) == false) {
 		return(false)
 	}
-	server.updateServerName()
+	server.UPDATE_SERVER_NAME()
 	if(siteDirectory == null) {
 		siteDirectory = getConfigFileDirectory()
 	}
@@ -216,6 +216,8 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 		})
 	}
 	else if(serverMode == "api") {
+		// support the posting of large documents
+		server.setSmallBodyLimit(1024 * 1024)
 		if(apiSecret != null) {
 			server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
 				var secret = req.getHeader("x-secret")

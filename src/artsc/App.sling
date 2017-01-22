@@ -67,7 +67,7 @@ func main(args as array<string>) static as int #main
 
 func printHeader(stdout as PrintWriter)
 {
-	ConsoleApplication.printHeader(stdout, null)
+	ConsoleApplication.PRINT_HEADER(stdout, null)
 }
 
 func printUsage(stdout as PrintWriter) virtual
