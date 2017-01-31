@@ -22,57 +22,65 @@
  * SOFTWARE.
  */
 
-class is LayerWidget imports cape imports cave imports cave.ui:
+class:
 
-ctor(context as GuiApplicationContext)
+ui LayerWidget
 {
-	base(context)
-}
-
-func adjustStyle(context as GuiApplicationContext, widget as TextInputWidget) as TextInputWidget
-{
-	widget.setWidgetPadding(context.getHeightValue("2mm"))
-	widget.setWidgetBackgroundColor(Color.forRGB(0xEF, 0xEF, 0xEF))
-	return(widget)
-}
-
-func initializeWidget override
-{
-	base.initializeWidget()
-	addWidget(CanvasWidget.forColor(context, Color.white()))
-	var container = VerticalBoxWidget.forContext(context)
-	container.setWidgetMargin(context.getHeightValue("1mm"))
-	container.setWidgetSpacing(context.getHeightValue("3mm"))
-	container.setWidgetWidthRequest(context.getWidthValue("100mm"))
-	var logo = ImageWidget.forImageResource(context, "sympathy_logo")
-	logo.setWidgetImageScaleMethod(ImageWidget.FIT)
-	container.addWidget(logo)
-	var loginContainer = VerticalBoxWidget.forContext(context)
-	loginContainer.setWidgetSpacing(context.getHeightValue("1mm"))
-	var serverUrl final = adjustStyle(context, TextInputWidget.forType(context, TextInputWidget.TYPE_URL, "Server URL"))
-	var serverSecret final = adjustStyle(context, TextInputWidget.forType(context, TextInputWidget.TYPE_PASSWORD, "Server Secret"))
-	loginContainer.addWidget(serverUrl)
-	loginContainer.addWidget(serverSecret)
-	var loginBtn = TextButtonWidget.forText(context, "Log In", func {
-		var url = serverUrl.getWidgetText()
-		var secret = serverSecret.getWidgetText()
-		if(String.isEmpty(url)) {
-			context.showErrorDialog("Server URL must be supplied.")
-			return
+	CanvasWidget {
+		widgetColor = Color.white()
+	}
+	VerticalScrollerWidget {
+		AlignWidget {
+			VerticalBoxWidget : 0.5, 0.5 {
+				widgetMargin = context.getHeightValue("1mm")
+				widgetSpacing = context.getHeightValue("3mm")
+				widgetWidthRequest = context.getWidthValue("100mm")
+				ImageWidget {
+					widgetImageResource = "sympathy_logo"
+					widgetImageScaleMethod = ImageWidget.FIT
+				}
+				VerticalBoxWidget {
+					widgetSpacing = context.getHeightValue("1mm")
+					TextInputWidget serverUrl {
+						widgetType = TextInputWidget.TYPE_URL
+						widgetPlaceholder = "Server URL"
+						widgetPadding = context.getHeightValue("2mm")
+						widgetBackgroundColor = Color.forRGB(0xEF, 0xEF, 0xEF)
+					}
+					TextInputWidget serverSecret {
+						widgetType = TextInputWidget.TYPE_PASSWORD
+						widgetPlaceholder = "Server Secret"
+						widgetPadding = context.getHeightValue("2mm")
+						widgetBackgroundColor = Color.forRGB(0xEF, 0xEF, 0xEF)
+					}
+					TextButtonWidget {
+						widgetText = "Login"
+						widgetClickHandler = func {
+							var url = serverUrl.getWidgetText()
+							var secret = serverSecret.getWidgetText()
+							if(String.isEmpty(url)) {
+								context.showErrorDialog("Server URL must be supplied.")
+								return
+							}
+							var api = new APIClient()
+							api.setContext(context)
+							api.setParentWidget(thisWidget)
+							api.setApiUrl(url)
+							api.setApiSecret(secret)
+							api.getServerInfo(func(serverName as string, serverVersion as string) {
+								NavigationWidget.pushToContainer(thisWidget, new MainWidget(context).setApi(api))
+							})
+						}
+						widgetBackgroundColor = Color.forRGB(128, 128, 255)
+						widgetTextColor = Color.white()
+					}
+				}
+				AlignWidget {
+					LabelWidget : 0.5, 0.5 {
+						widgetText = VALUE "copyright"
+					}
+				}
+			}
 		}
-		var api = new APIClient()
-		api.setContext(context)
-		api.setParentWidget(this)
-		api.setApiUrl(url)
-		api.setApiSecret(secret)
-		api.getServerInfo(func(serverName as string, serverVersion as string) {
-			NavigationWidget.pushToContainer(this, new MainWidget(context).setApi(api))
-		})
-	})
-	loginBtn.setWidgetBackgroundColor(Color.forRGB(128, 128, 255))
-	loginBtn.setWidgetTextColor(Color.white())
-	loginContainer.addWidget(loginBtn)
-	container.addWidget(loginContainer)
-	container.addWidget(AlignWidget.forWidget(context, LabelWidget.forText(context, VALUE("copyright")), 0.5, 0.5))
-	addWidget(VerticalScrollerWidget.forWidget(context, AlignWidget.forWidget(context, container, 0.5, 0.5)))
+	}
 }

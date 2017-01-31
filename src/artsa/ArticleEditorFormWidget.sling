@@ -77,7 +77,7 @@ func initializeWidget override
 	base.initializeWidget()
 	if(String.isEmpty(articleId) == false && api != null) {
 		api.getArticleDetails(articleId, func(details as DynamicMap) {
-			setFormData(details)
+			setFormData(details, true)
 		})
 	}
 }
