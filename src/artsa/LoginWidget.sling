@@ -27,35 +27,35 @@ class:
 ui LayerWidget
 {
 	CanvasWidget {
-		widgetColor = Color.white()
+		color = Color.white()
 	}
 	VerticalScrollerWidget {
 		AlignWidget {
 			VerticalBoxWidget : 0.5, 0.5 {
-				widgetMargin = context.getHeightValue("1mm")
-				widgetSpacing = context.getHeightValue("3mm")
-				widgetWidthRequest = context.getWidthValue("100mm")
+				margin = context.getHeightValue("1mm")
+				spacing = context.getHeightValue("3mm")
+				widthRequest = context.getWidthValue("100mm")
 				ImageWidget {
-					widgetImageResource = "sympathy_logo"
-					widgetImageScaleMethod = ImageWidget.FIT
+					imageResource = "sympathy_logo"
+					imageScaleMethod = ImageWidget.FIT
 				}
 				VerticalBoxWidget {
-					widgetSpacing = context.getHeightValue("1mm")
+					spacing = context.getHeightValue("1mm")
 					TextInputWidget serverUrl {
-						widgetType = TextInputWidget.TYPE_URL
-						widgetPlaceholder = "Server URL"
-						widgetPadding = context.getHeightValue("2mm")
-						widgetBackgroundColor = Color.forRGB(0xEF, 0xEF, 0xEF)
+						type = TextInputWidget.TYPE_URL
+						placeholder = "Server URL"
+						padding = context.getHeightValue("2mm")
+						backgroundColor = Color.forRGB(0xEF, 0xEF, 0xEF)
 					}
 					TextInputWidget serverSecret {
-						widgetType = TextInputWidget.TYPE_PASSWORD
-						widgetPlaceholder = "Server Secret"
-						widgetPadding = context.getHeightValue("2mm")
-						widgetBackgroundColor = Color.forRGB(0xEF, 0xEF, 0xEF)
+						type = TextInputWidget.TYPE_PASSWORD
+						placeholder = "Server Secret"
+						padding = context.getHeightValue("2mm")
+						backgroundColor = Color.forRGB(0xEF, 0xEF, 0xEF)
 					}
 					TextButtonWidget {
-						widgetText = "Login"
-						widgetClickHandler = func {
+						text = "Login"
+						clickHandler = func {
 							var url = serverUrl.getWidgetText()
 							var secret = serverSecret.getWidgetText()
 							if(String.isEmpty(url)) {
@@ -71,13 +71,13 @@ ui LayerWidget
 								NavigationWidget.pushToContainer(thisWidget, new MainWidget(context).setApi(api))
 							})
 						}
-						widgetBackgroundColor = Color.forRGB(128, 128, 255)
-						widgetTextColor = Color.white()
+						backgroundColor = Color.forRGB(128, 128, 255)
+						textColor = Color.white()
 					}
 				}
 				AlignWidget {
 					LabelWidget : 0.5, 0.5 {
-						widgetText = VALUE "copyright"
+						text = VALUE "copyright"
 					}
 				}
 			}
