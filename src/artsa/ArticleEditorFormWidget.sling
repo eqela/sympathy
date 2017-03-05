@@ -47,13 +47,13 @@ func getFormDeclaration override as FormDeclaration
 {
 	var v = new FormDeclaration()
 	v.startHorizontalContainer()
-	v.addTextInput("title", "Article Title", null).setWeight(2.0)
-	v.addTextInput("banner", "Filename of banner image", null).setWeight(1.0)
+	v.addTextInput("title", "Article Title", null).setProperty("weight", 2.0)
+	v.addTextInput("banner", "Filename of banner image", null).setProperty("weight", 1.0)
 	v.endHorizontalContainer()
 	v.addTextInput("slogan", "Article Slogan", null)
 	v.addTextAreaInput("intro", "Introduction Paragraph", null, 4)
 	v.addStringListInput("categories", "Categories", null)
-	v.addCodeInput("contentMarkup", "Article Text", null, 10).setWeight(1.0)
+	v.addCodeInput("contentMarkup", "Article Text", null, 10).setProperty("weight", 1.0)
 	return(v)
 }
 
