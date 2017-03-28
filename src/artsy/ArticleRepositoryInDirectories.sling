@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is ArticleRepository imports cape imports capex:
+class is ArticleRepository imports cape imports capex.util imports capex.text:
 
 class MyArticle is Article
 {

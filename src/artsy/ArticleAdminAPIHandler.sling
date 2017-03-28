@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandler imports cape imports capex imports sympathy:
+class is HTTPServerRequestHandler imports cape imports sympathy:
 
 func forRepository(repository as ArticleRepository) static as this
 {

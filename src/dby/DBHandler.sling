@@ -22,62 +22,62 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandlerAdapter imports cape imports capex imports sympathy:
+class is HTTPServerRequestHandlerAdapter imports cape imports sympathy imports capex.data:
 
-prop db as SQLDatabase;
+prop db as SQLDatabase
 
 func onPOST(req as HTTPServerRequest) override as bool
 {
-	var tableName = req.popResource();
+	var tableName = req.popResource()
 	if(tableName == null) {
-		req.sendInternalError("Creating tables: Not implemented");
-		return(true);
+		req.sendInternalError("Creating tables: Not implemented")
+		return(true)
 	}
 	if(req.hasMoreResources()) {
-		req.sendInvalidRequest();
-		return(true);
+		req.sendInvalidRequest()
+		return(true)
 	}
-	var data = req.getBodyJSONMap();
+	var data = req.getBodyJSONMap()
 	if(data == null) {
-		req.sendInvalidRequest();
-		return(true);
+		req.sendInvalidRequest()
+		return(true)
 	}
 	db.execute(db.prepareInsertStatement(tableName, data), func(status as bool) {
 		if(status == false) {
-			req.sendInternalError();
+			req.sendInternalError()
 		}
 		else {
-			req.sendJSONObject(JSONResponse.forOk());
+			req.sendJSONObject(JSONResponse.forOk())
 		}
-	});
-	return(true);
+	})
+	return(true)
 }
 
 func onGET(req as HTTPServerRequest) override as bool
 {
-	var tableName = req.popResource();
+	var tableName = req.popResource()
 	if(tableName == null) {
 		db.queryAllTableNames(func(data as vector) {
 			if(data == null) {
-				req.sendNotFound();
+				req.sendNotFound()
 			}
 			else {
-				req.sendJSONObject(data);
+				req.sendJSONObject(data)
 			}
-		});
-		return(true);
+		})
+		return(true)
 	}
 	if(req.hasMoreResources()) {
-		req.sendInvalidRequest();
-		return(true);
+		req.sendInvalidRequest()
+		return(true)
 	}
 	db.query(db.prepareQueryAllStatement(tableName), func(data as SQLResultSetIterator) {
 		if(data == null) {
-			req.sendNotFound();
+			req.sendNotFound()
 		}
 		else {
-			req.sendJSONObject(data.toVector());
+			req.sendJSONObject(data.toVector())
 		}
-	});
-	return(true);
+	})
+	return(true)
 }

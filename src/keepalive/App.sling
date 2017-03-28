@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex imports capex.console:
+class imports cape imports capex.console:
 
 IFDEF("target_mono")
 {

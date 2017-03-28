@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is DynamicMapObject abstract imports cape imports capex:
+class is DynamicMapObject abstract imports cape imports capex.text:
 
 func isValidIdentifier(name as string) static as bool
 {

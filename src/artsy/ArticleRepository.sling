@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-interface imports cape imports capex:
+interface imports cape:
 
 func getCategories(callback as function<void,vector<Category>>)
 func getArticleCount(category as string, callback as function<void,int>)

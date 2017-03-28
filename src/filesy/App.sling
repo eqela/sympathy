@@ -25,7 +25,6 @@
 class is WebServer imports sympathy.app:
 
 import cape
-import capex
 import capex.console
 import sympathy
 

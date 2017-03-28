@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex imports capex.console:
+class imports cape imports capex.console imports capex.text imports capex.util:
 
 func isValidIdentifier(name as string) as bool
 {
@@ -418,7 +418,7 @@ func execute(args as array<string>) as bool
 	Log.info(ctx, String.forInteger(ctx.getErrorCount()) .. " error(s)")
 	Log.info(ctx, String.forInteger(ctx.getWarningCount()) .. " warning(s)")
 	if(v) {
-		Log.info(ctx "Processing successful: `" .. dataDir.getPath() .. "'")
+		Log.info(ctx, "Processing successful: `" .. dataDir.getPath() .. "'")
 	}
 	else {
 		Log.error(ctx, "Processing FAILED: `" .. dataDir.getPath() .. "'")

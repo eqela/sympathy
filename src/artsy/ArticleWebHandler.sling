@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandlerAdapter is RichTextDocumentReferenceResolver imports cape imports capex imports sympathy:
+class is HTTPServerRequestHandlerAdapter is RichTextDocumentReferenceResolver imports cape imports sympathy imports capex.text:
 
 func forRepository(repository as ArticleRepository) static as this
 {
@@ -160,6 +160,7 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 	if(pp < 0) {
 		pp = 0
 	}
+	var myObject = this
 	repository.getArticleCount(catId, func(count as int) {
 		if(count < 0) {
 			next()
@@ -182,7 +183,6 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 		if(pages < 1) {
 			pages = 1
 		}
-		var myObject = this
 		repository.getArticles(catId, pp * articlesPerPage, articlesPerPage, func(category as Category, results as vector<Article>) {
 			if(results == null) {
 				sendResponse(req, "error", JSONResponse.forErrorCode("queryFailed"))
@@ -247,6 +247,7 @@ func onGETArticle(req as HTTPServerRequest, next as function)
 		next()
 		return
 	}
+	var myObject = this
 	repository.getArticleById(pageId, func(article as Article) {
 		if(article == null) {
 			next()
@@ -277,7 +278,6 @@ func onGETArticle(req as HTTPServerRequest, next as function)
 			req.sendRedirectAsDirectory()
 			return
 		}
-		var myObject = this
 		var map = article.toDynamicMap()
 		article.getIntroHtml(myObject, func(introHtml as string) {
 			map.set("introHtml", introHtml)
