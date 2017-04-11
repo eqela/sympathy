@@ -67,6 +67,6 @@ func getTokenInfo(token as string, listener as function<void,DynamicMap,Error>) 
 {
 	var op = new HTTPClientOperation()
 	op.setAcceptInvalidCertificate(true)
-	var req = HTTPClientRequest.forGET("https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=" .. capex.util.URLEncoder.encode(token))
+	var req = HTTPClientRequest.forGET("https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=" .. cape.URLEncoder.encode(token))
 	op.executeRequest(req, new MyHTTPClientListener().setListener(listener))
 }
