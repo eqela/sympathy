@@ -1,0 +1,146 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape imports cave imports cave.ui imports chaty.client #mainWidget:
+
+class MyChatConversationWidget is ChatConversationWidget
+{
+	ctor(context as GuiApplicationContext):
+		base(context)
+
+	func createMessageFieldWidget override as TextAreaWidget:
+		return TextAreaWidget.forPlaceholder(context, "Message text")
+
+	func createSendButtonWidget override as Widget:
+		return LabelWidget.forText(context, "Send")
+
+	func createMessageWidgetObject override as ChatMessageWidget:
+		return new MyChatMessageWidget(context)
+}
+
+class MyChatConversationItemWidget is ChatConversationItemWidget
+{
+	var label as LabelWidget
+
+	ctor(context as GuiApplicationContext):
+		base(context)
+
+	func initializeWidget override
+	{
+		base.initializeWidget()
+		addWidget(label = LabelWidget.forText(context, getChannelId()))
+	}
+}
+
+class MyChatMessageWidget is ChatMessageWidget
+{
+	var label as LabelWidget
+
+	ctor(context as GuiApplicationContext):
+		base(context)
+
+	func initializeWidget override
+	{
+		base.initializeWidget()
+		addWidget(label = LabelWidget.forText(context, getMessageText()))
+	}
+}
+
+class MyChatWidget is ChatWidget
+{
+	ctor(context as GuiApplicationContext):
+		base(context)
+
+	func createChatConversationItemWidgetObject override as ChatConversationItemWidget:
+		return new MyChatConversationItemWidget(context)
+
+	func createChatConversationWidgetObject override as ChatConversationWidget:
+		return new MyChatConversationWidget(context)
+}
+
+prop manager as ChatManager
+var serverAddress as TextInputWidget
+var recipient as TextInputWidget
+var username as TextInputWidget
+var message as TextInputWidget
+var status as LabelWidget
+
+ctor(ctx as GuiApplicationContext)
+{
+	base(ctx)
+	manager = ChatManager.create(ctx)
+}
+
+ui LayerWidget
+{
+	CanvasWidget {
+		color = Color.white()
+	}
+	VerticalBoxWidget main {
+		spacing = context.getWidthValue("2000um")
+		margin = context.getWidthValue("2000um")
+	}
+}
+
+func initializeWidget override
+{
+	base.initializeWidget()
+	assert manager
+	serverAddress = TextInputWidget.forType(context, TextInputWidget.TYPE_DEFAULT, "Server Address")
+	serverAddress.setWidgetPadding(context.getHeightValue("4mm"))
+	serverAddress.setWidgetFontSize(context.getHeightValue("3mm"))
+	main.addWidget(serverAddress)
+	recipient = TextInputWidget.forType(context, TextInputWidget.TYPE_DEFAULT, "Recipient")
+	recipient.setWidgetPadding(context.getHeightValue("4mm"))
+	recipient.setWidgetFontSize(context.getHeightValue("3mm"))
+	main.addWidget(recipient)
+	username = TextInputWidget.forType(context, TextInputWidget.TYPE_DEFAULT, "Username")
+	username.setWidgetPadding(context.getHeightValue("4mm"))
+	username.setWidgetFontSize(context.getHeightValue("3mm"))
+	main.addWidget(username)
+	message = TextInputWidget.forType(context, TextInputWidget.TYPE_DEFAULT, "Message")
+	message.setWidgetPadding(context.getHeightValue("4mm"))
+	message.setWidgetFontSize(context.getHeightValue("3mm"))
+	main.addWidget(message)
+	main.addWidget(TextButtonWidget.forText(context, "Send", func {
+		var r = new DynamicVector()
+		r.append("dwight")
+		r.append("steven")
+		var m = new ChatMessage()
+		m.setRecipients(r)
+		m.setMessage(message.getWidgetText())
+		manager.sendMessage(m)
+	}))
+	main.addWidget(status = new LabelWidget(context), 0)
+	var chatWidget = new MyChatWidget(context)
+	chatWidget.setManager(manager)
+	main.addWidget(chatWidget, 1)
+	manager.setChatWidget(chatWidget)
+	main.addWidget(TextButtonWidget.forText(context, "Connect", func {
+		var host = serverAddress.getWidgetText()
+		if String.isEmpty(host):
+			host = "ws://127.0.0.1:8080"
+		manager.connect(host, String.toUTF8Buffer(username.getWidgetText()))
+	}))
+}

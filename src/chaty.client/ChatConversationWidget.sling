@@ -1,0 +1,203 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is LayerWidget is KeyListener abstract imports cape imports cave imports cave.ui:
+
+ctor(context as GuiApplicationContext)
+{
+	base(context)
+	messages = new DynamicVector()
+}
+
+prop chatWidget as ChatWidget
+prop channelId as string
+var recipients private as DynamicVector
+var messageList private as VerticalBoxWidget
+var messageField private as TextAreaWidget
+var messages private as DynamicVector
+
+func initialize(item as ChatConversationItemWidget) as bool
+{
+	assert item
+	messages = item.getMessages()
+	if messages == null:
+		messages = new DynamicVector()
+	channelId = item.getChannelId()
+	if String.isEmpty(channelId):
+		return false
+	recipients = item.getRecipients()
+	assert recipients
+	return true
+}
+
+func onMessageReceived(message as ChatMessage)
+{
+	assert message {
+		Log.error(context, "message from server is null")
+	}
+	if not String.isEmpty(channelId) && String.equals(channelId, message.getChannelId()) == false:
+		return
+	channelId = message.getChannelId()
+	if String.isEmpty(channelId):
+		return
+	recipients = message.getRecipients()
+	initializeMessageWidget(message)
+}
+
+func initializeMessageWidget(message as ChatMessage)
+{
+	assert (message && messageList)
+	var mwo = assert createMessageWidgetObject()
+	mwo.setMessage(message)
+	messageList.addWidget(mwo)
+}
+
+func initializeWidget override
+{
+	base.initializeWidget()
+	var bg = createBackgroundWidget()
+	if bg != null:
+		addWidget(bg)
+	var vbox = VerticalBoxWidget.forContext(context)
+	var header = createHeaderWidget()
+	if header != null:
+		vbox.addWidget(header)
+	var subHeader = createSubHeaderWidget()
+	if subHeader != null:
+		vbox.addWidget(subHeader)
+	vbox.addWidget(VerticalScrollerWidget.forWidget(context, messageList = VerticalBoxWidget.forContext(context)), 1)
+	var footer = createFooterWidget()
+	if footer != null:
+		vbox.addWidget(footer)
+	addWidget(vbox)
+	foreach(message as ChatMessage in messages.toVector()) {
+		initializeMessageWidget(message)
+	}
+}
+
+func createHeaderWidget private as Widget
+{
+	var hbox = HorizontalBoxWidget.forContext(context)
+	var back = createBackButtonWidget()
+	var title = createTitleWidget()
+	if back == null && title == null:
+		return null
+	if back != null {
+		Widget.setWidgetClickHandler(back, func {
+			onBackWidgetClicked()
+		})
+		hbox.addWidget(back)
+	}
+	if title != null:
+		hbox.addWidget(title, 1)
+	var hbw = createHeaderBackgroundWidget()
+	if hbw != null {
+		var layer = LayerWidget.forContext(context)
+		layer.addWidget(hbw)
+		layer.addWidget(hbox)
+		return layer
+	}
+	return hbox
+}
+
+func onKeyEvent(event as KeyEvent) virtual
+{
+	if(event.isKeyPress(KeyEvent.KEY_BACK)) {
+		event.consume()
+		onBackWidgetClicked()
+	}
+}
+
+func onBackWidgetClicked private
+{
+	assert chatWidget
+	chatWidget.onBackFromConversationWidget()
+}
+
+func onSendWidgetClicked private
+{
+	assert chatWidget
+	assert messageField
+	var text = assert messageField.getWidgetText()
+	messageField.setWidgetText(null)
+	var m = new ChatMessage()
+	m.setRecipients(recipients)
+	m.setChannelId(channelId)
+	m.setMessage(text)
+	chatWidget.sendMessage(m)
+}
+
+func createHeaderBackgroundWidget virtual as Widget:
+	return null
+
+func createFooterBackgroundWidget virtual as Widget:
+	return null
+
+func createBackgroundWidget virtual as Widget:
+	return null
+
+func createBackButtonWidget virtual as Widget:
+	return null
+
+func createTitleWidget virtual as Widget:
+	return null
+
+func createFooterWidget private as Widget
+{
+	// FIXME: Too many widgets
+	var layer = LayerWidget.forContext(context)
+	var fbw = createFooterBackgroundWidget()
+	if fbw != null:
+		layer.addWidget(fbw)
+	var hbox = HorizontalBoxWidget.forContext(context, context.getWidthValue("1000um"), context.getWidthValue("2000um"))
+	var line = createSeparator()
+	var send = createSendButtonWidget()
+	messageField = createMessageFieldWidget()
+	var attachment = createAttachmentButton()
+	if send == null && messageField == null:
+		return null
+	if messageField != null:
+		hbox.addWidget(messageField, 1)
+	if send != null {
+		Widget.setWidgetClickHandler(send, func {
+			onSendWidgetClicked()
+		})
+		hbox.addWidget(send)
+	}
+	if attachment != null {
+		hbox.addWidget(attachment)
+	}
+	layer.addWidget(line)
+	layer.addWidget(hbox)
+	return layer
+}
+
+func createSubHeaderWidget virtual as Widget:
+	return null
+
+func createSeparator abstract as Widget
+func createMessageFieldWidget abstract as TextAreaWidget
+func createSendButtonWidget abstract as Widget
+func createAttachmentButton abstract as Widget
+func createMessageWidgetObject abstract as ChatMessageWidget

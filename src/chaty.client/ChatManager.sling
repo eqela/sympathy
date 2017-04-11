@@ -1,0 +1,133 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+import cape
+import cave
+import cave.ui
+
+func create(ctx as LoggingContext) static as this
+{
+	var v = new this()
+	v.setApi(new ChatAPI().setCtx(ctx))
+	v.setCtx(ctx)
+	return v
+}
+
+prop ctx as LoggingContext
+prop api as ChatAPI
+prop chatWidget as ChatWidget
+var queue private as DynamicVector
+
+ctor
+{
+	conversationMap = new DynamicMap()
+	queue = new DynamicVector()
+}
+
+func connect(url as string, authData as buffer)
+{
+	assert api {
+		Log.error(ctx, "ChatManager: Failed to initialize. No 'ChatAPI' configured.")
+	}
+	assert chatWidget {
+		Log.error(ctx, "ChatManager: Failed to initialize. No 'ChatWidget' configured.")
+	}
+	api.setOnOpenCallback(func {
+		onOpenConnection()
+	})
+	api.setOnMessageCallback(func(message as ChatMessage) {
+		onMessageReceived(message)
+	})
+	api.setOnErrorCallback(func {
+		onErrorEvent()
+	})
+	api.setOnCloseCallback(func {
+		onCloseEvent()
+	})
+	api.connect(url, authData)
+}
+
+func pushMessage(message as ChatMessage) private:
+	queue.append(message)
+
+func popMessage as ChatMessage
+{
+	var m = queue.get(0) as ChatMessage
+	if m != null:
+		queue.remove(0)
+	return m
+}
+
+func onOpenConnection private
+{
+	PRINT "status: connected"
+	// Handle status connected here
+}
+
+func onErrorEvent private
+{
+	// Handle error events here
+}
+
+func onCloseEvent private
+{
+	// Handle close events here like reconnect after 5 seconds
+}
+
+func onMessageReceived(message as ChatMessage) private
+{
+	assert message
+	saveMessage(message)
+	if chatWidget.isActive() == false {
+		pushMessage(message)
+		// FIXME: Fire up a notification
+		return
+	}
+	chatWidget.onMessageReceived(message)
+}
+
+func getConversationChannelIds as DynamicVector:
+	return conversationMap.getKeys()
+
+var conversationMap private as DynamicMap
+
+func saveMessage(message as ChatMessage) private
+{
+	assert message
+	var channelId = assert message.getChannelId()
+	var c = conversationMap.get(channelId) as DynamicVector
+	if c == null {
+		c = new DynamicVector()
+		conversationMap.set(channelId, c)
+	}
+	c.append(message)
+}
+
+func sendMessage(message as ChatMessage)
+{
+	assert message
+	api.sendMessage(message)
+}
