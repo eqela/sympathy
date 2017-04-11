@@ -1,0 +1,71 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is WSServerConnectionHandler imports cape imports capex.console imports sympathy:
+
+prop connectionId as string
+prop engine as ChatEngine
+prop user as ChatUser
+
+func onOpened override
+{
+}
+
+func onClosed override
+{
+	// FIXME: Check if this gets called each time we call the close() method.
+	// We need to make sure the engine.onUserDisconnect() gets called everytime
+	// the connection is closed regardless if it's intentional or unintentional.
+	assert (engine && user)
+	engine.onUserDisconnect(user.getId(), this)
+}
+
+func onDataMessage(message as WSServerMessage) override
+{
+	assert message {
+		close()
+	}
+	var data = assert message.getPayloadBuffer() {
+		close()
+	}
+	onData(data)
+}
+
+func onData(data as buffer) private
+{
+	assert engine {
+		close()
+	}
+	engine.onDataReceived(data, this)
+}
+
+func sendMessage(message as ChatMessage) as int
+{
+	// FIXME: Should we close the connection if result is less than 1?
+	assert message
+	var r = sendResponse(WSServerMessage.create(1, 0, 0, 0, 1, null, message.toBuffer()))
+	if r < 1:
+		close()
+	return r
+}
