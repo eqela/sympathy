@@ -22,10 +22,19 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class:
+
+const CLOSE_NORMAL = 1000
+const CLOSE_GOING_AWAY = 1001
+const CLOSE_PROTOCOL_ERROR = 1002
+const CLOSE_UNSUPPORTED = 1003
+const CLOSE_NO_STATUS = 1005
+const CLOSE_ABNORMAL = 1006
+const UNSUPPORTED_DATA = 1007
+const POLICY_VIOLATION = 1008
+const CLOSE_TOO_LARGE = 1009
+const MISSING_EXTENSION = 1010
+const INTERNAL_ERROR = 1011
+const SERVICE_RESTART = 1012
+const TRY_AGAIN_LATER = 1013
+const TLS_HANDSHAKE = 1015

@@ -1,0 +1,677 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape imports capex.util:
+
+func forDetails(method as string, url as string, version as string, headers as KeyValueList<string,string>) static as this
+{
+	var v = new this()
+	v.method = method
+	v.urlString = url
+	v.version = version
+	v.setHeaders(headers)
+	return v
+}
+
+prop method as string
+prop urlString as string
+prop version as string
+var rawHeaders as KeyValueList<string,string>
+var headers as map<string,string>
+var url as URL
+var cacheId as string
+prop connection as HTTPServerConnection
+prop server as HTTPServerBase
+prop data as object
+prop session as object
+var cookies as map<string,string>
+prop bodyBuffer as buffer
+var bodyString as string
+var postParameters as map<string,string>
+var resources as vector<string>
+var currentResource as int
+var relativeResourcePath as string
+var responseSent = false
+var responseCookies as vector<HTTPServerCookie>
+
+macro REQUIRE_SESSION
+{
+	if thisObject.getSession() == null {
+		thisObject.sendResponse(HTTPServerResponse.forHTTPNotAllowed())
+		return
+	}
+}
+
+func asBuffer as buffer
+{
+	if String.isEmpty(method) || String.isEmpty(urlString) || String.isEmpty(version) || rawHeaders == null:
+		return null
+	var hdr = new StringBuilder()
+	hdr.append(method)
+	hdr.append(' ')
+	hdr.append(urlString)
+	hdr.append(' ')
+	hdr.append(version)
+	hdr.append('\r')
+	hdr.append('\n')
+	var itr = assert iterateHeaders()
+	loop {
+		var kvp = itr.next() as KeyValuePair<string, string>
+		if kvp == null:
+			break
+		hdr.append(kvp.key)
+		hdr.append(':')
+		hdr.append(' ')
+		hdr.append(kvp.value)
+		hdr.append('\r')
+		hdr.append('\n')
+	}
+	hdr.append('\r')
+	hdr.append('\n')
+	var v = assert String.toUTF8Buffer(hdr.toString())
+	if bodyBuffer != null:
+		v = Buffer.append(v, bodyBuffer)
+	return v
+}
+
+func setBodyReceiver(receiver as DataStream)
+{
+	assert receiver
+	if bodyBuffer {
+		var sz = SIZE(bodyBuffer)
+		assert receiver.onDataStreamStart(sz)
+		assert receiver.onDataStreamContent(bodyBuffer, sz)
+		receiver.onDataStreamEnd()
+		return
+	}
+	assert connection
+	connection.setBodyReceiver(receiver)
+}
+
+func getCacheId as string
+{
+	if cacheId == null {
+		if method == "GET":
+			cacheId = method .. " " .. urlString
+	}
+	return cacheId
+}
+
+func clearHeaders
+{
+	rawHeaders = null
+	headers = null
+}
+
+func addHeader(key as string, value as string)
+{
+	assert key
+	if not rawHeaders:
+		rawHeaders = new KeyValueList<string,string>()
+	if not headers:
+		headers = new map<string,string>
+	rawHeaders.add(key, value)
+	headers[String.toLowerCase(key)] = value
+}
+
+func setHeaders(headers as KeyValueList<string,string>)
+{
+	clearHeaders()
+	assert headers
+	var it = assert headers.iterate()
+	loop {
+		var kvp = it.next()
+		if not kvp:
+			break
+		addHeader(kvp.key, kvp.value)
+	}
+}
+
+func getHeader(name as string) as string
+{
+	if(String.isEmpty(name)) {
+		return(null)
+	}
+	if(headers == null) {
+		return(null)
+	}
+	return(Map.get(headers, name))
+}
+
+func iterateHeaders as Iterator<KeyValuePair<string,string>>
+{
+	if(rawHeaders == null) {
+		return(null)
+	}
+	return(rawHeaders.iterate())
+}
+
+func getURL as URL
+{
+	if(url == null) {
+		url = URL.forString(urlString, true)
+	}
+	return(url)
+}
+
+func getQueryParameters as map<string,string>
+{
+	var url = getURL()
+	if(url == null) {
+		return(null)
+	}
+	return(url.getQueryParameters())
+}
+
+func iterateQueryParameters as Iterator<KeyValuePair<string,string>>
+{
+	var url = getURL()
+	if(url == null) {
+		return(null)
+	}
+	var list = url.getRawQueryParameters()
+	if(list == null) {
+		return(null)
+	}
+	return(list.iterate())
+}
+
+func getQueryParameter(key as string) as string
+{
+	var url = getURL()
+	if(url == null) {
+		return(null)
+	}
+	return(url.getQueryParameter(key))
+}
+
+func getURLPath as string
+{
+	var url = getURL()
+	if(url == null) {
+		return(null)
+	}
+	return(url.getPath())
+}
+
+func getRemoteIPAddress as string
+{
+	var rr = getRemoteAddress()
+	if(rr == null) {
+		return(null)
+	}
+	var colon = String.indexOf(rr, ':')
+	if(colon < 0) {
+		return(rr)
+	}
+	return(String.getSubString(rr, 0, colon))
+}
+
+func getRemoteAddress as string
+{
+	if(connection == null) {
+		return(null)
+	}
+	return(connection.getRemoteAddress())
+}
+
+// Header shortcuts
+
+func getConnectionClose as bool
+{
+	var hdr = getHeader("connection")
+	if(hdr == null) {
+		return(false)
+	}
+	if(hdr == "close") {
+		return(true)
+	}
+	return(false)
+}
+
+func getETag as string
+{
+	return(getHeader("if-none-match"))
+}
+
+func getCookieValues as map<string,string>
+{
+	if(cookies == null) {
+		var v = new map<string,string>
+		var cvals = getHeader("cookie")
+		if(cvals != null) {
+			var sp = String.split(cvals, ';')
+			foreach(ck in sp) {
+				ck = String.strip(ck)
+				if(String.isEmpty(ck)) {
+					continue
+				}
+				var e = String.indexOf(ck, '=')
+				if(e < 0) {
+					Map.set(v, ck, "")
+				}
+				else {
+					Map.set(v, String.getSubString(ck, 0, e), String.getSubString(ck, e+1))
+				}
+			}
+		}
+		cookies = v
+	}
+	return(cookies)
+}
+
+func getCookieValue(name as string) as string
+{
+	var c = getCookieValues()
+	if(c == null) {
+		return(null)
+	}
+	return(Map.get(c, name))
+}
+
+// Body shortcuts
+
+func getBodyString as string
+{
+	if(bodyString == null) {
+		var buffer = getBodyBuffer()
+		if(buffer != null) {
+			bodyString = String.forUTF8Buffer(buffer)
+		}
+		bodyBuffer = null
+	}
+	return(bodyString)
+}
+
+func getBodyJSONObject as object
+{
+	return(JSONParser.parse(getBodyString()))
+}
+
+func getBodyJSONVector as DynamicVector
+{
+	return(getBodyJSONObject() as DynamicVector)
+}
+
+func getBodyJSONMap as DynamicMap
+{
+	return(getBodyJSONObject() as DynamicMap)
+}
+
+func getBodyJSONMapValue(key as string) as string
+{
+	var map = getBodyJSONMap()
+	if(map == null) {
+		return(null)
+	}
+	return(map.getString(key))
+}
+
+func getPostParameters as map<string,string>
+{
+	if(postParameters == null) {
+		var bs = getBodyString()
+		if(String.isEmpty(bs)) {
+			return(null)
+		}
+		postParameters = QueryString.parse(bs)
+	}
+	return(postParameters)
+}
+
+func getPostParameter(key as string) as string
+{
+	var pps = getPostParameters()
+	if(pps == null) {
+		return(null)
+	}
+	return(Map.get(pps, key))
+}
+
+// Unknown
+
+func getRelativeRequestPath(relativeTo as string) as string
+{
+	var path = assert getURLPath()
+	if relativeTo != null && String.startsWith(path, relativeTo) {
+		path = String.getSubString(path, String.getLength(relativeTo))
+	}
+	else {
+		return null
+	}
+	if String.isEmpty(path):
+		path = "/"
+	return path
+}
+
+func initResources
+{
+	var path = getURLPath()
+	if(path == null) {
+		return
+	}
+	resources = String.split(path, '/')
+	Vector.removeFirst(resources)
+	var vsz = Vector.getSize(resources)
+	if(vsz > 0) {
+		var last = Vector.get(resources, vsz-1)
+		if(String.isEmpty(last)) {
+			Vector.removeLast(resources)
+		}
+	}
+	currentResource = 0
+}
+
+func hasMoreResources as bool
+{
+	if not resources:
+		initResources()
+	assert resources
+	if currentResource < Vector.getSize(resources):
+		return true
+	return false
+}
+
+func getRemainingResourceCount as int
+{
+	if not resources:
+		initResources()
+	if not resources:
+		return 0
+	return Vector.getSize(resources) - currentResource - 1
+}
+
+func acceptMethodAndResource(methodToAccept as string, resource as string, mustBeLastResource as bool = false) as bool
+{
+	assert resource
+	if(methodToAccept == null || method == methodToAccept) {
+		var cc = peekResource()
+		if(cc == null) {
+			return(false)
+		}
+		if(cc != resource) {
+			return(false)
+		}
+		popResource()
+		if(mustBeLastResource && hasMoreResources()) {
+			unpopResource()
+			return(false)
+		}
+		return(true)
+	}
+	return(false)
+}
+
+func acceptResource(resource as string, mustBeLastResource as bool = false) as bool
+{
+	assert resource
+	var cc = assert peekResource()
+	if cc != resource:
+		return false
+	popResource()
+	if mustBeLastResource && hasMoreResources() {
+		unpopResource()
+		return false
+	}
+	return true
+}
+
+func peekResource as string
+{
+	if(resources == null) {
+		initResources()
+	}
+	if(resources == null) {
+		return(null)
+	}
+	if(currentResource < Vector.getSize(resources)) {
+		return(resources[currentResource])
+	}
+	return(null)
+}
+
+func getCurrentResource as int
+{
+	return(currentResource)
+}
+
+func setCurrentResource(value as int)
+{
+	currentResource = value
+	relativeResourcePath = null
+}
+
+func popResource as string
+{
+	if(resources == null) {
+		initResources()
+	}
+	var v = peekResource()
+	if(v != null) {
+		currentResource ++
+		relativeResourcePath = null
+	}
+	return(v)
+}
+
+func unpopResource
+{
+	if(currentResource > 0) {
+		currentResource --
+		relativeResourcePath = null
+	}
+}
+
+func resetResources
+{
+	resources = null
+	currentResource = 0
+	relativeResourcePath = null
+}
+
+func getRelativeResources as vector<string>
+{
+	if not resources:
+		initResources()
+	if not resources:
+		return null
+	if currentResource < 1:
+		return resources
+	var v = new vector<string>
+	var cr = currentResource
+	while cr < Vector.getSize(resources) {
+		v += resources[cr]
+		cr ++
+	}
+	return v
+}
+
+func getResourcePathComponent(index as int, nTrailingComponents as int = -1) as string
+{
+	if index < 0:
+		return null
+	if not resources:
+		initResources()
+	if not resources:
+		return null
+	var max = nTrailingComponents
+	var vsz = Vector.getSize(resources)
+	if max < 0:
+		max = vsz
+	if max > vsz:
+		max = vsz
+	if index >= max:
+		return null
+	if max < vsz:
+		return Vector.get(resources, index + vsz - max)
+	return Vector.get(resources, index)
+}
+
+func getRelativeResourcePath as string
+{
+	if(resources == null) {
+		return(getURLPath())
+	}
+	if(relativeResourcePath == null) {
+		var rrs = getRelativeResources()
+		if(rrs != null) {
+			var sb = new StringBuilder()
+			foreach(rr in rrs) {
+				if(String.isEmpty(rr) == false) {
+					sb.append('/')
+					sb.append(rr)
+				}
+			}
+			if(sb.count() < 1) {
+				sb.append('/')
+			}
+			relativeResourcePath = sb.toString()
+		}
+	}
+	return(relativeResourcePath)
+}
+
+func isForResource(res as string) as bool
+{
+	assert res
+	var rrp = assert getRelativeResourcePath()
+	if rrp == res:
+		return true
+	return false
+}
+
+func isForDirectory as bool
+{
+	var path = getURLPath()
+	if path && String.endsWith(path, "/"):
+		return true
+	return false
+}
+
+func isForPrefix(res as string) as bool
+{
+	assert res
+	var rr = getRelativeResourcePath()
+	if rr && String.startsWith(rr, res):
+		return true
+	return false
+}
+
+func isForMethod(mm as string) as bool
+{
+	assert mm
+	if mm == method:
+		return true
+	return false
+}
+
+func isGET as bool:
+	return method == "GET"
+
+func isPOST as bool:
+	return method == "POST"
+
+func isDELETE as bool:
+	return method == "DELETE"
+
+func isPUT as bool:
+	return method == "PUT"
+
+func isPATCH as bool:
+	return method == "PATCH"
+
+// Sending of responses
+
+func sendJSONObject(o as object):
+	sendResponse(HTTPServerResponse.forJSONString(JSONEncoder.encode(o)))
+
+func sendJSONString(json as string):
+	sendResponse(HTTPServerResponse.forJSONString(json))
+
+func sendJSONError(error as Error):
+	sendResponse(HTTPServerResponse.forJSONString(JSONEncoder.encode(JSONResponse.forError(error))))
+
+func sendJSONOK(data as object = null):
+	sendResponse(HTTPServerResponse.forJSONString(JSONEncoder.encode(JSONResponse.forOk(data))))
+
+func sendInternalError(text as string = null):
+	sendResponse(HTTPServerResponse.forHTTPInternalError(text))
+
+func sendNotAllowed:
+	sendResponse(HTTPServerResponse.forHTTPNotAllowed())
+
+func sendNotFound:
+	sendResponse(HTTPServerResponse.forHTTPNotFound())
+
+func sendInvalidRequest(text as string = null):
+	sendResponse(HTTPServerResponse.forHTTPInvalidRequest(text))
+
+func sendTextString(text as string):
+	sendResponse(HTTPServerResponse.forTextString(text))
+
+func sendHTMLString(html as string):
+	sendResponse(HTTPServerResponse.forHTMLString(html))
+
+func sendXMLString(xml as string):
+	sendResponse(HTTPServerResponse.forXMLString(xml))
+
+func sendFile(file as File):
+	sendResponse(HTTPServerResponse.forFile(file))
+
+func sendBuffer(buffer as buffer, mimeType as string = null):
+	sendResponse(HTTPServerResponse.forBuffer(buffer, mimeType))
+
+func sendRedirect(url as string):
+	sendResponse(HTTPServerResponse.forHTTPMovedTemporarily(url))
+
+func sendRedirectAsDirectory
+{
+	var path = getURLPath()
+	if path == null:
+		path = ""
+	sendRedirect(path .. "/")
+}
+
+func isResponseSent as bool:
+	return responseSent
+
+func addResponseCookie(cookie as HTTPServerCookie)
+{
+	assert cookie
+	if responseCookies == null:
+		responseCookies = new vector<HTTPServerCookie>
+	responseCookies += cookie
+}
+
+func sendResponse(resp as HTTPServerResponse)
+{
+	assert server
+	if responseSent:
+		return
+	foreach cookie in responseCookies:
+		resp.addCookie(cookie)
+	responseCookies = null
+	server.sendResponse(connection, this, resp)
+	responseSent = true
+}

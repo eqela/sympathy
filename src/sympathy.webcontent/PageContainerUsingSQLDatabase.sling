@@ -1,0 +1,338 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is PageContainer imports cape imports capex.data:
+
+func forDatabase(database as SQLDatabase, tablePrefix as string = null) static as this
+{
+	var v = new this()
+	v.setDatabase(database)
+	if(tablePrefix != null) {
+		v.setTablePrefix(tablePrefix)
+	}
+	return(v)
+}
+
+prop database as SQLDatabase
+prop tablePrefix as string
+
+ctor
+{
+	tablePrefix = "pages"
+}
+
+func getTableName(name as string) private as string
+{
+	if(name == null) {
+		return(null)
+	}
+	if(String.isEmpty(tablePrefix)) {
+		return(name)
+	}
+	return(tablePrefix .. "_" .. name)
+}
+
+func initializeTables as bool
+{
+	if(database == null) {
+		return(false)
+	}
+	var content = SQLTableInfo.forName(getTableName("content"))
+	content.addStringKeyColumn("id")
+	content.addStringColumn("type")
+	content.addTextColumn("data")
+	content.addUniqueIndex("id")
+	if(database.ensureTableExists(content) == false) {
+		return(false)
+	}
+	var attachments = SQLTableInfo.forName(getTableName("attachments"))
+	attachments.addStringColumn("pageid")
+	attachments.addStringColumn("filename")
+	attachments.addBlobColumn("data")
+	attachments.addIndex("pageid")
+	attachments.addIndex("filename")
+	// FIXME: Should have a single index on both pageid AND filename
+	if(database.ensureTableExists(attachments) == false) {
+		return(false)
+	}
+	return(true)
+}
+
+func getAllPageIds(callback as function<void,DynamicVector>)
+{
+	if(callback == null) {
+		return
+	}
+	if(database == null) {
+		callback(null)
+		return
+	}
+	database.query(database.prepare("SELECT id FROM " .. getTableName("content") .. ";"), func(results as SQLResultSetIterator) {
+		if(results == null) {
+			callback(null)
+		}
+		else {
+			callback(results.toVector())
+		}
+	})
+}
+
+func getPageData(pageId as string, callback as function<void,string,DynamicMap,DynamicVector>) virtual
+{
+	if(callback == null) {
+		return
+	}
+	if(database == null) {
+		callback(null,null,null)
+		return
+	}
+	var stmt1 = database.prepare("SELECT type,data FROM " .. getTableName("content") .." WHERE id = ?;")
+	if(stmt1 == null) {
+		callback(null,null,null)
+		return
+	}
+	stmt1.addParamString(pageId)
+	database.querySingleRow(stmt1, func(result as DynamicMap) {
+		if(result == null) {
+			callback(null,null,null)
+			return
+		}
+		var stmt2 = database.prepare("SELECT filename FROM " .. getTableName("attachments") .. " WHERE pageid = ?;")
+		if(stmt2 == null) {
+			callback(null,null,null)
+			return
+		}
+		stmt2.addParamString(pageId)
+		database.query(stmt2, func(attrs as SQLResultSetIterator) {
+			callback(result.getString("type"), JSONParser.parse(result.getString("data")) as DynamicMap, attrs.toVector())
+		})
+	})
+}
+
+func createPage(pageId as string, type as string, callback as function<void,bool>)
+{
+	if(database == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	var stmt = database.prepareInsertStatement(getTableName("content"), DynamicMap.forStringMap({
+		"id" : pageId,
+		"type" : type,
+		"data" : ""
+	}))
+	if(stmt == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	database.execute(stmt, callback)
+}
+
+func changePageType(pageId as string, type as string, callback as function<void,bool>)
+{
+	if(database == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	var criteria = DynamicMap.forStringMap({
+		"id" : pageId
+	})
+	var data = DynamicMap.forStringMap({
+		"type" : type
+	})
+	var stmt = database.prepareUpdateStatement(getTableName("content"), criteria, data)
+	if(stmt == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	database.execute(stmt, callback)
+}
+
+func deletePage(pageId as string, callback as function<void,bool>)
+{
+	if(database == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	deleteAllAttachments(pageId, func(status as bool) {
+		if(status == false) {
+			if(callback != null) {
+				callback(false)
+			}
+			return
+		}
+		var stmt = database.prepare("DELETE FROM " .. getTableName("content") .. " WHERE id = ?;")
+		if(stmt == null) {
+			if(callback != null) {
+				callback(false)
+			}
+			return
+		}
+		stmt.addParamString(pageId)
+		database.execute(stmt, callback)
+	})
+}
+
+func updatePageContent(pageId as string, content as DynamicMap, callback as function<void,bool>)
+{
+	if(database == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	var criteria = DynamicMap.forStringMap({
+		"id" : pageId
+	})
+	var data = DynamicMap.forStringMap({
+		"data" : JSONEncoder.encode(content)
+	})
+	var stmt = database.prepareUpdateStatement(getTableName("content"), criteria, data)
+	if(stmt == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	database.execute(stmt, callback)
+}
+
+func addAttachment(pageId as string, fileName as string, content as buffer, callback as function<void,bool>)
+{
+	if(database == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	var data = new DynamicMap()
+	data.set("pageid", pageId)
+	data.set("filename", fileName)
+	data.set("data", content)
+	var stmt = database.prepareInsertStatement(getTableName("attachments"), data)
+	if(stmt == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	database.execute(stmt, callback)
+}
+
+func replaceAttachment(pageId as string, fileName as string, content as buffer, callback as function<void,bool>)
+{
+	if(database == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	var criteria = new DynamicMap()
+	criteria.set("pageid", pageId)
+	criteria.set("filename", fileName)
+	var data = new DynamicMap()
+	data.set("data", content)
+	var stmt = database.prepareUpdateStatement(getTableName("attachments"), criteria, data)
+	if(stmt == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	database.execute(stmt, callback)
+}
+
+func getAttachment(pageId as string, fileName as string, callback as function<void,buffer>)
+{
+	if(callback == null) {
+		return
+	}
+	if(database == null) {
+		callback(null)
+		return
+	}
+	var stmt = database.prepare("SELECT data FROM " .. getTableName("attachments") .. " WHERE pageid = ? AND filename = ?;")
+	if(stmt == null) {
+		callback(null)
+		return
+	}
+	stmt.addParamString(pageId)
+	stmt.addParamString(fileName)
+	database.querySingleRow(stmt, func(data as DynamicMap) {
+		if(data == null) {
+			callback(null)
+		}
+		else {
+			callback(data.getBuffer("data"))
+		}
+	})
+}
+
+func deleteAttachment(pageId as string, fileName as string, callback as function<void,bool>)
+{
+	if(database == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	var stmt = database.prepare("DELETE FROM " .. getTableName("attachments") .. " WHERE pageid = ? AND filename = ?;")
+	if(stmt == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	stmt.addParamString(pageId)
+	stmt.addParamString(fileName)
+	database.execute(stmt, callback)
+}
+
+func deleteAllAttachments(pageId as string, callback as function<void,bool>)
+{
+	if(database == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	var stmt = database.prepare("DELETE FROM " .. getTableName("attachments") .. " WHERE pageid = ?;")
+	if(stmt == null) {
+		if(callback != null) {
+			callback(false)
+		}
+		return
+	}
+	stmt.addParamString(pageId)
+	database.execute(stmt, callback)
+}

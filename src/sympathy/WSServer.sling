@@ -22,10 +22,36 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is NetworkServer imports cape imports sympathy:
+
+prop createConnectionHandlerObject as function<WSServerConnectionHandler>
+
+ctor:
+	setPort(8080)
+
+func createConnectionObject override as NetworkConnection
+{
+	assert createConnectionHandlerObject {
+		logError("No 'createConnectionHandlerObject' set. Cannot create connection object handlers!")
+	}
+	var handler = assert createConnectionHandlerObject() {
+		logError("Failed to create connection object. No connection handler object returned!")
+	}
+	var connection = new WSServerConnection()
+	connection.setConnectionHandler(handler)
+	handler.setConnection(connection)
+	handler.setLogContext(logContext)
+	return connection
+}
+
+func logError(message as string):
+	Log.error(logContext, message)
+
+func logWarning(message as string):
+	Log.warning(logContext, message)
+
+func logInfo(message as string):
+	Log.info(logContext, message)
+
+func logDebug(message as string):
+	Log.debug(logContext, message)

@@ -22,10 +22,15 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+interface imports cape:
+
+func getTitle as string
+func getSlogan as string
+func getIntro as string
+func getAuthor as string
+func getDate as string
+func getBannerName as string
+func getAsMarkup as string
+func getAsHtml as string
+func getAttachmentHeaders as vector<string>
+func getAttachment(name as string) as Reader

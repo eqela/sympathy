@@ -1,0 +1,211 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is NetworkServer imports cape imports capex.net:
+
+/*
+class PortInfo
+{
+	prop port as int
+	prop socket as TCPSocket
+	prop sslCertificate as File
+	prop sslPrivateKey as File
+}
+var listenPorts as vector<PortInfo>
+var virtualHosts as vector<string>
+var listeners as vector<object>
+*/
+
+prop writeBufferSize = 1024 * 512
+prop smallBodyLimit = 32 * 1024
+prop timeoutDelay = 30
+prop maintenanceTimerDelay = 60
+prop serverName as string
+prop enableCaching = true
+prop allowCORS = true
+var cache as ContentCache
+var timeoutTimer as IOManagerTimer
+var maintenanceTimer as IOManagerTimer
+
+ctor
+{
+	setPort(8080)
+	setServerName(VALUE("sling_project_title") .. "/" .. VALUE("sling_project_version"))
+}
+
+macro UPDATE_SERVER_NAME
+{
+	thisObject.setServerName(VALUE("sling_project_title") .. "/" .. VALUE("sling_project_version"))
+}
+
+func createConnectionObject override as NetworkConnection
+{
+	return(new HTTPServerConnection())
+}
+
+func onRefresh virtual
+{
+}
+
+func onTimeoutTimer as bool
+{
+	var cfc final = new vector<HTTPServerConnection>
+	var now final = SystemClock.asSeconds()
+	forEachConnection(func(connection as NetworkConnection) {
+		var httpc = connection as HTTPServerConnection
+		if(httpc == null) {
+			return
+		}
+		if((httpc.getResponses() >= httpc.getRequests() || httpc.getIsWaitingForBodyReceiver()) && now - httpc.getLastActivity() >= timeoutDelay) {
+			cfc += httpc
+		}
+	})
+	foreach(wsc in cfc) {
+		wsc.close()
+	}
+	return(true)
+}
+
+func onMaintenanceTimer as bool
+{
+	if(cache != null) {
+		cache.onMaintenance()
+	}
+	onMaintenance()
+	return(true)
+}
+
+func onMaintenance virtual
+{
+}
+
+func startTimer(delay as long, handler as function<bool>) as IOManagerTimer
+{
+	if(ioManager == null) {
+		return(null)
+	}
+	return(ioManager.startTimer(delay, handler))
+}
+
+func initialize override as bool
+{
+	if(base.initialize() == false) {
+		return(false)
+	}
+	if(timeoutDelay < 1) {
+		Log.debug(logContext, VALUE("__THIS__") .. ": Timeout timer disabled")
+	}
+	else {
+		Log.debug(logContext, VALUE("__THIS__") .. ": Starting a timeout timer with a " .. String.forInteger(timeoutDelay) .. " second delay.")
+		timeoutTimer = ioManager.startTimer((timeoutDelay as long) * 1000000, onTimeoutTimer)
+		if(timeoutTimer == null) {
+			Log.error(logContext, VALUE("__THIS__") .. ": Failed to start timeout timer")
+		}
+	}
+	if(maintenanceTimerDelay < 1) {
+		Log.debug(logContext, "Maintenance timer disabled")
+	}
+	else {
+		Log.debug(logContext, VALUE("__THIS__") .. ": Starting a maintenance timer with a " .. String.forInteger(maintenanceTimerDelay) .. " second delay.")
+		maintenanceTimer = ioManager.startTimer((maintenanceTimerDelay as long) * 1000000, onMaintenanceTimer)
+		if(maintenanceTimer == null) {
+			Log.error(logContext, VALUE("__THIS__") .. ": Failed to start maintenance timer")
+		}
+	}
+	Log.info(logContext, VALUE("__THIS__") .. ": initialized: `" .. getServerName() .. "'")
+	return(true)
+}
+
+func cleanup override
+{
+	base.cleanup()
+	if(maintenanceTimer != null) {
+		maintenanceTimer.stop()
+		maintenanceTimer = null
+	}
+	if(timeoutTimer != null) {
+		timeoutTimer.stop()
+		timeoutTimer = null
+	}
+}
+
+func createOptionsResponse(req as HTTPServerRequest) virtual as HTTPServerResponse
+{
+	return(new HTTPServerResponse().setStatus("200").addHeader("Content-Length", "0"))
+}
+
+func onRequest(req as HTTPServerRequest) virtual
+{
+	req.sendResponse(HTTPServerResponse.forHTTPNotFound())
+}
+
+func handleIncomingRequest(req as HTTPServerRequest)
+{
+	if(req == null) {
+		return
+	}
+	if(cache != null) {
+		// FIXME: Check for for HTTP headers that would prevent caching
+		var cid = req.getCacheId()
+		if(cid != null) {
+			var resp = cache.get(cid) as HTTPServerResponse
+			if(resp != null) {
+				req.sendResponse(resp)
+				return
+			}
+		}
+	}
+	if(req.getMethod() == "OPTIONS") {
+		var resp = createOptionsResponse(req)
+		if(resp != null) {
+			req.sendResponse(resp)
+			return
+		}
+	}
+	onRequest(req)
+}
+
+func sendResponse(connection as HTTPServerConnection, req as HTTPServerRequest, resp as HTTPServerResponse)
+{
+	if(connection == null) {
+		return
+	}
+	if(allowCORS) {
+		resp.enableCORS(req)
+	}
+	if(enableCaching && resp.getCacheTtl() > 0) {
+		var cid = req.getCacheId()
+		if(cid != null) {
+			if(cache == null) {
+				cache = new ContentCache()
+			}
+			cache.set(cid, resp, resp.getCacheTtl())
+		}
+	}
+	connection.sendResponse(req, resp)
+}
+
+func onRequestComplete(request as HTTPServerRequest, resp as HTTPServerResponse, bytesSent as int, remoteAddress as string) virtual
+{
+}

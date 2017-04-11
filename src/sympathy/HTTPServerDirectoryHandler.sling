@@ -1,0 +1,350 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is HTTPServerRequestHandlerAdapter imports cape imports capex.text:
+
+func forDirectory(dir as File) static as this
+{
+	var v = new this()
+	v.setDirectory(dir)
+	return(v)
+}
+
+prop listDirectories = false
+prop processTemplateFiles = false
+prop directory as File
+prop maxAge = 300
+prop serverURL as string
+prop indexFiles as vector<string>
+prop templateIncludeDirs as vector<File>
+var serverName as string
+prop templateData as DynamicMap
+
+func addTemplateIncludeDir(dir as File)
+{
+	if(dir == null) {
+		return
+	}
+	if(templateIncludeDirs == null) {
+		templateIncludeDirs = new vector<File>
+	}
+	templateIncludeDirs += dir
+}
+
+func setIndexFiles(files as array<string>) as this
+{
+	indexFiles = new vector<string>
+	foreach(file in files) {
+		indexFiles += file
+	}
+	return(this)
+}
+
+func setServerName(name as string) as this
+{
+	this.serverName = name
+	return(this)
+}
+
+func getServerName as string
+{
+	if(serverName != null) {
+		return(serverName)
+	}
+	var server = getServer()
+	if(server == null) {
+		return(null)
+	}
+	return(server.getServerName())
+}
+
+func getDirectoryEntries(dir as File, allEntries as vector<string>, dirs as vector<string>, files as vector<string>)
+{
+	if(dir == null) {
+		return
+	}
+	var entries as Iterator<File> #force = dir.entries()
+	while(entries != null) {
+		var entry = entries.next()
+		if(entry == null) {
+			break
+		}
+		var name = entry.baseName()
+		if(dirs != null && entry.isDirectory()) {
+			dirs += name
+		}
+		if(files != null && entry.isFile()) {
+			files += name
+		}
+		if(allEntries != null) {
+			allEntries += name
+		}
+	}
+}
+
+func dirToJSONObject(dir as File) as DynamicMap
+{
+	var allEntries = new vector<string>
+	var dirs = new vector<string>
+	var files = new vector<string>
+	getDirectoryEntries(dir, allEntries, dirs, files)
+	var v = new DynamicMap()
+	v.set("files", DynamicVector.forStringVector(files)) // FIXME: MergeSort.sort(get_directory_entries_files(ff)))
+	v.set("dirs", DynamicVector.forStringVector(dirs)) // FIXME: MergeSort.sort(get_directory_entries_dirs(ff)))
+	v.set("all", DynamicVector.forStringVector(allEntries))
+	return(v)
+}
+
+func dirToJSON(dir as File) as string
+{
+	return(JSONEncoder.encode(dirToJSONObject(dir)))
+}
+
+func getTemplateVariablesForFile(file as File) virtual as DynamicMap
+{
+	return(null)
+}
+
+func dirToHTML(dir as File) as string
+{
+	if(dir == null) {
+		return(null)
+	}
+	var sb = new StringBuilder()
+	sb.append("<html>\n")
+	sb.append("<head>\n")
+	sb.append("<title>")
+	sb.append(dir.baseName())
+	sb.append("</title>\n")
+	sb.append("<style>\n")
+	sb.append("* { font-face: arial; font-size: 12px; }\n")
+	sb.append("h1 { font-face: arial; font-size: 14px; font-style: bold; border-bottom: solid 1px black; padding: 4px; margin: 4px}\n")
+	sb.append("#content a { text-decoration: none; color: #000080; }\n")
+	sb.append("#content a:hover { text-decoration: none; color: #FFFFFF; font-weight: bold; }\n")
+	sb.append(".entry { padding: 4px; }\n")
+	sb.append(".entry:hover { background-color: #AAAACC; }\n")
+	sb.append(".dir { font-weight: bold; }\n")
+	sb.append(".even { background-color: #DDDDDD; }\n")
+	sb.append(".odd { background-color: #EEEEEE; }\n")
+	sb.append("#footer { border-top: 1px solid black; padding: 4px; margin: 4px; font-size: 10px; text-align: right; }\n")
+	sb.append("#footer a { font-size: 10px; text-decoration: none; color: #000000; }\n")
+	sb.append("#footer a:hover { font-size: 10px; text-decoration: underline; color: #000000; }\n")
+	sb.append("</style>\n")
+	sb.append("<meta name=\"viewport\" content=\"initial-scale=1,maximum-scale=1\" />\n")
+	sb.append("</head>\n")
+	sb.append("<body>\n")
+	sb.append("<h1>")
+	sb.append(dir.baseName())
+	sb.append("</h1>\n")
+	sb.append("<div id=\"content\">\n")
+	var dirs = new vector<string>
+	var files = new vector<string>
+	getDirectoryEntries(dir, null, dirs, files)
+	// FIXME: Sort dirs
+	// FIXME: Sort files
+	var n = 0
+	foreach(dn in dirs) {
+		var cc as string
+		if(n % 2 == 0) {
+			cc = "even"
+		}
+		else {
+			cc = "odd"
+		}
+		sb.append("<a href=\"")
+		sb.append(dn)
+		sb.append("/\"><div class=\"entry dir ")
+		sb.append(cc)
+		sb.append("\">")
+		sb.append(dn)
+		sb.append("/</div></a>\n")
+		n++
+	}
+	foreach(fn in files) {
+		var cc as string
+		if(n % 2 == 0) {
+			cc = "even"
+		}
+		else {
+			cc = "odd"
+		}
+		sb.append("<a href=\"")
+		sb.append(fn)
+		sb.append("\"><div class=\"entry ")
+		sb.append(cc)
+		sb.append("\">")
+		sb.append(fn)
+		sb.append("</div></a>\n")
+		n++
+	}
+	sb.append("</div>\n")
+	sb.append("<div id=\"footer\">")
+	var serverName = getServerName()
+	if(String.isEmpty(serverName) == false) {
+		if(String.isEmpty(serverURL) == false) {
+			sb.append("Generated by <a href=\"")
+			if(String.contains(serverURL, "://") == false) {
+				sb.append("http://")
+			}
+			sb.append(serverURL)
+			sb.append("\">")
+			sb.append(serverName)
+			sb.append("</a>\n")
+		}
+		else {
+			sb.append("Generated by ")
+			sb.append(serverName)
+			sb.append("\n")
+		}
+	}
+	sb.append("</div>\n")
+	sb.append("</body>\n")
+	sb.append("</html>\n")
+	return(sb.toString())
+}
+
+func onGET(req as HTTPServerRequest) override as bool
+{
+	if(directory == null) {
+		return(false)
+	}
+	var dd = directory
+	while(true) {
+		var comp = req.popResource()
+		if(comp == null) {
+			break
+		}
+		dd = dd.entry(comp)
+	}
+	if(dd.isDirectory()) {
+		foreach(indexFile in indexFiles) {
+			var ff = dd.entry(indexFile)
+			if(ff.isFile()) {
+				dd = ff
+				break
+			}
+		}
+	}
+	if(dd.isDirectory()) {
+		if(req.isForDirectory() == false) {
+			req.sendRedirectAsDirectory()
+			return(true)
+		}
+		if(listDirectories == false) {
+			return(false)
+		}
+		req.sendHTMLString(dirToHTML(dd))
+		return(true)
+	}
+	if(dd.exists() == false && processTemplateFiles) {
+		var bn = dd.baseName()
+		var nf = dd.getParent().entry(bn .. ".t")
+		if(nf.isFile()) {
+			dd = nf
+		}
+		else {
+			nf = dd.getParent().entry(bn .. ".html.t")
+			if(nf.isFile()) {
+				dd = nf
+			}
+		}
+	}
+	if(dd.isFile()) {
+		var resp as HTTPServerResponse
+		if(processTemplateFiles) {
+			var bn = dd.baseName()
+			var isJSONTemplate = false
+			var isHTMLTemplate = false
+			var isCSSTemplate = false
+			if(String.endsWith(bn, ".html.t")) {
+				isHTMLTemplate = true
+			}
+			else if(String.endsWith(bn, ".css.t")) {
+				isCSSTemplate = true
+			}
+			else if(String.endsWith(bn, ".json.t")) {
+				isJSONTemplate = true
+			}
+			if(isHTMLTemplate || isCSSTemplate || isJSONTemplate) {
+				var data = dd.getContentsString("UTF-8")
+				if(data == null) {
+					Log.error(logContext, "Failed to read template file content: `" .. dd.getPath() .. "'")
+					req.sendResponse(HTTPServerResponse.forHTTPInternalError())
+					return(true)
+				}
+				var includeDirs = new vector<File>
+				includeDirs += dd.getParent()
+				foreach(dir in templateIncludeDirs) {
+					includeDirs += dir
+				}
+				var tt as TextTemplate
+				if(isHTMLTemplate || isCSSTemplate) {
+					tt = TextTemplate.forHTMLString(data, includeDirs, logContext)
+				}
+				else {
+					tt = TextTemplate.forJSONString(data, includeDirs, logContext)
+				}
+				if(tt == null) {
+					Log.error(logContext, "Failed to process template file content: `" .. dd.getPath() .. "'")
+					req.sendResponse(HTTPServerResponse.forHTTPInternalError())
+					return(true)
+				}
+				var tdata = templateData
+				var dynamicData = getTemplateVariablesForFile(dd)
+				if(dynamicData != null) {
+					if(tdata == null) {
+						tdata = dynamicData
+					}
+					else {
+						tdata.mergeFrom(dynamicData)
+					}
+				}
+				var text = tt.execute(tdata, includeDirs)
+				if(text == null) {
+					Log.error(logContext, "Failed to execute template: `" .. dd.getPath() .. "'")
+					req.sendResponse(HTTPServerResponse.forHTTPInternalError())
+					return(true)
+				}
+				if(isHTMLTemplate) {
+					resp = HTTPServerResponse.forHTMLString(text)
+				}
+				else if(isCSSTemplate) {
+					resp = HTTPServerResponse.forString(text, "text/css")
+				}
+				else {
+					resp = HTTPServerResponse.forJSONString(text)
+				}
+			}
+		}
+		if(resp == null) {
+			resp = HTTPServerResponse.forFile(dd)
+		}
+		if(maxAge > 0) {
+			resp.addHeader("Cache-Control", "max-age=" .. String.forInteger(maxAge))
+		}
+		req.sendResponse(resp)
+		return(true)
+	}
+	return(false)
+}

@@ -22,10 +22,37 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is DNSResolver imports cape:
+
+func getNSRecords(host as string, type as string, ctx as LoggingContext) override as DynamicVector
+{
+	// FIXME - No imlementation yet.
+	return(null)
+}
+
+func getIPAddress(hostname as string, ctx as LoggingContext) override as string
+{
+	var v = getIPAddresses(hostname, ctx)
+	if(v == null || v.getSize() < 1) {
+		return(null)
+	}
+	var ip = v.get(0) as string
+	if(ip != null) {
+		return(ip)
+	}
+	return(null)
+}
+
+func getIPAddresses(hostname as string, ctx as LoggingContext) override as DynamicVector
+{
+	var v = new DynamicVector()
+	lang "cs" {{{
+		foreach(System.Net.IPAddress address in System.Net.Dns.GetHostAddresses(hostname)) {
+			System.Console.WriteLine("SMTP ADDRESS: " + address.ToString());
+	}}}
+	v.append(lang "cs" string {{{ address.ToString() }}})
+	lang "cs" {{{
+		}
+	}}}
+	return(v)
+}

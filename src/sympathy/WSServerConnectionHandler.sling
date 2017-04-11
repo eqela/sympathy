@@ -22,10 +22,63 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class abstract imports cape:
+
+var connection protected as WSServerConnection
+var logContext protected as LoggingContext
+
+func setConnection(conn as WSServerConnection) as this
+{
+	connection = conn
+	return this
+}
+
+func getConnection as WSServerConnection:
+	return connection
+
+func setLogContext(ctx as LoggingContext) as this
+{
+	logContext = ctx
+	return this
+}
+
+func getLogContext as LoggingContext:
+	return logContext
+
+func sendResponse(message as WSServerMessage) as int
+{
+	if connection == null:
+		return -1
+	return connection.sendResponse(message)
+}
+
+func onOpened virtual
+{
+}
+
+func onClosed virtual
+{
+}
+
+func close
+{
+	assert connection
+	connection.close()
+}
+
+func onCloseMessage(message as WSServerMessage) virtual
+{
+}
+
+func onPingMessage(message as WSServerMessage) virtual as bool
+{
+	return false
+}
+
+func onPongMessage(message as WSServerMessage) virtual
+{
+}
+
+func onDataMessage(message as WSServerMessage) virtual
+{
+}

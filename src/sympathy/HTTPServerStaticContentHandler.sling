@@ -22,10 +22,49 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is HTTPServerRequestHandler:
+
+func forContent(content as string, mimeType as string) static as this
+{
+	var v = new this()
+	v.setContent(content)
+	v.setMimeType(mimeType)
+	return(v)
+}
+
+func forHTMLContent(content as string) static as this
+{
+	var v = new this()
+	v.setContent(content)
+	v.setMimeType("text/html")
+	return(v)
+}
+
+func forJSONContent(content as string) static as this
+{
+	var v = new this()
+	v.setContent(content)
+	v.setMimeType("application/json")
+	return(v)
+}
+
+func forRedirect(url as string) static as this
+{
+	var v = new this()
+	v.setRedirectUrl(url)
+	return(v)
+}
+
+prop content as string
+prop mimeType as string
+prop redirectUrl as string
+
+func handleRequest(req as HTTPServerRequest, next as function)
+{
+	if(redirectUrl != null) {
+		req.sendResponse(HTTPServerResponse.forRedirect(redirectUrl))
+	}
+	else {
+		req.sendResponse(HTTPServerResponse.forString(content, mimeType))
+	}
+}

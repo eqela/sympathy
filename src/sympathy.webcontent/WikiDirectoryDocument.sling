@@ -1,0 +1,255 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is WikiDocument imports cape imports capex.text:
+
+class MyReferenceResolver is RichTextDocumentReferenceResolver
+{
+	prop backend as WikiBackend
+	prop path as string
+	prop themeDirectory as File
+
+	func toAbsoluteRef(refid as string) private as string
+	{
+		if(refid == null) {
+			return(null)
+		}
+		if(String.startsWith(refid, "/")) {
+			return(refid)
+		}
+		var sb = new StringBuilder()
+		sb.append(path)
+		if(path != null && String.endsWith(path, "/") == false) {
+			sb.append('/')
+		}
+		sb.append(refid)
+		sb.append('/')
+		return(sb.toString())
+	}
+
+	func getReferenceHref(refid as string) as string
+	{
+		return(toAbsoluteRef(refid))
+	}
+
+	func getReferenceTitle(arefid as string) as string
+	{
+		var refid = toAbsoluteRef(arefid)
+		if(backend == null) {
+			return(refid)
+		}
+		var doc = backend.getDocumentForPath(refid)
+		if(doc == null) {
+			return(refid)
+		}
+		var tit = doc.getTitle()
+		if(String.isEmpty(tit)) {
+			return(refid)
+		}
+		return(tit)
+	}
+
+	func getContentString(acid as string) as string
+	{
+		var cid = acid
+		if(themeDirectory == null || cid == null) {
+			return(null)
+		}
+		if(String.indexOf(cid, '/') >= 0) {
+			var sb = new StringBuilder()
+			var it = String.iterate(cid)
+			var c as char
+			while((c = it.getNextChar()) > 0) {
+				if(c != '/') {
+					sb.append(c)
+				}
+			}
+			cid = sb.toString()
+		}
+		return(themeDirectory.entry("content").entry(cid .. ".html").getContentsString("UTF-8"))
+	}
+}
+
+func forDirectory(dir as File, themedir as File, backend as WikiBackend) static as this
+{
+	var v = new this()
+	v.setBackend(backend)
+	v.setThemeDirectory(themedir)
+	if(v.initialize(dir) == false) {
+		v = null
+	}
+	return(v)
+}
+
+prop backend as WikiBackend
+prop themeDirectory as File
+prop path as string
+prop cacheHtml = true
+
+var dir as File
+var markupFile as File
+var markup as string
+var doc as RichTextDocument
+var timeStamp as long
+var cachedHtmlContent as string
+
+func processDocument(doc as RichTextDocument)
+{
+	var pars = doc.getParagraphs()
+	if(pars == null) {
+		return
+	}
+	var p0 = Vector.get(pars, 0) as RichTextStyledParagraph
+	if(p0 == null || p0.getHeading() != 1) {
+		return
+	}
+	var tc = p0.getTextContent()
+	if(String.isEmpty(tc)) {
+		return
+	}
+	if(tc != doc.getTitle()) {
+		return
+	}
+	Vector.removeFirst(pars)
+}
+
+func initialize(dir as File) as bool
+{
+	if(dir == null) {
+		return(false)
+	}
+	var ff = dir.entry("content.markup")
+	var st = ff.stat()
+	if(st == null) {
+		return(false)
+	}
+	var str = ff.getContentsString("UTF-8")
+	if(str == null) {
+		return(false)
+	}
+	var doc = RichTextDocument.forWikiMarkupString(str)
+	if(doc == null) {
+		return(false)
+	}
+	processDocument(doc)
+	this.dir = dir
+	this.markupFile = ff
+	this.markup = str
+	this.doc = doc
+	this.timeStamp = st.getModifyTime()
+	return(true)
+}
+
+func isUpToDate as bool
+{
+	if(markupFile == null) {
+		return(false)
+	}
+	var st = markupFile.stat()
+	if(st == null) {
+		return(false)
+	}
+	if(st.getModifyTime() <= timeStamp) {
+		return(true)
+	}
+	return(false)
+}
+
+func getTitle as string
+{
+	if(doc == null) {
+		return(null)
+	}
+	return(doc.getTitle())
+}
+
+func getAuthor as string
+{
+	if(doc == null) {
+		return(null)
+	}
+	return(doc.getMetadata("author"))
+}
+
+func getDate as string
+{
+	if(doc == null) {
+		return(null)
+	}
+	return(doc.getMetadata("date"))
+}
+
+func getSlogan as string
+{
+	if(doc == null) {
+		return(null)
+	}
+	return(doc.getMetadata("slogan"))
+}
+
+func getIntro as string
+{
+	if(doc == null) {
+		return(null)
+	}
+	return(doc.getMetadata("intro"))
+}
+
+func getBannerName as string
+{
+	if(doc == null) {
+		return(null)
+	}
+	return(doc.getMetadata("banner"))
+}
+
+func getAsMarkup as string
+{
+	return(markup)
+}
+
+func getAsHtml as string
+{
+	if(cachedHtmlContent != null) {
+		return(cachedHtmlContent)
+	}
+	if(doc == null) {
+		return(null)
+	}
+	var html = doc.toHtml(new MyReferenceResolver().setPath(path).setThemeDirectory(themeDirectory).setBackend(backend))
+	if(cacheHtml) {
+		cachedHtmlContent = html
+	}
+	return(html)
+}
+
+func getAttachmentHeaders as vector<string>
+{
+	return(null) // FIXME
+}
+
+func getAttachment(name as string) as Reader
+{
+	return(null) // FIXME
+}

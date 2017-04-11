@@ -22,10 +22,17 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is StringObject imports cape:
+
+prop ttl as int
+prop address as string
+
+func getType virtual as string
+{
+	return("UNKNOWN")
+}
+
+func toString virtual as string
+{
+	return("type=" .. getType() .. " ttl=" .. String.forInteger(ttl) .. " address=`" .. address .. "'")
+}

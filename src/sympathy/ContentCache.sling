@@ -1,0 +1,108 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape:
+
+class CacheEntry
+{
+	prop data as object
+	prop ttl as int
+	prop timestamp as int
+}
+
+var cache as map<string,CacheEntry>
+prop cacheTtl = 3600
+
+func onMaintenance
+{
+	if(cache == null) {
+		return
+	}
+	var now = SystemClock.asSeconds()
+	var keys as vector<string> #force = Map.getKeys(cache)
+	foreach(key in keys) {
+		var ce = Map.get(cache, key) as CacheEntry
+		if(ce == null) {
+			Map.remove(cache, key)
+		}
+		else {
+			var diff = now - ce.getTimestamp()
+			if(diff >= ce.getTtl()) {
+				Map.remove(cache, key)
+			}
+		}
+	}
+}
+
+func clear
+{
+	cache = null
+}
+
+func remove(cacheid as string)
+{
+	Map.remove(cache, cacheid)
+}
+
+func set(cacheid as string, content as object, ttl as int = -1)
+{
+	if(cacheid == null) {
+		return
+	}
+	var ee = new CacheEntry()
+	ee.setData(content)
+	if(ttl >= 0) {
+		ee.setTtl(ttl)
+	}
+	else {
+		ee.setTtl(cacheTtl)
+	}
+	if(ee.getTtl() < 1) {
+		return
+	}
+	ee.setTimestamp(SystemClock.asSeconds())
+	if(cache == null) {
+		cache = new map<string,CacheEntry>
+	}
+	cache[cacheid] = ee
+}
+
+func get(cacheid as string) as object
+{
+	if(cache == null) {
+		return(null)
+	}
+	var ee = Map.getValue(cache, cacheid) as CacheEntry
+	if(ee != null) {
+		var diff = SystemClock.asSeconds() - ee.getTimestamp()
+		if(diff >= ee.getTtl()) {
+			Map.remove(cache, cacheid)
+			ee = null
+		}
+	}
+	if(ee != null) {
+		return(ee.getData())
+	}
+	return(null)
+}

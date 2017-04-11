@@ -22,10 +22,50 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class imports cape:
+
+func forSuccess static as this
+{
+	return(new this())
+}
+
+func forMessage(msg as SMTPMessage) static as this
+{
+	return(new this()
+		.setMessage(msg))
+}
+
+func forError(error as string, msg as SMTPMessage = null) static as this
+{
+	return(new this()
+		.setMessage(msg)
+		.addTransaction(SMTPClientTransactionResult.forError(error)))
+}
+
+prop message as SMTPMessage
+prop transactions as DynamicVector
+
+func getStatus as bool
+{
+	if(transactions == null) {
+		return(false)
+	}
+	foreach(rr as SMTPClientTransactionResult in transactions.toVector()) {
+		if(rr.getStatus() == false) {
+			return(false)
+		}
+	}
+	return(true)
+}
+
+func addTransaction(r as SMTPClientTransactionResult) as this
+{
+	if(r == null) {
+		return(this)
+	}
+	if(transactions == null) {
+		transactions = new DynamicVector()
+	}
+	transactions.append(r)
+	return(this)
+}

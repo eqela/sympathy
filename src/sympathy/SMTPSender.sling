@@ -1,0 +1,171 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape imports capex.util:
+
+func forServerAddress(name as string, ctx as LoggingContext) static as this
+{
+	return(new this().setThisServerAddress(name).setCtx(ctx))
+}
+
+func forConfiguration(config as DynamicMap, ctx as LoggingContext) static as this
+{
+	return(new this().setCtx(ctx).configure(config))
+}
+
+prop thisServerAddress as string
+prop server as string
+prop myName as string
+prop myAddress as string
+prop ctx as LoggingContext
+prop maxSenderCount = 0
+var serverInternal as string
+var senderCount = 0
+
+ctor
+{
+	thisServerAddress = "unknown.server.com"
+}
+
+func getDescription as string
+{
+	var sb = new StringBuilder() // No implementation for initial size of 512
+	if(String.isEmpty(myName) == false) {
+		sb.append('"')
+		sb.append(myName)
+		sb.append('"')
+	}
+	if(String.isEmpty(myAddress) == false) {
+		var hasName = false
+		if(sb.count() > 0) {
+			hasName = true
+		}
+		if(hasName) {
+			sb.append(' ')
+			sb.append('<')
+		}
+		sb.append(myAddress)
+		if(hasName) {
+			sb.append('>')
+		}
+	}
+	var s = serverInternal
+	if(String.isEmpty(s)) {
+		s = server
+	}
+	if(String.isEmpty(s) == false) {
+		sb.append(' ')
+		sb.append('(')
+		sb.append(s)
+		sb.append(')')
+	}
+	if(sb.count() < 1) {
+		sb.append("(no configuration; raw passhtrough of messages)")
+	}
+	return(sb.toString())
+}
+
+func configure(config as DynamicMap) as this
+{
+	if(config == null) {
+		return(this)
+	}
+	var defaultPort = "25"
+	var scheme = config.getString("server_type", "smtp")
+	if(String.equals("smtp+ssl", scheme)) {
+		defaultPort = "465"
+	}
+	var url = new URL()
+		.setScheme(scheme)
+		.setUsername(URLEncoder.encode(config.getString("server_username")))
+		.setPassword(URLEncoder.encode(config.getString("server_password")))
+		.setHost(config.getString("server_address"))
+		.setPort(config.getString("server_port", defaultPort))
+	setServer(url.toString())
+	url.setPassword(null)
+	serverInternal = url.toString()
+	setMyName(config.getString("sender_name", "SMTP"))
+	setMyAddress(config.getString("sender_address", "my@address.com"))
+	setThisServerAddress(config.getString("this_server_address", thisServerAddress))
+	return(this)
+}
+
+func onSendStart
+{
+	senderCount ++
+	Log.debug(ctx, "SMTP send start: Now " .. String.forInteger(senderCount) .. " sender(s)")
+}
+
+func onSendEnd
+{
+	senderCount --
+	Log.debug(ctx, "SMTP send end: Now " .. String.forInteger(senderCount) .. " sender(s)")
+}
+
+func send(msg as SMTPMessage, listener as SMTPSenderListener)
+{
+	if(msg == null) {
+		if(listener != null) {
+			listener.onSMTPSendComplete(msg, SMTPClientResult.forError("No message to send"))
+		}
+		return
+	}
+	var rcpts = msg.getAllRcpts()
+	if(rcpts == null || rcpts.getSize() < 1) {
+		if(listener != null) {
+			listener.onSMTPSendComplete(msg, SMTPClientResult.forSuccess())
+		}
+		return
+	}
+	if(maxSenderCount > 0 && senderCount > maxSenderCount) {
+		Log.warning(ctx, "Reached maximum sender count " .. String.forInteger(maxSenderCount))
+		if(listener != null) {
+			listener.onSMTPSendComplete(msg, SMTPClientResult.forError("Maximum number of SMTP senders has been exceeded."))
+		}
+		return
+	}
+	if(String.isEmpty(myName) == false) {
+		msg.setMyName(myName)
+	}
+	if(String.isEmpty(myAddress) == false) {
+		msg.setMyAddress(myAddress)
+	}
+	var sct = new SMTPClientTask()
+	if(String.isEmpty(server) == false) {
+		sct.setServer(URL.forString(server))
+	}
+	sct.setCtx(ctx)
+	sct.setServerAddress(thisServerAddress)
+	sct.setMsg(msg)
+	sct.setListener(listener)
+	sct.setSender(this)
+	if(Thread.start(sct) == false) {
+		Log.error(ctx, "Failed to start SMTP sender background task")
+		if(listener != null) {
+			listener.onSMTPSendComplete(msg, SMTPClientResult.forError("Failed to start SMTP sender background task"))
+		}
+		return
+	}
+	onSendStart()
+}

@@ -22,10 +22,52 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is NetworkConnectionManager abstract imports cape imports capex.net:
+
+prop port as int
+var socket as TCPSocket
+var esocket as IOManagerEntry
+
+func initialize override as bool
+{
+	if(base.initialize() == false) {
+		return(false)
+	}
+	socket = TCPSocket.createAndListen(port)
+	if(socket == null) {
+		Log.error(logContext, "Failed to listen on TCP port " .. String.forInteger(port))
+		cleanup()
+		return(false)
+	}
+	esocket = ioManager.addWithReadListener(socket, onIncomingConnection)
+	if(esocket == null) {
+		Log.error(logContext, "Failed to register with event loop")
+		cleanup()
+		return(false)
+	}
+	Log.info(logContext, "TCP server initialized, listening on port " .. String.forInteger(port))
+	return(true)
+}
+
+func cleanup override
+{
+	if(esocket != null) {
+		esocket.remove()
+		esocket = null
+	}
+	if(socket != null) {
+		socket.close()
+		socket = null
+	}
+	base.cleanup()
+}
+
+func onIncomingConnection private
+{
+	var nn = socket.accept()
+	if(nn == null) {
+		Log.error(logContext, "Failed to accept an incoming client.")
+		return
+	}
+	onNewSocket(nn)
+}

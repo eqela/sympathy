@@ -22,10 +22,16 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+interface imports cape:
+
+func getAllPageIds(callback as function<void,DynamicVector>)
+func getPageData(pageId as string, callback as function<void,string,DynamicMap,DynamicVector>)
+func createPage(pageId as string, type as string, callback as function<void,bool>)
+func changePageType(pageId as string, type as string, callback as function<void,bool>)
+func deletePage(pageId as string, callback as function<void,bool>)
+func updatePageContent(pageId as string, content as DynamicMap, callback as function<void,bool>)
+func addAttachment(pageId as string, fileName as string, content as buffer, callback as function<void,bool>)
+func replaceAttachment(pageId as string, fileName as string, content as buffer, callback as function<void,bool>)
+func getAttachment(pageId as string, fileName as string, callback as function<void,buffer>)
+func deleteAttachment(pageId as string, fileName as string, callback as function<void,bool>)
+func deleteAllAttachments(pageId as string, callback as function<void,bool>)

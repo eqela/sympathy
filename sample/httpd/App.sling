@@ -1,0 +1,322 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape imports capex.console imports capex.net imports sympathy:
+
+// This is how we can receive large amounts of POST data
+
+class MyBodyReceiver is DataStream
+{
+	prop logContext as LoggingContext
+	prop request as HTTPServerRequest
+	prop fileName as string
+	var writer as FileWriter
+
+	func onDataStreamStart(length as long) as bool
+	{
+		Log.debug(logContext, "DataStream started: " .. String.forInteger(length) .. " bytes")
+		var file = FileInstance.forPath(fileName)
+		writer = file.write()
+		if(writer == null) {
+			Log.error(logContext, "Failed to open file for writing: `" .. file.getPath() .. "'")
+			return(false)
+		}
+		Log.info(logContext, "Writing file: `" .. file.getPath() .. "'")
+		return(true)
+	}
+
+	func onDataStreamContent(data as buffer, size as int) as bool
+	{
+		Log.debug(logContext, "DataStream content: " .. String.forInteger(size) .. " bytes")
+		if(writer.write(data, size) < size) {
+			Log.error(logContext, "Failed to write to file")
+			return(false)
+		}
+		return(true)
+	}
+
+	func onDataStreamEnd as bool
+	{
+		Log.debug(logContext, "DataStream ended: " .. fileName)
+		writer.close()
+		writer = null
+		request.sendTextString("Thank you. All good.")
+		return(true)
+	}
+
+	func onDataStreamAbort
+	{
+		Log.debug(logContext, "DataStream aborted.")
+		request.sendTextString("Too bad. It got aborted.")
+	}
+}
+
+// A customized request handler class
+
+class MySpecialRequestHandler is HTTPServerRequestHandlerAdapter
+{
+	func initialize(server as HTTPServerBase) override
+	{
+		base.initialize(server)
+		Log.info(logContext, "Running initialize for " .. VALUE("__THIS__"))
+	}
+
+	func onMaintenance override
+	{
+		base.onMaintenance()
+		Log.info(logContext, "Running maintenance for " .. VALUE("__THIS__"))
+	}
+
+	func onRefresh override
+	{
+		base.onRefresh()
+		Log.info(logContext, "Running refresh for " .. VALUE("__THIS__"))
+	}
+
+	func cleanup override
+	{
+		base.cleanup()
+		Log.info(logContext, "Running cleanup for " .. VALUE("__THIS__"))
+	}
+
+	func onGET(req as HTTPServerRequest) override as bool
+	{
+		req.sendTextString("This is my special request handler class talking: " .. req.getRelativeResourcePath())
+		return(true)
+	}
+}
+
+// Custom request handler stack, implemented as reusable class. This is how
+// we should do API implementations.
+
+class MyAPIHandlerClass is HTTPServerRequestHandlerStack
+{
+	func initialize(server as HTTPServerBase) override
+	{
+		base.initialize(server)
+		pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+			Log.info(logContext, "Authentication for my API")
+			next()
+		})
+		pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+			if(req.isForResource("/superman")) {
+				req.sendTextString("SUPERMAN")
+				return
+			}
+			if(req.isForResource("/supergirl")) {
+				req.sendTextString("SUPERGIRL")
+				return
+			}
+			next()
+		})
+	}
+}
+
+func main(args as array<string>) as int #main
+{
+	var ctx = new ConsoleApplicationContext()
+	var ioManager = IOManager.createDefault()
+	if(ioManager == null) {
+		Log.error(ctx, "Failed to create IO manager")
+		return(1)
+	}
+	var server = new HTTPServer()
+
+	// --- Add the request handlers here ---
+
+	// This is just for logging. Doesn't do anything. But could also be used for analytics.
+	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+		Log.info(ctx, "REQUEST FOR: `" .. req.getURLPath() .. "'")
+		next()
+	})
+
+	// This interprets an HTTP header "x-session" and, if found, treats it as a session.
+	// This is a sample only: Real authentication would involve more functionality. But it will be
+	// implemented using this mechanism.
+	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+		var session = req.getHeader("x-session")
+		if(String.isEmpty(session) == false) {
+			req.setSession(session)
+		}
+		next()
+	})
+
+	// The HTTPServerRequestMap can be used to specify URL handler
+	// hierarchies.
+	var map = new HTTPServerRequestHandlerMap()
+
+	// The following maps to /supertest
+	map.get("supertest", func(req as HTTPServerRequest) {
+		req.sendTextString("Super Testing Indeed")
+	})
+
+	// The following maps to /xupload
+	map.get("xupload", func(req as HTTPServerRequest) {
+		req.REQUIRE_SESSION()
+		req.sendTextString("xupload: NOT IMPLEMENTED")
+	})
+
+	// The following also maps to /xupload (but for POST method)
+	map.post("xupload", func(req as HTTPServerRequest) {
+		req.sendTextString("xupload: NOT IMPLEMENTED")
+	})
+
+	// The following maps to /submap
+	map.get("submap", func(req as HTTPServerRequest) {
+		req.sendTextString("THIS IS SUBMAP!")
+	})
+	// The following maps the URLS under /submap
+	map.child("submap", new HTTPServerRequestHandlerMap()
+		.get("", func(req as HTTPServerRequest) {
+			// This ALSO maps to /submap (but the entry
+			// above takes precedence. If you comment out the one above,
+			// then the following will work)
+			req.sendTextString("This is the ALTERNATIVE SUBMAP!")
+		})
+		.get("test1", func(req as HTTPServerRequest) {
+			// This maps to /submap/test1
+			req.sendTextString("submap -> test1")
+		})
+		.get("test2", func(req as HTTPServerRequest) {
+			// This maps to /submap/test2
+			req.sendTextString("submap -> test2")
+		})
+		.get("test2/*", func(req as HTTPServerRequest) {
+			// This maps to /submap/test2/* (any one level FROM
+			// test2, eg. /submap/test2/asdf, /submap/test2/hello, etc.
+			req.sendTextString("submap -> test2/*: " .. req.peekResource())
+		})
+		.get("test2/**", func(req as HTTPServerRequest) {
+			// This maps to anything anywhere below test2, eg.
+			// /submap/test2/a/b/c/d/e/f/g/h/j/etc.
+			// If you comment out the rule for "test2/*" above, then the following
+			// will also capture the URL paths one level from test2.
+			req.sendTextString("submap -> test2/**: " .. req.getRelativeResourcePath())
+		})
+	)
+
+	// You can also put custom classes as children of a map:
+	map.child("special", new MySpecialRequestHandler())
+
+	// Or you can embed custom classes deeper in the hierarchy.
+	// This will enable URL path /more/andmore/special and anything
+	// under it (eg. /more/andmore/special/a/b/c/d/f/g/etc)
+	map.child("more", new HTTPServerRequestHandlerMap()
+		.child("andmore", new HTTPServerRequestHandlerMap()
+			.child("special", new MySpecialRequestHandler())
+		)
+	)
+
+	// Request handler stacks (like the one we have in HTTPServer) can
+	// also be created separately from HTTPServer and added to the hierarchy
+	// like this
+	var stack = new HTTPServerRequestHandlerStack()
+	stack.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+		Log.info(ctx, "THIS REQUEST WAS FOR /stack/**, and could have its own authentication: `" .. req.getURLPath() .. "'")
+		next()
+	})
+	stack.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+		req.sendTextString("For /stack/**")
+	})
+	map.child("stack/**", stack)
+
+	// Or the stack can be created as a reusable class (like we should do):
+	map.child("api/**", new MyAPIHandlerClass())
+
+	// Serves all files in the current directory of the process (where you execute
+	// this program from) under the URL /allfiles
+	var files = HTTPServerDirectoryHandler.forDirectory(FileInstance.forPath("."))
+	files.setListDirectories(true)
+	files.setProcessTemplateFiles(true)
+	files.setIndexFiles([
+		"index.html",
+		"index.html.t"
+	])
+	files.setServerURL("sympathy.ws")
+	map.child("allfiles", files)
+
+	// The map is then added as a request handler just like the others
+	server.pushRequestHandler(map)
+
+	// "manual" URL path interpretations.
+	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+		if(req.isForResource("/testing")) {
+			req.sendTextString("You have asked for TESTING")
+			return
+		}
+		if(req.isForResource("/other")) {
+			req.sendTextString("This is other")
+			return
+		}
+		if(req.isForResource("/secure")) {
+			// NOTE: REQUIRE_SESSION() is a macro. If there is no
+			// session, this sends the error response and returns.
+			// See implementation in HTTPServerRequest.sling
+			req.REQUIRE_SESSION()
+			req.sendTextString("This is a SECURE resource")
+			return
+		}
+		if(req.isForResource("/postme")) {
+			var bb = req.getBodyBuffer()
+			Log.info(ctx, "Got body of " .. String.forInteger(SIZE(bb)) .. " bytes")
+			req.sendBuffer(bb, req.getHeader("content-type"))
+			return
+		}
+		if(req.acceptResource("upload")) {
+			var fileName = req.popResource()
+			if(String.isEmpty(fileName)) {
+				req.sendTextString("No filename specified")
+				return
+			}
+			req.setBodyReceiver(new MyBodyReceiver().setLogContext(ctx).setFileName(fileName).setRequest(req))
+			return
+		}
+		req.sendResponse(HTTPServerResponse.forHTTPNotFound())
+	})
+
+	// --- Add request handler listeners ---
+
+	// These are used for informing us when requests have been completed and processed.
+	// These are useful for eg. logging, real time analytics or other monitoring
+	server.addRequestHandlerListener (func(req as HTTPServerRequest, resp as HTTPServerResponse, bytesSent as int, remoteAddress as string) {
+		Log.info(ctx, "REQUEST IS COMPLETE 1!")
+	})
+	server.addRequestHandlerListener (func(req as HTTPServerRequest, resp as HTTPServerResponse, bytesSent as int, remoteAddress as string) {
+		Log.info(ctx, "REQUEST IS COMPLETE 2!")
+	})
+	server.addRequestHandlerListener(new HTTPServerRequestLogger())
+
+	// --- Execute the server ---
+
+	if(server.initialize(ioManager, ctx) == false) {
+		Log.error(ctx, "Failed to initialize HTTP server.")
+		return(1)
+	}
+	if(ioManager.execute(ctx) == false) {
+		Log.error(ctx, "Failed to execute IO manager")
+		return(1)
+	}
+	Log.info(ctx, "Successfully completed.")
+	return(0)
+}

@@ -22,10 +22,44 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is TemplateStorage imports cape:
+
+func forDirectory(dir as File) static as this
+{
+	var v = new this()
+	v.setDirectory(dir)
+	return(v)
+}
+
+func forHTMLTemplateDirectory(dir as File) static as this
+{
+	var v = new this()
+	v.setDirectory(dir)
+	v.setSuffix(".html.t")
+	return(v)
+}
+
+prop directory as File
+prop suffix as string
+
+ctor
+{
+	suffix = ".txt"
+}
+
+func getTemplate(id as string, callback as function<void,string>)
+{
+	if(callback == null) {
+		return
+	}
+	if(directory == null || String.isEmpty(id) || String.indexOf(id, '/') >= 0 || String.indexOf(id, '\\') >= 0) {
+		callback(null)
+		return
+	}
+	var ff = directory.entry(id .. suffix)
+	if(ff.isFile() == false) {
+		callback(null)
+		return
+	}
+	callback(ff.getContentsString("UTF-8"))
+}

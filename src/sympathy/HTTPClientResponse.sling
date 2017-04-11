@@ -22,10 +22,35 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is StringObject imports cape:
+
+prop httpVersion as string
+prop httpStatus as string
+prop httpStatusDescription as string
+prop rawHeaders as KeyValueListForStrings
+prop headers as map<string,string>
+
+func addHeader(key as string, value as string)
+{
+	if(rawHeaders == null) {
+		rawHeaders = new KeyValueListForStrings()
+	}
+	if(headers == null) {
+		headers = new map<string,string>
+	}
+	rawHeaders.add(key, value)
+	headers[String.toLowerCase(key)] = value
+}
+
+func getHeader(key as string) as string
+{
+	if(headers == null) {
+		return(null)
+	}
+	return(Map.get(headers, key))
+}
+
+func toString as string
+{
+	return(String.asString(rawHeaders))
+}

@@ -1,0 +1,268 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape:
+
+const CLOSE_FRAME = 8
+const PING_FRAME = 9
+const PONG_FRAME = 10
+
+var fin = 0
+var rsv1 = 0
+var rsv2 = 0
+var rsv3 = 0
+var opcode = 0
+var maskingBuffer as buffer
+var payloadBuffer as buffer
+var messageBuffer as buffer
+
+func create(fin as int, rsv1 as int, rsv2 as int, rsv3 as int, opcode as int, maskingBuffer as buffer, payloadBuffer as buffer) static as this:
+	return new this().setFin(fin).setRsv1(rsv1).setRsv2(rsv2).setRsv3(rsv3).setOpcode(opcode).setMaskingBuffer(maskingBuffer).setPayloadBuffer(payloadBuffer)
+
+dtor
+{
+	messageBuffer = null
+	maskingBuffer = null
+	payloadBuffer = null
+}
+
+func onChanged private:
+	messageBuffer = null
+
+func setFin(fin as int) as this
+{
+	this.fin = fin
+	onChanged()
+	return this
+}
+
+func getFin as int:
+	return fin
+
+func setRsv1(rsv1 as int) as this
+{
+	this.rsv1 = rsv1
+	onChanged()
+	return this
+}
+
+func getRsv1 as int:
+	return rsv1
+
+func setRsv2(rsv2 as int) as this
+{
+	this.rsv2 = rsv2
+	onChanged()
+	return this
+}
+
+func getRsv2 as int:
+	return rsv2
+
+func setRsv3(rsv3 as int) as this
+{
+	this.rsv3 = rsv3
+	onChanged()
+	return this
+}
+
+func getRsv3 as int:
+	return rsv3
+
+func setOpcode(opcode as int) as this
+{
+	this.opcode = opcode
+	onChanged()
+	return this
+}
+
+func getOpcode as int:
+	return opcode
+
+func setMaskingBuffer(maskingBuffer as buffer) as this
+{
+	this.maskingBuffer = maskingBuffer
+	onChanged()
+	return this
+}
+
+func getMaskingBuffer as buffer:
+	return maskingBuffer
+
+func setPayloadBuffer(payloadBuffer as buffer) as this
+{
+	this.payloadBuffer = payloadBuffer
+	onChanged()
+	return this
+}
+
+func getPayloadBuffer as buffer:
+	return payloadBuffer
+
+func forCloseControlFrame(statusCode as int = -1, reason as string = null) static as this
+{
+	if statusCode < 65536 && statusCode > -1 {
+		if String.isEmpty(reason) == false {
+			var rBuffer = String.toUTF8Buffer(reason)
+			var size = SIZE(rBuffer)
+			var plBuffer = Buffer.allocate(size + 2)
+			Buffer.setByte(plBuffer, 0, (statusCode >> 8) & 0xFF)
+			Buffer.setByte(plBuffer, 1, statusCode & 0xFF)
+			Buffer.copyFrom(plBuffer, rBuffer, 0, 2, size)
+			return new this().setFin(1).setOpcode(CLOSE_FRAME).setPayloadBuffer(plBuffer)
+		}
+		var plBuffer = Buffer.allocate(2)
+		Buffer.setByte(plBuffer, 0, (statusCode >> 8) & 0xFF)
+		Buffer.setByte(plBuffer, 1, statusCode & 0xFF)
+		return new this().setFin(1).setOpcode(CLOSE_FRAME).setPayloadBuffer(plBuffer)
+	}
+	return new this().setFin(1).setOpcode(CLOSE_FRAME)
+}
+
+func forPingControlFrame static as this:
+	return new this().setFin(1).setOpcode(PING_FRAME)
+
+func forPongControlFrame static as this:
+	return new this().setFin(1).setOpcode(PONG_FRAME)
+
+func isDataText as bool:
+	return opcode == 1
+
+func isDataBinary as bool:
+	return opcode == 2
+
+func isCloseControlFrame as bool:
+	return opcode == CLOSE_FRAME
+
+func isPingControlFrame as bool:
+	return opcode == PING_FRAME
+
+func isPongControlFrame as bool:
+	return opcode == PONG_FRAME
+
+func toBuffer as buffer
+{
+	if messageBuffer != null:
+		return messageBuffer
+
+	// Calculate the total size of the message buffer
+
+	var size = 2
+	if maskingBuffer != null:
+		size += 4
+	var payloadLength = 0
+	if payloadBuffer != null:
+		payloadLength = SIZE(payloadBuffer)
+	var plb = 0
+	if payloadLength < 126 && payloadLength >= 0 {
+		plb = payloadLength
+	}
+	else if payloadLength < 65536 {
+		plb = 126
+		size += 2
+	}
+	else if payloadLength > 65535 {
+		plb = 127
+		size += 8
+	}
+	else {
+		return null
+	}
+	size += payloadLength
+
+	// Allocate a new buffer with the calculated size
+
+	messageBuffer = Buffer.allocate(size)
+
+	// Set the first byte
+
+	var b1 as uint8 = opcode
+	if fin != 0:
+		b1 |= 0x80
+	if rsv1 != 0:
+		b1 |= 0x40
+	if rsv2 != 0:
+		b1 |= 0x20
+	if rsv3 != 0:
+		b1 |= 0x10
+	Buffer.setByte(messageBuffer, 0, b1)
+
+	// Set the second byte
+
+	var b2 as uint8
+	b2 = plb
+	if maskingBuffer != null:
+		b2 |= 0x80
+	Buffer.setByte(messageBuffer, 1, b2)
+
+	// Set the following 2 bytes - 16bit (if payload length < 65536 && payload length > 125)
+	// or the following 8 bytes - 64bit (if payload length > 65535)
+
+	var p = 2
+	var tp = p
+	var n = 0
+	if plb == 126 {
+		n = 8
+		tp += 2
+	}
+	else if plb == 127 {
+		n = 56
+		tp += 8
+	}
+	while p < tp {
+		if n != 0 {
+			Buffer.setByte(messageBuffer, p, (payloadLength >> n) & 0xFF)
+		}
+		else {
+			Buffer.setByte(messageBuffer, p, payloadLength & 0xFF)
+		}
+		p++
+		n -= 8
+	}
+
+	// Append the four bytes of masking buffer if it's not null
+
+	if maskingBuffer != null {
+		Buffer.copyFrom(messageBuffer, maskingBuffer, 0, p, 4)
+		p += 4
+		if payloadBuffer != null {
+
+			// Mask the payload buffer
+
+			var i = 0
+			while i < payloadLength {
+				var b = Buffer.getByte(payloadBuffer, i)
+				var ob = b ^ Buffer.getByte(maskingBuffer, i % 4) as! uint8
+				Buffer.setByte(payloadBuffer, i, ob)
+				i++
+			}
+		}
+	}
+
+	// Append the payload buffer if it's not null
+
+	if payloadBuffer != null:
+		Buffer.copyFrom(messageBuffer, payloadBuffer, 0, p, payloadLength)
+	return messageBuffer
+}

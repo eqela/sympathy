@@ -1,0 +1,79 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape imports capex.util:
+
+prop apiKey as string
+prop locationHost = "http://dataservice.accuweather.com/locations/"
+prop currentConditionHost = "http://dataservice.accuweather.com/currentconditions/"
+prop forecastHost = "http://dataservice.accuweather.com/forecasts/"
+var client as WebClient
+prop version = "v1"
+prop details = true
+prop metric = true
+var locationData as DynamicMap
+var currentConditionData as DynamicVector
+var currentWeatherData as DynamicMap
+var forecastData as DynamicMap
+
+ctor:
+	client = NativeWebClient.instance()
+
+func forApiKey(key as string) static as this
+{
+	if String.isEmpty(key):
+		return null
+	return new this().setApiKey(key)
+}
+
+func queryLocation(latitude as double, longitude as double, callback as function<void, DynamicMap>)
+{
+	assert client
+	var cb final #used = callback
+	client.query("GET", locationHost .. version .. "/cities/geoposition/search.json?q=" .. String.forDouble(latitude) .. "," .. String.forDouble(longitude) .. "&apikey=" .. apiKey, null, null, func(statusCode as string, headers as KeyValueList<string, string>, location as buffer) {
+		locationData = JSONParser.parse(location)
+		cb(locationData)
+	})
+}
+
+func queryCurrentCondition(key as string, callback as function<void, DynamicMap>)
+{
+	assert client
+	var cb final #used = callback
+	client.query("GET", currentConditionHost .. version .."/" .. key .. "?apikey=" .. apiKey .. "&details=" .. String.forBoolean(details), null, null, func(statusCode as string, headers as KeyValueList<string, string>, current as buffer) {
+		currentConditionData = JSONParser.parse(current)
+		currentWeatherData =  currentConditionData.getMap(0)
+		cb(currentWeatherData)
+	})
+}
+
+func queryForecast(key as string, forecastDays as int, callback as function<void, DynamicMap>)
+{
+	assert client
+	var cb final #used = callback
+	client.query("GET", forecastHost .. version .."/daily/".. String.forInteger(forecastDays) .."day/" .. key .. "?apikey=" .. apiKey .. "&metric=" .. String.forBoolean(metric), null, null, func(statusCode as string, headers as KeyValueList<string, string>, forecast as buffer) {
+		forecastData = JSONParser.parse(forecast)
+		cb(forecastData)
+	})
+}

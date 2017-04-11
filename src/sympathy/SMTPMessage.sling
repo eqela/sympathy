@@ -1,0 +1,331 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape imports capex.text:
+
+var rcptsTo as DynamicVector
+var rcptsCC as DynamicVector
+var rcptsBCC as DynamicVector
+var replyTo as string
+var subject as string
+var contentType as string
+var text as string
+var myName as string
+var myAddress as string
+var messageBody as string
+var messageID as string
+var date as string
+prop excludeAddresses as DynamicVector
+var counter private static = 0
+
+ctor
+{
+	date = VerboseDateTimeString.forNow()
+}
+
+func onChanged private
+{
+	messageBody = null
+}
+
+func generateMessageID(host as string) as this
+{
+	messageID = String.forInteger(SystemClock.asSeconds()) .. "-" .. String.forInteger(new Random().nextInt(1000000)) .. "-" .. String.forInteger(counter) .. "@" .. host
+	counter++
+	onChanged()
+	return(this)
+}
+
+func getDate as string
+{
+	return(date)
+}
+
+func getReplyTo as string
+{
+	return(replyTo)
+}
+
+func setDate(date as string) as this
+{
+	this.date = date
+	onChanged()
+	return(this)
+}
+
+func setMessageID(id as string) as this
+{
+	messageID = id
+	onChanged()
+	return(this)
+}
+
+func setReplyTo(v as string) as this
+{
+	replyTo = v
+	onChanged()
+	return(this)
+}
+
+func getMessageID as string
+{
+	return(messageID)
+}
+
+func isExcludedAddress(add as string) private as bool
+{
+	if(excludeAddresses == null || excludeAddresses.getSize() < 1) {
+		return(false)
+	}
+	foreach(ea as string in excludeAddresses.toVector()) {
+		if(String.equals(ea, add)) {
+			return(true)
+		}
+	}
+	return(false)
+}
+
+func getAllRcpts as DynamicVector
+{
+	var rcpts = new DynamicVector()
+	if(rcptsTo != null) {
+		foreach(r as string in rcptsTo.toVector()) {
+			if(isExcludedAddress(r)) {
+				continue
+			}
+			rcpts.append(r)
+		}
+	}
+	if(rcptsCC != null) {
+		foreach(r as string in rcptsCC.toVector()) {
+			if(isExcludedAddress(r)) {
+				continue
+			}
+			rcpts.append(r)
+		}
+	}
+	if(rcptsBCC != null) {
+		foreach(r as string in rcptsBCC.toVector()) {
+			if(isExcludedAddress(r)) {
+				continue
+			}
+			rcpts.append(r)
+		}
+	}
+	return(rcpts)
+}
+
+func getRcptsTo as DynamicVector
+{
+	return(rcptsTo)
+}
+
+func getRcptsCC as DynamicVector
+{
+	return(rcptsCC)
+}
+
+func getRcptsBCC as DynamicVector
+{
+	return(rcptsBCC)
+}
+
+func getSubject as string
+{
+	return(subject)
+}
+
+func getContentType as string
+{
+	return(contentType)
+}
+
+func getText as string
+{
+	return(text)
+}
+
+func getMyName as string
+{
+	return(myName)
+}
+
+func getMyAddress as string
+{
+	return(myAddress)
+}
+
+func setSubject(s as string) as this
+{
+	subject = s
+	onChanged()
+	return(this)
+}
+
+func setContentType(c as string) as this
+{
+	contentType = c
+	onChanged()
+	return(this)
+}
+
+func setText(t as string) as this
+{
+	text = t
+	onChanged()
+	return(this)
+}
+
+func setMyName(n as string) as this
+{
+	myName = n
+	onChanged()
+	return(this)
+}
+
+func setMyAddress(a as string) as this
+{
+	myAddress = a
+	onChanged()
+	return(this)
+}
+
+func setTo(address as string) as this
+{
+	rcptsTo = new DynamicVector()
+	rcptsTo.append(address)
+	onChanged()
+	return(this)
+}
+
+func addTo(address as string) as this
+{
+	if(String.isEmpty(address) == false) {
+		if(rcptsTo == null) {
+			rcptsTo = new DynamicVector()
+		}
+		rcptsTo.append(address)
+	}
+	onChanged()
+	return(this)
+}
+
+func addCC(address as string) as this
+{
+	if(String.isEmpty(address) == false) {
+		if(rcptsCC == null) {
+			rcptsCC = new DynamicVector()
+		}
+		rcptsCC.append(address)
+	}
+	onChanged()
+	return(this)
+}
+
+func addBCC(address as string) as this
+{
+	if(String.isEmpty(address) == false) {
+		if(rcptsBCC == null) {
+			rcptsBCC = new DynamicVector()
+		}
+		rcptsBCC.append(address)
+	}
+	onChanged()
+	return(this)
+}
+
+func setRecipients(to as DynamicVector, cc as DynamicVector, bcc as DynamicVector) as this
+{
+	rcptsTo = to
+	rcptsCC = cc
+	rcptsBCC = bcc
+	onChanged()
+	return(this)
+}
+
+func getSizeBytes as int
+{
+	var b = getMessageBody()
+	if(b == null) {
+		return(0)
+	}
+	var bb = String.toUTF8Buffer(b)
+	if(bb == null) {
+		return(0)
+	}
+	return(Buffer.getSize(bb))
+}
+
+func getMessageBody virtual as string
+{
+	if(messageBody != null) {
+		return(messageBody)
+	}
+	var sb = new StringBuilder()
+	sb.append("From: ")
+	sb.append(myName)
+	sb.append(" <")
+	sb.append(myAddress)
+	if(String.isEmpty(replyTo) == false) {
+		sb.append(">\r\nReply-To: ")
+		sb.append(myName)
+		sb.append(" <")
+		sb.append(replyTo)
+	}
+	sb.append(">\r\nTo: ")
+	var first = true
+	if(rcptsTo != null) {
+		foreach(to as string in rcptsTo.toVector()) {
+			if(first == false) {
+				sb.append(", ")
+			}
+			sb.append(to)
+			first = false
+		}
+	}
+	sb.append("\r\nCc: ")
+	first = true
+	if(rcptsCC != null) {
+		foreach(to as string in rcptsCC.toVector()) {
+			if(first == false) {
+				sb.append(", ")
+			}
+			sb.append(to)
+			first = false
+		}
+	}
+	// FIXME - How about the BCC?
+	sb.append("\r\nSubject: ")
+	sb.append(subject)
+	sb.append("\r\nContent-Type: ")
+	sb.append(contentType)
+	sb.append("\r\nDate: ")
+	sb.append(date)
+	sb.append("\r\nMessage-ID: <")
+	sb.append(messageID)
+	sb.append(">\r\n\r\n")
+	sb.append(text)
+	messageBody = sb.toString()
+	return(messageBody)
+}

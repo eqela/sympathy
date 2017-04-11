@@ -22,10 +22,46 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is TextProtocolConnection abstract imports cape:
+
+prop useCRLF = false
+
+func sendLine(text as string)
+{
+	if(useCRLF) {
+		sendText(text .. "\r\n")
+	}
+	else {
+		sendText(text .. "\n")
+	}
+}
+
+func onTextReceived(data as string) override
+{
+	// FIXME: Should rather collect all incoming data to a string buffer, and only
+	// proceed once a newline is encountered. With the current implementation, only
+	// single packet lines will be observed (Windows telnet will not be compatible).
+	if(data == null) {
+		return
+	}
+	var str = data
+	if(String.endsWith(str, "\r\n")) {
+		str = String.subString(str, 0, String.getLength(str) - 2)
+	}
+	else if(String.endsWith(str, "\n")) {
+		str = String.subString(str, 0, String.getLength(str) - 1)
+	}
+	var nn = String.indexOf(str, '\n')
+	if(nn < 0) {
+		onLineReceived(str)
+		return
+	}
+	foreach(line in String.split(str, '\n')) {
+		if(String.endsWith(line, "\r")) {
+			line = String.subString(line, 0, String.getLength(line)-1)
+		}
+		onLineReceived(line)
+	}
+}
+
+func onLineReceived(data as string) abstract

@@ -22,10 +22,51 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class imports cape imports sympathy:
+
+class MyHTTPClientListener is HTTPClientListener
+{
+	prop listener as function<void, DynamicMap, Error>
+	var body as buffer
+
+	func onError(message as string) override
+	{
+		if(listener != null) {
+			listener(null, Error.forMessage(message))
+		}
+	}
+
+	func onAborted override
+	{
+		if(listener != null) {
+			listener(null, Error.forCode("aborted"))
+		}
+	}
+
+	func onDataReceived(buffer as buffer) override as bool
+	{
+		body = Buffer.append(body, buffer)
+		return(true)
+	}
+
+	func onResponseCompleted override
+	{
+		base.onResponseCompleted()
+		if(listener != null) {
+			var json = JSONParser.parse(body) as DynamicMap
+			if(json == null) {
+				listener(null, Error.forMessage("Invalid JSON Format from Google"))
+				return
+			}
+			listener(json, null)
+		}
+	}
+}
+
+func getTokenInfo(token as string, listener as function<void,DynamicMap,Error>) static
+{
+	var op = new HTTPClientOperation()
+	op.setAcceptInvalidCertificate(true)
+	var req = HTTPClientRequest.forGET("https://www.googleapis.com/oauth2/v3/tokeninfo?id_token=" .. capex.util.URLEncoder.encode(token))
+	op.executeRequest(req, new MyHTTPClientListener().setListener(listener))
+}

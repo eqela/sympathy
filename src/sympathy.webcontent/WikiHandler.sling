@@ -1,0 +1,84 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is HTTPServerRequestHandlerAdapter imports cape imports sympathy:
+
+prop backend as WikiBackend
+prop siteData as DynamicMap
+prop theme as WikiTheme
+
+func onGET(req as HTTPServerRequest) override as bool
+{
+	if(req.isForResource("/style.css")) {
+		req.sendResponse(HTTPServerResponse.forString(theme.getCss(), "text/css"))
+		return(true)
+	}
+	var rrp = req.getRelativeResourcePath()
+	if(String.isEmpty(rrp)) {
+		return(false)
+	}
+	var res = backend.getResourceForPath(rrp)
+	if(res != null) {
+		req.sendResponse(HTTPServerResponse.forFile(res))
+		return(true)
+	}
+	var doc = backend.getDocumentForPath(rrp)
+	if(doc != null) {
+		if(req.isForDirectory() == false) {
+			req.sendRedirectAsDirectory()
+			return(true)
+		}
+		var html = doc.getAsHtml()
+		if(html == null) {
+			Log.error(logContext, "Failed to get document as HTML: `" .. rrp .. "'")
+			req.sendResponse(HTTPServerResponse.forHTTPInternalError())
+			return(true)
+		}
+		var data = new DynamicMap()
+		data.set("site", siteData)
+		var docConfig = new DynamicMap()
+		var tit = doc.getTitle()
+		var appTitle as string
+		if(siteData != null) {
+			appTitle = siteData.getString("title")
+		}
+		if(String.isEmpty(tit) == false && tit != appTitle) {
+			data.set("page_title", tit .. " | " .. appTitle)
+			docConfig.set("title", tit)
+		}
+		else {
+			docConfig.set("title", appTitle)
+		}
+		docConfig.set("slogan", doc.getSlogan())
+		docConfig.set("intro", doc.getIntro())
+		docConfig.set("author", doc.getAuthor())
+		docConfig.set("date", doc.getDate())
+		docConfig.set("banner", doc.getBannerName())
+		data.set("document", docConfig)
+		var pageHtml = theme.getArticlePageHtml(html, data)
+		req.sendHTMLString(pageHtml)
+		return(true)
+	}
+	return(false)
+}

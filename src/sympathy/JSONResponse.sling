@@ -1,0 +1,154 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape:
+
+func forError(error as Error) static as DynamicMap
+{
+	var v = new DynamicMap()
+	v.set("status", "error")
+	if(error != null) {
+		var code = error.getCode()
+		var message = error.getMessage()
+		var detail = error.getDetail()
+		if(String.isEmpty(code) == false) {
+			v.set("code", code)
+		}
+		if(String.isEmpty(message) == false) {
+			v.set("message", message)
+		}
+		if(String.isEmpty(detail) == false) {
+			v.set("detail", detail)
+		}
+	}
+	return(v)
+}
+
+func forErrorCode(code as string) static as DynamicMap
+{
+	var v = new DynamicMap()
+	v.set("status", "error")
+	v.set("code", code)
+	return(v)
+}
+
+func forErrorMessage(message as string = null, code as string = null) static as DynamicMap
+{
+	var v = new DynamicMap()
+	v.set("status", "error")
+	if(String.isEmpty(message) == false) {
+		v.set("message", message)
+	}
+	if(String.isEmpty(code) == false) {
+		v.set("code", code)
+	}
+	return(v)
+}
+
+func forOk(data as object = null) static as DynamicMap
+{
+	var v = new DynamicMap()
+	v.set("status", "ok")
+	if(data != null) {
+		v.set("data", data)
+	}
+	return(v)
+}
+
+func forDetails(status as string, code as string, message as string) static as DynamicMap
+{
+	var v = new DynamicMap()
+	if(String.isEmpty(status) == false) {
+		v.set("status", status)
+	}
+	if(String.isEmpty(code) == false) {
+		v.set("code", code)
+	}
+	if(String.isEmpty(message) == false) {
+		v.set("message", message)
+	}
+	return(v)
+}
+
+func forMissingData(type as string = null) static as DynamicMap
+{
+	if(String.isEmpty(type) == false) {
+		return(forErrorMessage("Missing data: " .. type, "missing_data"))
+	}
+	return(forErrorMessage("Missing data", "missing_data"))
+}
+
+func forInvalidData(type as string = null) static as DynamicMap
+{
+	if(String.isEmpty(type) == false) {
+		return(forErrorMessage("Invalid data: " .. type, "invalid_data"))
+	}
+	return(forErrorMessage("Invalid data", "invalid_data"))
+}
+
+func forAlreadyExists static as DynamicMap
+{
+	return(forErrorMessage("Already exists", "already_exists"))
+}
+
+func forInvalidRequest(type as string = null) static as DynamicMap
+{
+	if(String.isEmpty(type) == false) {
+		return(forErrorMessage("Invalid request: " .. type, "invalid_request"))
+	}
+	return(forErrorMessage("Invalid request", "invalid_request"))
+}
+
+func forNotAllowed static as DynamicMap
+{
+	return(forErrorMessage("Not allowed", "not_allowed"))
+}
+
+func forFailedToCreate static as DynamicMap
+{
+	return(forErrorMessage("Failed to create", "failed_to_create"))
+}
+
+func forNotFound static as DynamicMap
+{
+	return(forErrorMessage("Not found", "not_found"))
+}
+
+func forAuthenticationFailed static as DynamicMap
+{
+	return(forErrorMessage("Authentication failed", "authentication_failed"))
+}
+
+func forIncorrectUsernamePassword static as DynamicMap
+{
+	return(forErrorMessage("Incorrect username and/or password", "authentication_failed"))
+}
+
+func forInternalError(details as string = null) static as DynamicMap
+{
+	if(String.isEmpty(details) == false) {
+		return(forErrorMessage("Internal error: " .. details, "internal_error"))
+	}
+	return(forErrorMessage("Internal error", "internal_error"))
+}

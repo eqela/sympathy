@@ -1,0 +1,128 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape imports capex.text:
+
+func forDirectory(dir as File) static as this
+{
+	if(dir == null) {
+		return(null)
+	}
+	if(dir.isDirectory() == false) {
+		return(null)
+	}
+	var includes = new vector<File>
+	includes += dir
+	var v = new this()
+	v.setDirectory(dir)
+	v.setCss(readFile(dir, "style.css"))
+	v.setDocumentHeader(TextTemplate.forHTMLString(readFile(dir, "document_header.html"), includes))
+	v.setFrameHeader(TextTemplate.forHTMLString(readFile(dir, "frame_header.html"), includes))
+	v.setFrameFooter(TextTemplate.forHTMLString(readFile(dir, "frame_footer.html"), includes))
+	v.setArticleHeader(TextTemplate.forHTMLString(readFile(dir, "article_header.html"), includes))
+	v.setArticleFooter(TextTemplate.forHTMLString(readFile(dir, "article_footer.html"), includes))
+	v.setIncludes(includes)
+	return(v)
+}
+
+func readFile(dir as File, fileName as string) private static as string
+{
+	var ff = dir.entry(fileName)
+	if(ff.isFile() == false) {
+		return(null)
+	}
+	var v = ff.getContentsString("UTF-8")
+	if(v == null) {
+		return(null)
+	}
+	return(v)
+}
+
+prop css as string
+prop directory as File
+prop documentHeader as TextTemplate
+prop frameHeader as TextTemplate
+prop frameFooter as TextTemplate
+prop articleHeader as TextTemplate
+prop articleFooter as TextTemplate
+prop includes as vector<File>
+
+func getPageHtml(contentHtml as string, data as DynamicMap) as string
+{
+	var sb = new StringBuilder()
+	sb.append("<!DOCTYPE html>\n")
+	sb.append("<html>\n")
+	sb.append("<head>\n")
+	sb.append("<link rel=\"stylesheet\" type=\"text/css\" href=\"/style.css\" />\n")
+	sb.append("<link rel=\"icon\" type=\"image/png\" href=\"/res/favicon.png\" />\n")
+	sb.append("<meta name=\"viewport\" content=\"initial-scale=1,maximum-scale=1\" />\n")
+	var intro as string
+	if(data != null) {
+		intro = HTMLString.toQuotedString(data.getString("intro"))
+	}
+	sb.append("<meta property=\"og:description\" content=" .. intro .. " />\n")
+	// sb.append("<script src=\"/script.js\"></script>\n")
+	if(documentHeader != null) {
+		sb.append(documentHeader.execute(data, includes))
+	}
+	sb.append("</head>\n")
+	sb.append("<body>\n")
+	sb.append("<div id=\"padget_container\">\n")
+	sb.append("<div id=\"padget_header\">\n")
+	if(frameHeader != null) {
+		sb.append(frameHeader.execute(data, includes))
+	}
+	sb.append("</div>")
+	sb.append("<div id=\"padget_content\">\n")
+	sb.append(contentHtml)
+	sb.append("</div>")
+	if(frameFooter != null) {
+		sb.append(frameFooter.execute(data, includes))
+	}
+	sb.append("</body>\n")
+	sb.append("</div>")
+	sb.append("</html>\n")
+	return(sb.toString())
+}
+
+func getArticlePageHtml(contentHtml as string, data as DynamicMap) as string
+{
+	var sb = new StringBuilder()
+	if(articleHeader != null) {
+		sb.append(articleHeader.execute(data, includes))
+	}
+	sb.append("<div class=\"wikidocument\">\n")
+	sb.append(contentHtml)
+	sb.append("</div>")
+	if(articleFooter != null) {
+		sb.append(articleFooter.execute(data, includes))
+	}
+	return(getPageHtml(sb.toString(), data))
+}
+
+func getNotFoundHtml as string
+{
+	var errorHtml = "<div class=\"wikidocument\">\n<h1>Document not found</h1><p>No such document.</p><p><a href=\"/\">Return to main page</a></p>\n</div>\n"
+	return(getPageHtml(errorHtml, null))
+}

@@ -22,10 +22,38 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is NetworkConnection abstract imports cape:
+
+prop encoding as string
+
+func onDataReceived(data as buffer, size as int) override
+{
+	if(size < 1) {
+		return
+	}
+	var sb = Buffer.getSubBuffer(data, 0, size)
+	if(sb == null) {
+		return
+	}
+	var str as string
+	if(encoding == null) {
+		str = String.forUTF8Buffer(sb)
+	}
+	else {
+		str = String.forBuffer(data, encoding)
+	}
+	if(str == null) {
+		return
+	}
+	onTextReceived(str)
+}
+
+func sendText(text as string)
+{
+	if(text == null) {
+		return
+	}
+	sendData(String.toUTF8Buffer(text), -1)
+}
+
+func onTextReceived(data as string) abstract

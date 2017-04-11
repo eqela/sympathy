@@ -1,0 +1,254 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+import cape
+import capex.net
+import capex.util
+import capex.console
+import sympathy
+
+class MyHTTPServer is HTTPServer
+{
+	prop myParent as parent
+
+	func onMaintenance override
+	{
+		base.onMaintenance()
+		myParent.onMaintenance()
+	}
+}
+
+prop enableRequestLogging = true
+prop listenPort = 8080
+prop loggingDirectory as File
+prop configFile as File
+prop enableDebugMessages = false
+prop maintenanceTimerDelay = 60
+prop enableRateLimit as string
+
+func getConfigFileDirectory as File
+{
+	if configFile == null:
+		return null
+	return configFile.getParent()
+}
+
+func onMaintenance virtual
+{
+}
+
+func configure(key as string, value as string, relativeTo as File, error as Error) virtual as bool
+{
+	if key == "enableRateLimit" {
+		enableRateLimit = value
+		return true
+	}
+	if key == "maintenanceTimerDelay" {
+		maintenanceTimerDelay = Integer.asInteger(value)
+		return true
+	}
+	if key == "listenPort" {
+		listenPort = Integer.asInteger(value)
+		return true
+	}
+	if key == "enableRequestLogging" {
+		enableRequestLogging = Boolean.asBoolean(value)
+		return true
+	}
+	if key == "loggingDirectory" {
+		loggingDirectory = FileInstance.forRelativePath(value, relativeTo)
+		return true
+	}
+	if key == "enableDebugMessages" {
+		enableDebugMessages = Boolean.asBoolean(value)
+		return true
+	}
+	return false
+}
+
+func doConfigure(ctx as LoggingContext, key as string, value as string, relativeTo as File) private as bool
+{
+	var error = new Error()
+	if configure(key, value, relativeTo, error) == false {
+		Log.error(ctx, error.toStringWithDefault("Unsupported configuration option: `" .. key .. "'"))
+		return false
+	}
+	return true
+}
+
+func initialize(ctx as LoggingContext, server as HTTPServer) virtual as bool
+{
+	if enableRateLimit != null {
+		var limit = new HTTPServerRateLimitHandler()
+		if enableRateLimit == "true" || enableRateLimit == "yes" {
+			; // all good, use default settings
+		}
+		else {
+			var comps = String.split(enableRateLimit, ':', 3)
+			limit.setCountLimit(Integer.asInteger(Vector.get(comps, 0)))
+			limit.setCountDuration(Integer.asInteger(Vector.get(comps, 1)))
+			limit.setIgnoreDuration(Integer.asInteger(Vector.get(comps, 2)))
+		}
+		server.pushRequestHandler(limit)
+	}
+	return true
+}
+
+func printUsage(stdout as PrintWriter) virtual
+{
+	var flags = new array<string>[] {
+		new string[] { "v|version|vv", "Display version information" },
+		new string[] { "h|help", "Usage information" }
+	}
+	var options = new array<string>[] {
+		new string[] { "config", "Specify a configuration file to use" },
+		new string[] { "O<option>", "Manually specify configuration parameters (key/value pairs)" }
+	}
+	ConsoleApplication.printUsage(stdout, null, null, flags, options)
+}
+
+func printHeader(stdout as PrintWriter) virtual
+{
+}
+
+func printVersion(stdout as PrintWriter, longFormat as bool) virtual
+{
+}
+
+func execute(args as array<string>) as bool
+{
+	var stdout = Stdout.instance()
+	var arguments = ConsoleApplication.parseCommandLineArguments(args)
+	foreach(arg in arguments) {
+		if arg.isFlag("v") || arg.isFlag("version") {
+			printVersion(stdout, false)
+			return true
+		}
+		else if arg.isFlag("vv") {
+			printVersion(stdout, true)
+			return true
+		}
+	}
+	printHeader(stdout)
+	var ctx as LoggingContext = new ConsoleApplicationContext()
+	var showHelp = false
+	var options = new KeyValueListForStrings()
+	foreach(arg in arguments) {
+		if arg.isOption("config") {
+			if configFile != null {
+				Log.error(ctx, "Duplicate config file parameter supplied: `" .. arg.getComplete() .. "'")
+				return false
+			}
+			configFile = FileInstance.forPath(arg.getStringValue())
+		}
+		else if arg.isFlag("help") || arg.isFlag("h") {
+			showHelp = true
+		}
+		else if arg.key != null && String.startsWith(arg.key, "O") {
+			var key = String.getSubString(arg.key, 1)
+			if String.isEmpty(key) {
+				Log.error(ctx, "Invalid option parameter: `" .. arg.getComplete() .. "'")
+				return false
+			}
+			options.add(key, arg.getStringValue())
+		}
+		else {
+			arg.reportAsUnsupported(ctx)
+			return false
+		}
+	}
+	if showHelp {
+		printUsage(stdout)
+		return true
+	}
+	if configFile != null {
+		var config = SimpleConfigFile.forFile(configFile)
+		if config == null {
+			Log.error(ctx, "Failed to read configuration file: `" .. configFile.getPath() .. "'")
+			return false
+		}
+		var it = config.iterate()
+		while it != null {
+			var kvp = it.next()
+			if kvp == null:
+				break
+			var key = kvp.key
+			var value = kvp.value
+			if doConfigure(ctx, key, value, null) == false:
+				return false
+		}
+	}
+	var oit as Iterator<KeyValuePair<string,string>> #force = options.iterate()
+	while oit != null {
+		var kvp = oit.next()
+		if kvp == null:
+			break
+		var key = kvp.key
+		var value = kvp.value
+		if doConfigure(ctx, key, value, null) == false:
+			return false
+	}
+	if loggingDirectory != null {
+		Log.debug(ctx, "Configuring logging to directory: `" .. loggingDirectory.getPath() .. "'")
+		var dlc = DirectoryLogContext.create(loggingDirectory)
+		dlc.setEnableDebugMessages(enableDebugMessages)
+		ctx = dlc
+	}
+	else {
+		(ctx as! ConsoleApplicationContext).setEnableDebugMessages(enableDebugMessages)
+	}
+	var server = new MyHTTPServer()
+	server.setMyParent(this)
+	server.setPort(listenPort)
+	if initialize(ctx, server) == false {
+		Log.error(ctx, "Failed to configure HTTP server")
+		return false
+	}
+	if enableRequestLogging:
+		server.addRequestHandlerListener(new HTTPServerRequestLogger().setLogContext(ctx).setLogdir(loggingDirectory))
+	var ioManager = IOManager.createDefault()
+	if ioManager == null {
+		Log.error(ctx, "Failed to create IO manager")
+		return false
+	}
+	if server.initialize(ioManager, ctx) == false {
+		Log.error(ctx, "Failed to initialize HTTP server.")
+		return false
+	}
+	if initializeWithIOManager(ioManager, ctx) == false {
+		Log.error(ctx, "Failed to initialize with IOManager")
+		return false
+	}
+	if ioManager.execute(ctx) == false {
+		Log.error(ctx, "Failed to execute IO manager")
+		return false
+	}
+	Log.info(ctx, "Exiting normally.")
+	return true
+}
+
+func initializeWithIOManager(ioManager as IOManager, ctx as LoggingContext) virtual as bool:
+	return true

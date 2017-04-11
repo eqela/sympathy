@@ -1,0 +1,113 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is HTTPServerRequestHandlerContainer imports cape:
+
+class FunctionRequestHandler is HTTPServerRequestHandler private
+{
+	prop handler as function<void,HTTPServerRequest,function>
+
+	func handleRequest(req as HTTPServerRequest, next as function)
+	{
+		handler(req, next)
+	}
+}
+
+class RequestProcessor private
+{
+	prop requestHandlers as vector<HTTPServerRequestHandler>
+	prop request as HTTPServerRequest
+	prop last as function
+	var current = 0
+
+	func start
+	{
+		current = -1
+		next()
+	}
+
+	func next
+	{
+		current ++
+		var handler = Vector.get(requestHandlers, current)
+		if(handler == null) {
+			if(last == null) {
+				defaultLast()
+			}
+			else {
+				last()
+			}
+			return
+		}
+		handler.handleRequest(request, next)
+		request.resetResources()
+	}
+
+	func defaultLast
+	{
+		request.sendResponse(HTTPServerResponse.forHTTPNotFound())
+	}
+}
+
+var requestHandlers protected as vector<HTTPServerRequestHandler>
+
+func iterateRequestHandlers override as Iterator<HTTPServerRequestHandler>
+{
+	if(requestHandlers == null) {
+		return(null)
+	}
+	return(Vector.iterate(requestHandlers) as! Iterator<HTTPServerRequestHandler>)
+}
+
+func pushRequestHandler(handler as function<void,HTTPServerRequest,function>)
+{
+	if(handler == null) {
+		return
+	}
+	pushRequestHandler(new FunctionRequestHandler().setHandler(handler))
+}
+
+func pushRequestHandler(handler as HTTPServerRequestHandler)
+{
+	if(handler == null) {
+		return
+	}
+	if(requestHandlers == null) {
+		requestHandlers = new vector<HTTPServerRequestHandler>
+	}
+	requestHandlers += handler
+	if(handler is HTTPServerComponent && isInitialized()) {
+		(handler as! HTTPServerComponent).initialize(getServer())
+	}
+}
+
+func handleRequest(req as HTTPServerRequest, next as function) override
+{
+	// FIXME: Shouldn't create a new one for every request
+	var rp = new RequestProcessor()
+	rp.setRequestHandlers(requestHandlers)
+	rp.setRequest(req)
+	rp.setLast(next)
+	rp.start()
+}

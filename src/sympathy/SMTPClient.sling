@@ -1,0 +1,344 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports cape imports capex.net imports capex.crypto imports capex.util:
+
+func connect(server as string, port as int, ctx as LoggingContext) private static as TCPSocket
+{
+	if(String.isEmpty(server) || port < 1) {
+		return(null)
+	}
+	var address = server
+	var dns = DNSResolver.create()
+	if(dns != null) {
+		address = dns.getIPAddress(server, ctx)
+		if(String.isEmpty(address)) {
+			Log.error(ctx, "SMTPClient: Could not resolve SMTP server address: `" .. server .. "'")
+			return(null)
+		}
+	}
+	Log.debug(ctx, "SMTPClient: Connecting to SMTP server `" .. address .. ":" .. String.forInteger(port) .. "' ..")
+	var v = TCPSocket.createAndConnect(address, port)
+	if(v != null) {
+		Log.debug(ctx, "SMTPClient: Connected to SMTP server `" .. address .. ":" .. String.forInteger(port) .. "' ..")
+	}
+	else {
+		Log.error(ctx, "SMTPClient: FAILED connection to SMTP server `" .. address .. ":" .. String.forInteger(port) .. "' ..")
+	}
+	return(v)
+}
+
+func writeLine(ops as PrintWriter, str as string) private static as bool
+{
+	return(ops.print(str .. "\r\n"))
+}
+
+func communicate(ins as PrintReader, expectCode as string) private static as string
+{
+	var sb = new StringBuilder()
+	var line = ins.readLine()
+	if(String.isEmpty(line) == false) {
+		sb.append(line)
+	}
+	while(String.isEmpty(line) == false && String.getChar(line, 3) == '-') {
+		line = ins.readLine()
+		if(String.isEmpty(line) == false) {
+			sb.append(line)
+		}
+	}
+	if(String.isEmpty(line) == false && String.getChar(line, 3) == ' ') {
+		if(String.isEmpty(expectCode)) {
+			return(null)
+		}
+		var rc = String.getSubString(line, 0, 3)
+		foreach(cc in String.split(expectCode, '|')) {
+			if(String.equals(cc, rc)) {
+				return(null)
+			}
+		}
+	}
+	var v = sb.toString()
+	if(String.isEmpty(v)) {
+		v = "XXX Unknown SMTP server error response"
+	}
+	return(v)
+}
+
+func encode(enc as string) private static as string
+{
+	if(String.isEmpty(enc)) {
+		return(null)
+	}
+	return(Base64Encoder.encode(String.toUTF8Buffer(enc)))
+}
+
+func rcptAsEmailAddress(ss as string) private static as string
+{
+	if(String.isEmpty(ss)) {
+		return(ss)
+	}
+	var b = String.getIndexOf(ss, '<')
+	if(b < 0) {
+		return(ss)
+	}
+	var e = String.getIndexOf(ss, '>')
+	if(e < 0) {
+		return(ss)
+	}
+	return(String.getSubString(ss, b + 1, e - b - 1))
+}
+
+func resolveMXServerForDomain(domain as string) private static as string
+{
+	var dns = DNSResolver.instance()
+	if(dns == null) {
+		return(null)
+	}
+	var rcs = dns.getNSRecords(domain, "MX", null)
+	if(rcs == null || rcs.getSize() < 1) {
+		return(null)
+	}
+	var v as string
+	var pr as int
+	foreach(mx as DNSRecordMX in rcs.toVector()) {
+		var p = mx.getPriority()
+		if(v == null || p < pr) {
+			pr = p
+			v = mx.getAddress()
+		}
+	}
+	return(v)
+}
+
+func sendMessage(msg as SMTPMessage, server as URL, serverName as string, ctx as LoggingContext = null) static as SMTPClientResult
+{
+	if(msg == null) {
+		return(SMTPClientResult.forMessage(msg).addTransaction(SMTPClientTransactionResult.forError("No message")))
+	}
+	var rcpts = msg.getAllRcpts()
+	if(server != null) {
+		// simple case. single server transaction with a supplied address.
+		var t = executeTransaction(msg, server, rcpts, serverName, ctx)
+		if(t != null) {
+			t.setServer(server.getHost())
+			t.setRecipients(rcpts)
+		}
+		return(SMTPClientResult.forMessage(msg).addTransaction(t))
+	}
+	var r = SMTPClientResult.forMessage(msg)
+	var servers = new DynamicMap()
+	foreach(rcpt as string in rcpts.toVector()) {
+		var em = rcptAsEmailAddress(rcpt)
+		if(String.isEmpty(em)) {
+			r.addTransaction(SMTPClientTransactionResult.forError("Invalid recipient address: `" .. rcpt .. "'"))
+			break
+		}
+		var at = String.getIndexOf(em, '@')
+		if(at < 0) {
+			r.addTransaction(SMTPClientTransactionResult.forError("Invalid recipient address: `" .. rcpt .. "'"))
+			break
+		}
+		var sa = String.getSubString(em, at + 1)
+		if(String.isEmpty(sa)) {
+			r.addTransaction(SMTPClientTransactionResult.forError("Invalid recipient address: `" .. rcpt .. "'"))
+			break
+		}
+		var ss = servers.get(sa) as DynamicVector
+		if(ss == null) {
+			ss = new DynamicVector()
+			servers.set(sa, ss)
+		}
+		ss.append(rcpt)
+	}
+	var itr = servers.iterateKeys()
+	while(itr != null) {
+		var domain = itr.next()
+		if(String.isEmpty(domain)) {
+			break
+		}
+		var ds = resolveMXServerForDomain(domain)
+		if(String.isEmpty(ds)) {
+			r.addTransaction(SMTPClientTransactionResult.forError("Unable to determine mail server for `" .. domain .. "'"))
+		}
+		else {
+			Log.debug(ctx, "SMTP server for domain `" .. domain .. "': `" .. ds .. "'")
+			var trcpts = servers.get(domain) as DynamicVector
+			var t = executeTransaction(msg, URL.forString("smtp://" .. ds), trcpts, serverName, ctx)
+			if(t != null) {
+				t.setDomain(domain)
+				t.setServer(ds)
+				t.setRecipients(trcpts)
+			}
+			r.addTransaction(t)
+		}
+	}
+	var vt = r.getTransactions()
+	if(vt == null || vt.getSize() < 1) {
+		r.addTransaction(SMTPClientTransactionResult.forError("Unknown error in SMTPClient"))
+	}
+	return(r)
+}
+
+func executeTransaction(msg as SMTPMessage, server as URL, rcpts as DynamicVector, serverName as string, ctx as LoggingContext) private static as SMTPClientTransactionResult
+{
+	var url = server
+	if(url == null) {
+		return(SMTPClientTransactionResult.forError("No server URL"))
+	}
+	var socket as ConnectedSocket = null
+	var scheme = url.getScheme()
+	var host = url.getHost()
+	var port = url.getPortInt()
+	var n as int
+	for(n = 0; n < 3; n++) {
+		if(String.equals("smtp", scheme) || String.equals("smtp+tls", scheme)) {
+			if(port < 1) {
+				port = 25
+			}
+			socket = connect(host, port, ctx)
+		}
+		else if(String.equals("smtp+ssl", scheme)) {
+			if(port < 1) {
+				port = 465
+			}
+			var ts = connect(host, port, ctx)
+			if(ts != null) {
+				socket = SSLSocket.forClient(ts, host)
+				if(socket == null) {
+					return(SMTPClientTransactionResult.forError("Failed to start SSL"))
+				}
+			}
+		}
+		else {
+			return(SMTPClientTransactionResult.forError("SMTPClient: Unknown SMTP URI scheme `" .. scheme .. "'"))
+		}
+		if(socket != null) {
+			break
+		}
+		Log.debug(ctx, "Failed to connect to SMTP server `" .. host .. ":" .. String.forInteger(port) .. "'. Waiting to retry ..")
+		Log.error(ctx, "FIXME - No sleep implementation yet, quitting instead!")
+		break
+		//SystemEnvironment.sleep(1)
+	}
+	if(socket == null) {
+		return(SMTPClientTransactionResult.forError("Unable to connect to SMTP server `" .. host .. ":" .. String.forInteger(port) .. "'"))
+	}
+	var ops = PrintWriterWrapper.forWriter(socket)
+	var ins = new PrintReader(socket)
+	if(ops == null || ins == null) {
+		return(SMTPClientTransactionResult.forError("Unable to establish SMTP I/O streams"))
+	}
+	var err as string
+	if((err = communicate(ins, "220")) != null) {
+		return(SMTPClientTransactionResult.forError(err))
+	}
+	var sn = serverName
+	if(String.isEmpty(sn)) {
+		sn = "eq.net.smtpclient"
+	}
+	if(writeLine(ops, "EHLO " .. sn) == false) {
+		return(SMTPClientTransactionResult.forNetworkError())
+	}
+	if((err = communicate(ins, "250")) != null) {
+		return(SMTPClientTransactionResult.forError(err))
+	}
+	if(String.equals("smtp+tls", scheme)) {
+		if(writeLine(ops, "STARTTLS") == false) {
+			return(SMTPClientTransactionResult.forNetworkError())
+		}
+		if((err = communicate(ins, "220")) != null) {
+			return(SMTPClientTransactionResult.forError(err))
+		}
+		ops = null
+		ins = null
+		socket = SSLSocket.forClient(socket, host)
+		if(socket == null) {
+			return(SMTPClientTransactionResult.forError("Failed to start SSL"))
+		}
+		ops = PrintWriterWrapper.forWriter(socket)
+		ins = new PrintReader(socket)
+	}
+	var username = url.getUsername()
+	var password = url.getPassword()
+	if(String.isEmpty(username) == false) {
+		if(writeLine(ops, "AUTH login") == false) {
+			return(SMTPClientTransactionResult.forNetworkError())
+		}
+		if((err = communicate(ins, "334")) != null) {
+			return(SMTPClientTransactionResult.forError(err))
+		}
+		if(writeLine(ops, encode(username)) == false) {
+			return(SMTPClientTransactionResult.forNetworkError())
+		}
+		if((err = communicate(ins, "334")) != null) {
+			return(SMTPClientTransactionResult.forError(err))
+		}
+		if(writeLine(ops, encode(password)) == false) {
+			return(SMTPClientTransactionResult.forNetworkError())
+		}
+		if((err = communicate(ins, "235|530")) != null) {
+			return(SMTPClientTransactionResult.forError(err))
+		}
+	}
+	if(writeLine(ops, "MAIL FROM:<" .. msg.getMyAddress() .. ">") == false) {
+		return(SMTPClientTransactionResult.forNetworkError())
+	}
+	if((err = communicate(ins, "250")) != null) {
+		return(SMTPClientTransactionResult.forError(err))
+	}
+	if(rcpts != null) {
+		foreach(rcpt as string in rcpts.toVector()) {
+			if(writeLine(ops, "RCPT TO:<" .. rcptAsEmailAddress(rcpt) .. ">") == false) {
+				return(SMTPClientTransactionResult.forNetworkError())
+			}
+			if((err = communicate(ins, "250")) != null) {
+				return(SMTPClientTransactionResult.forError(err))
+			}
+		}
+	}
+	if(writeLine(ops, "DATA") == false) {
+		return(SMTPClientTransactionResult.forNetworkError())
+	}
+	if((err = communicate(ins, "354")) != null) {
+		return(SMTPClientTransactionResult.forError(err))
+	}
+	if(String.isEmpty(msg.getMessageID())) {
+		msg.generateMessageID(sn)
+	}
+	var bod = msg.getMessageBody()
+	Log.debug(ctx, "Sending message body: `" .. bod .. "'")
+	if(ops.print(bod) == false) {
+		return(SMTPClientTransactionResult.forNetworkError())
+	}
+	if(ops.print("\r\n.\r\n") == false) {
+		return(SMTPClientTransactionResult.forNetworkError())
+	}
+	if((err = communicate(ins, "250")) != null) {
+		return(SMTPClientTransactionResult.forError(err))
+	}
+	if(writeLine(ops, "QUIT") == false) {
+		return(SMTPClientTransactionResult.forNetworkError())
+	}
+	return(SMTPClientTransactionResult.forSuccess())
+}

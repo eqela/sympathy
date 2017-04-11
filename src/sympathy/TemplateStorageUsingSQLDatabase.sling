@@ -22,10 +22,57 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is TemplateStorage imports cape imports capex.data:
+
+func forDatabase(db as SQLDatabase, table as string = null, idColumn as string = null, contentColumn as string = null) static as this
+{
+	var v = new this()
+	v.setDatabase(db)
+	if(table != null) {
+		v.setTable(table)
+	}
+	if(idColumn != null) {
+		v.setIdColumn(idColumn)
+	}
+	if(contentColumn != null) {
+		v.setContentColumn(contentColumn)
+	}
+	return(v)
+}
+
+prop database as SQLDatabase
+prop table as string
+prop idColumn as string
+prop contentColumn as string
+
+ctor
+{
+	table = "templates"
+	idColumn = "id"
+	contentColumn = "content"
+}
+
+func getTemplate(id as string, callback as function<void,string>)
+{
+	if(callback == null) {
+		return
+	}
+	if(database == null || String.isEmpty(table) || String.isEmpty(id)) {
+		callback(null)
+		return
+	}
+	var stmt = database.prepare("SELECT content FROM " .. table .. " WHERE " .. idColumn .. " = ?;")
+	if(stmt == null) {
+		callback(null)
+		return
+	}
+	stmt.addParamString(id)
+	var cb final = callback
+	database.querySingleRow(stmt, func(data as DynamicMap) {
+		if(data == null) {
+			cb(null)
+			return
+		}
+		cb(data.getString("content"))
+	})
+}

@@ -73,9 +73,9 @@ http://eqdn.tech/sympathy/
 Compiling the server-side components
 ------------------------------------
 
-To compile Sympathy servers, you will need to get the latest Jkop libraries (from
-http://www.jkop.org). You will also need the SAM Sling compiler in order to compile
-the Sling code: http://eqdn.tech/sling/
+To compile the Sympathy source code, you will need to get the latest Jkop libraries
+(from http://www.jkop.org). You will also need the SAM Sling compiler in order to
+compile the Sling code: http://eqdn.tech/sling/
 
 To compile all of the above-mentioned components, use the build script:
 

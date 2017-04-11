@@ -22,10 +22,32 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class is Runnable imports cape imports capex.util:
+
+prop ctx as LoggingContext
+prop server as URL
+prop msg as SMTPMessage
+prop serverAddress as string
+prop listener as SMTPSenderListener
+prop sender as SMTPSender
+
+func run
+{
+	var r as SMTPClientResult
+	if(msg == null) {
+		r = SMTPClientResult.forError("No message was given to SMTPClientTask", msg)
+	}
+	else {
+		r = SMTPClient.sendMessage(msg, server, serverAddress, ctx)
+	}
+	if(r == null) {
+		r = SMTPClientResult.forError("Unknown error", msg)
+	}
+	if(sender != null) {
+		sender.onSendEnd()
+	}
+	if(listener == null) {
+		return
+	}
+	listener.onSMTPSendComplete(r.getMessage(), r)
+}

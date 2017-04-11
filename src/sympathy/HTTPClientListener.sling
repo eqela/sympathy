@@ -22,10 +22,43 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A server-side web application and network service development platform"
-copyright = "Copyright (c) 2017 Job and Esther Technologies, Inc."
-license = "All rights reserved"
-version = "4.0.x"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+class:
+
+prop completed = false
+
+func onError(message as string) virtual
+{
+}
+
+func onStatus(message as string) virtual
+{
+}
+
+func onStartRequest(request as HTTPClientRequest) virtual as bool
+{
+	return(true)
+}
+
+func onEndRequest virtual as bool
+{
+	return(true)
+}
+
+func onResponseReceived(response as HTTPClientResponse) virtual as bool
+{
+	return(true)
+}
+
+func onDataReceived(buffer as buffer) virtual as bool
+{
+	return(true)
+}
+
+func onAborted virtual
+{
+}
+
+func onResponseCompleted virtual
+{
+	completed = true
+}
