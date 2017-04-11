@@ -72,6 +72,6 @@ func getTravelDetails(apiKey as string, origin as string, destination as string,
 	op.setAcceptInvalidCertificate(true)
 	var req as HTTPClientRequest
 	req = HTTPClientRequest.forGET("https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&origins=" ..
-		capex.util.URLEncoder.encode(origin) .. "&destinations=" .. capex.util.URLEncoder.encode(destination) .. "&key=" .. apiKey)
+		cape.URLEncoder.encode(origin) .. "&destinations=" .. cape.URLEncoder.encode(destination) .. "&key=" .. apiKey)
 	op.executeRequest(req, new GoogleMapsHTTPClientListener().setListener(listener))
 }
