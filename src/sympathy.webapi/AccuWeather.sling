@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex.util:
+class imports cape imports capex.web:
 
 prop apiKey as string
 prop locationHost = "http://dataservice.accuweather.com/locations/"

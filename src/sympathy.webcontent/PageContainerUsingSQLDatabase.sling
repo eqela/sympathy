@@ -138,7 +138,7 @@ func createPage(pageId as string, type as string, callback as function<void,bool
 		}
 		return
 	}
-	var stmt = database.prepareInsertStatement(getTableName("content"), DynamicMap.forStringMap({
+	var stmt = database.prepareInsertStatement(getTableName("content"), DynamicMap.forObjectMap({
 		"id" : pageId,
 		"type" : type,
 		"data" : ""
@@ -160,10 +160,10 @@ func changePageType(pageId as string, type as string, callback as function<void,
 		}
 		return
 	}
-	var criteria = DynamicMap.forStringMap({
+	var criteria = DynamicMap.forObjectMap({
 		"id" : pageId
 	})
-	var data = DynamicMap.forStringMap({
+	var data = DynamicMap.forObjectMap({
 		"type" : type
 	})
 	var stmt = database.prepareUpdateStatement(getTableName("content"), criteria, data)
@@ -211,10 +211,10 @@ func updatePageContent(pageId as string, content as DynamicMap, callback as func
 		}
 		return
 	}
-	var criteria = DynamicMap.forStringMap({
+	var criteria = DynamicMap.forObjectMap({
 		"id" : pageId
 	})
-	var data = DynamicMap.forStringMap({
+	var data = DynamicMap.forObjectMap({
 		"data" : JSONEncoder.encode(content)
 	})
 	var stmt = database.prepareUpdateStatement(getTableName("content"), criteria, data)
