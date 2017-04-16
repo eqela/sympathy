@@ -119,14 +119,14 @@ func initialize(ctx as LoggingContext, server as HTTPServer) virtual as bool
 
 func printUsage(stdout as PrintWriter) virtual
 {
-	var flags = new array<string>[] {
-		new string[] { "v|version|vv", "Display version information" },
-		new string[] { "h|help", "Usage information" }
-	}
-	var options = new array<string>[] {
-		new string[] { "config", "Specify a configuration file to use" },
-		new string[] { "O<option>", "Manually specify configuration parameters (key/value pairs)" }
-	}
+	var flags = [
+		[ "v|version|vv", "Display version information" ],
+		[ "h|help", "Usage information" ]
+	]
+	var options = [
+		[ "config", "Specify a configuration file to use" ],
+		[ "O<option>", "Manually specify configuration parameters (key/value pairs)" ]
+	]
 	ConsoleApplication.printUsage(stdout, null, null, flags, options)
 }
 
@@ -231,7 +231,7 @@ func execute(args as array<string>) as bool
 		server.addRequestHandlerListener(new HTTPServerRequestLogger().setLogContext(ctx).setLogdir(loggingDirectory))
 	var ioManager = IOManager.createDefault()
 	if ioManager == null {
-		Log.error(ctx, "Failed to create IO manager")
+		Log.error(ctx, "FAILED to create IO manager")
 		return false
 	}
 	if server.initialize(ioManager, ctx) == false {

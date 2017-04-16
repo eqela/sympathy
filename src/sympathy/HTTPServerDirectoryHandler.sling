@@ -52,13 +52,12 @@ func addTemplateIncludeDir(dir as File)
 	templateIncludeDirs += dir
 }
 
-func setIndexFiles(files as array<string>) as this
+func setIndexFiles(files as array) as this
 {
 	indexFiles = new vector<string>
-	foreach(file in files) {
+	foreach file as string in files:
 		indexFiles += file
-	}
-	return(this)
+	return this
 }
 
 func setServerName(name as string) as this
