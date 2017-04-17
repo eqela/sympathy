@@ -32,7 +32,9 @@ ctor(context as GuiApplicationContext)
 
 prop chatWidget as ChatWidget
 prop channelId as string
+var fileName as string
 var recipients private as DynamicVector
+var fileAttachment as VerticalBoxWidget
 var messageList private as VerticalBoxWidget
 var messageField private as TextAreaWidget
 var messages private as DynamicVector
@@ -86,7 +88,8 @@ func initializeWidget override
 	var subHeader = createSubHeaderWidget()
 	if subHeader != null:
 		vbox.addWidget(subHeader)
-	vbox.addWidget(VerticalScrollerWidget.forWidget(context, messageList = VerticalBoxWidget.forContext(context)), 1)
+	vbox.addWidget(VerticalScrollerWidget.forWidget(context, messageList = VerticalBoxWidget.forContext(context)), 1.0)
+	vbox.addWidget(fileAttachment = VerticalBoxWidget.forContext(context))
 	var footer = createFooterWidget()
 	if footer != null:
 		vbox.addWidget(footer)
@@ -143,9 +146,11 @@ func onSendWidgetClicked private
 	messageField.setWidgetText(null)
 	var m = new ChatMessage()
 	m.setRecipients(recipients)
-	m.setChannelId(channelId)
+	if not String.isEmpty(channelId):
+		m.setChannelId(getChannelId())
 	m.setMessage(text)
-	chatWidget.sendMessage(m)
+	if not String.isEmpty(text):
+		chatWidget.sendMessage(m)
 }
 
 func createHeaderBackgroundWidget virtual as Widget:
@@ -179,19 +184,44 @@ func createFooterWidget private as Widget
 		return null
 	if messageField != null:
 		hbox.addWidget(messageField, 1)
+	if attachment != null {
+		Widget.setWidgetClickHandler(attachment, func {
+			onAttachmentWidgetClicked()
+		})
+		hbox.addWidget(attachment)
+	}
 	if send != null {
 		Widget.setWidgetClickHandler(send, func {
 			onSendWidgetClicked()
 		})
 		hbox.addWidget(send)
 	}
-	if attachment != null {
-		hbox.addWidget(attachment)
-	}
 	layer.addWidget(line)
 	layer.addWidget(hbox)
 	return layer
 }
+
+func onAttachmentWidgetClicked
+{
+	var thisWidget final = this
+	var ftype = "*/*"
+	var fs = new FileSelectorWidget(context)
+	fs.openFileDialog(thisWidget, ftype, func(buff as buffer, ff as string, mimeType as string, err as Error) {
+		fileName = ff
+		var pa = previewAttachment()
+		if pa != null {
+			Widget.removeChildrenOf(fileAttachment)
+			if buff != null:
+				fileAttachment.addWidget(pa)
+		}
+	})
+}
+
+func previewAttachment virtual as Widget:
+	return null
+
+func attachmentFilename as string:
+	return fileName
 
 func createSubHeaderWidget virtual as Widget:
 	return null

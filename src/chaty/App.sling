@@ -32,11 +32,11 @@ func execute(args as array<string>) as bool
 		if arg.isOption("port") || arg.isOption("listenPort"):
 			port = arg.getIntegerValue()
 	}
-	var ctx as LoggingContext = new ConsoleApplicationContext()
+	var ctx final as LoggingContext = new ConsoleApplicationContext()
 	(ctx as! ConsoleApplicationContext).setEnableDebugMessages(true)
 	var server = new WSServer()
 	server.setPort(port)
-	var engine = new ChatEngine()
+	var engine final = new ChatEngine()
 	engine.setCtx(ctx)
 	engine.setAuthenticateConnectionCallback(func(data as buffer) as string {
 		return String.forUTF8Buffer(data)
