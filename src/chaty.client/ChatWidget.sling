@@ -44,14 +44,14 @@ func initializeWidget override
 {
 	base.initializeWidget()
 	var bg = createBackgroundWidgetObject()
-	if bg != null:
+	if bg:
 		addWidget(bg)
 	navi = new NavigationWidget(context)
 	navi.setEnableSidebar(false)
 	navi.setEnableActionBar(false)
 	addWidget(navi)
 	var nmw = createNewMessageWidgetObject()
-	if nmw != null {
+	if nmw {
 		var vbox = VerticalBoxWidget.forContext(context)
 		vbox.addWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)), 1.0)
 		Widget.setWidgetClickHandler(nmw, func {
@@ -61,36 +61,20 @@ func initializeWidget override
 		navi.pushWidget(vbox)
 	}
 	else {
-		currentConversationWidget = createChatConversationWidgetObject()
-		currentConversationWidget.setChatWidget(this)
-		IFDEF("target_html") {
-			assert currentConversationWidget {
-				Log.error(context, "ChatWidget: No ChatConversationWidget instance returned!")
-			}
-			var hbox = HorizontalBoxWidget.forContext(context)
-			var vbox = VerticalBoxWidget.forContext(context)
-			vbox.addWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)), 1.0)
-			hbox.addWidget(vbox, 1.0)
-			hbox.addWidget(currentConversationWidget, 1.0)
-			navi.pushWidget(hbox)
-		}
-		ELSE {
-			assert currentConversationWidget {
-				Log.error(context, "ChatWidget: No ChatConversationWidget instance returned!")
-			}
-			navi.pushWidget(currentConversationWidget)
-		}
+		var vbox = VerticalBoxWidget.forContext(context)
+		vbox.addWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)))
+		navi.pushWidget(vbox)
 	}
 	active = true
 }
 
 func onNewMessageWidgetClicked private
 {
-	if currentConversationWidget != null {
+	if currentConversationWidget {
 		Log.warning(context, "ChatWidget: Current ChatConversationWidget object not null!")
 		return
 	}
-
+	currentConversationWidget = createChatConversationWidgetObject()
 	assert currentConversationWidget {
 		Log.error(context, "ChatWidget: No ChatConversationWidget instance returned!")
 	}
@@ -104,7 +88,7 @@ func onMessageReceived(message as ChatMessage)
 	var channelId = assert message.getChannelId()
 	var recipients = assert message.getRecipients()
 	var ccw = conversationMap.get(channelId) as ChatConversationItemWidget
-	if ccw == null {
+	if not ccw {
 		ccw = createChatConversationItemWidgetObject()
 		assert ccw {
 			Log.error(context, "ChatWidget: Failed to create ChatConversationWidget object!")
@@ -118,7 +102,7 @@ func onMessageReceived(message as ChatMessage)
 		conversationList.addWidget(ccw)
 		conversationMap.set(channelId, ccw)
 	}
-	if currentConversationWidget != null {
+	if currentConversationWidget {
 		currentConversationWidget.onMessageReceived(message)
 		var ccwf final = ccw
 		Widget.setWidgetClickHandler(ccw, func {

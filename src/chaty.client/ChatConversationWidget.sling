@@ -43,7 +43,7 @@ func initialize(item as ChatConversationItemWidget) as bool
 {
 	assert item
 	messages = item.getMessages()
-	if messages == null:
+	if not messages:
 		messages = new DynamicVector()
 	channelId = item.getChannelId()
 	if String.isEmpty(channelId):
@@ -79,19 +79,19 @@ func initializeWidget override
 {
 	base.initializeWidget()
 	var bg = createBackgroundWidget()
-	if bg != null:
+	if bg:
 		addWidget(bg)
 	var vbox = VerticalBoxWidget.forContext(context)
 	var header = createHeaderWidget()
-	if header != null:
+	if header:
 		vbox.addWidget(header)
 	var subHeader = createSubHeaderWidget()
-	if subHeader != null:
+	if subHeader:
 		vbox.addWidget(subHeader)
 	vbox.addWidget(VerticalScrollerWidget.forWidget(context, messageList = VerticalBoxWidget.forContext(context)), 1.0)
 	vbox.addWidget(fileAttachment = VerticalBoxWidget.forContext(context))
 	var footer = createFooterWidget()
-	if footer != null:
+	if footer:
 		vbox.addWidget(footer)
 	addWidget(vbox)
 	foreach(message as ChatMessage in messages.toVector()) {
@@ -104,18 +104,18 @@ func createHeaderWidget private as Widget
 	var hbox = HorizontalBoxWidget.forContext(context)
 	var back = createBackButtonWidget()
 	var title = createTitleWidget()
-	if back == null && title == null:
+	if not back && not title:
 		return null
-	if back != null {
+	if back {
 		Widget.setWidgetClickHandler(back, func {
 			onBackWidgetClicked()
 		})
 		hbox.addWidget(back)
 	}
-	if title != null:
+	if title:
 		hbox.addWidget(title, 1)
 	var hbw = createHeaderBackgroundWidget()
-	if hbw != null {
+	if hbw {
 		var layer = LayerWidget.forContext(context)
 		layer.addWidget(hbw)
 		layer.addWidget(hbox)
@@ -173,24 +173,24 @@ func createFooterWidget private as Widget
 	// FIXME: Too many widgets
 	var layer = LayerWidget.forContext(context)
 	var fbw = createFooterBackgroundWidget()
-	if fbw != null:
+	if fbw:
 		layer.addWidget(fbw)
 	var hbox = HorizontalBoxWidget.forContext(context, context.getWidthValue("1000um"), context.getWidthValue("2000um"))
 	var line = createSeparator()
 	var send = createSendButtonWidget()
 	messageField = createMessageFieldWidget()
 	var attachment = createAttachmentButton()
-	if send == null && messageField == null:
+	if not send && not messageField:
 		return null
-	if messageField != null:
+	if messageField:
 		hbox.addWidget(messageField, 1)
-	if attachment != null {
+	if attachment {
 		Widget.setWidgetClickHandler(attachment, func {
 			onAttachmentWidgetClicked()
 		})
 		hbox.addWidget(attachment)
 	}
-	if send != null {
+	if send {
 		Widget.setWidgetClickHandler(send, func {
 			onSendWidgetClicked()
 		})
@@ -209,16 +209,13 @@ func onAttachmentWidgetClicked
 	fs.openFileDialog(thisWidget, ftype, func(buff as buffer, ff as string, mimeType as string, err as Error) {
 		fileName = ff
 		var pa = previewAttachment()
-		if pa != null {
+		if pa {
 			Widget.removeChildrenOf(fileAttachment)
-			if buff != null:
+			if buff:
 				fileAttachment.addWidget(pa)
 		}
 	})
 }
-
-func previewAttachment virtual as Widget:
-	return null
 
 func attachmentFilename as string:
 	return fileName
@@ -230,4 +227,5 @@ func createSeparator abstract as Widget
 func createMessageFieldWidget abstract as TextAreaWidget
 func createSendButtonWidget abstract as Widget
 func createAttachmentButton abstract as Widget
+func previewAttachment abstract as Widget
 func createMessageWidgetObject abstract as ChatMessageWidget
