@@ -44,14 +44,14 @@ func initializeWidget override
 {
 	base.initializeWidget()
 	var bg = createBackgroundWidgetObject()
-	if bg != null:
+	if bg:
 		addWidget(bg)
 	navi = new NavigationWidget(context)
 	navi.setEnableSidebar(false)
 	navi.setEnableActionBar(false)
 	addWidget(navi)
 	var nmw = createNewMessageWidgetObject()
-	if nmw != null {
+	if nmw {
 		var vbox = VerticalBoxWidget.forContext(context)
 		vbox.addWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)), 1.0)
 		Widget.setWidgetClickHandler(nmw, func {
@@ -61,14 +61,16 @@ func initializeWidget override
 		navi.pushWidget(vbox)
 	}
 	else {
-		navi.pushWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)))
+		var vbox = VerticalBoxWidget.forContext(context)
+		vbox.addWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)))
+		navi.pushWidget(vbox)
 	}
 	active = true
 }
 
 func onNewMessageWidgetClicked private
 {
-	if currentConversationWidget != null {
+	if currentConversationWidget {
 		Log.warning(context, "ChatWidget: Current ChatConversationWidget object not null!")
 		return
 	}
@@ -83,14 +85,10 @@ func onNewMessageWidgetClicked private
 func onMessageReceived(message as ChatMessage)
 {
 	assert message
-	if currentConversationWidget != null {
-		currentConversationWidget.onMessageReceived(message)
-		return
-	}
 	var channelId = assert message.getChannelId()
 	var recipients = assert message.getRecipients()
 	var ccw = conversationMap.get(channelId) as ChatConversationItemWidget
-	if ccw == null {
+	if not ccw {
 		ccw = createChatConversationItemWidgetObject()
 		assert ccw {
 			Log.error(context, "ChatWidget: Failed to create ChatConversationWidget object!")
@@ -103,6 +101,13 @@ func onMessageReceived(message as ChatMessage)
 		})
 		conversationList.addWidget(ccw)
 		conversationMap.set(channelId, ccw)
+	}
+	if currentConversationWidget {
+		currentConversationWidget.onMessageReceived(message)
+		var ccwf final = ccw
+		Widget.setWidgetClickHandler(ccw, func {
+			onChatConversationWidgetClicked(ccwf)
+		})
 	}
 	ccw.onMessageReceived(message)
 }
