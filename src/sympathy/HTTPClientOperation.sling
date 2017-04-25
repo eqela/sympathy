@@ -158,7 +158,7 @@ class MyResponseParser imports cape
 				return(null)
 			}
 			v = MALLOC(cl)
-			Buffer.copyFrom(v, receivedData, i, 0, cl)
+			Buffer.copyFrom(v, receivedData, 0, i, cl)
 			i += cl
 		}
 		while(i < Buffer.getSize(receivedData) && (Buffer.getByte(receivedData, i) == '\r' || Buffer.getByte(receivedData, i) == '\n')) {
