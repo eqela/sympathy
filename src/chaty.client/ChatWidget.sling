@@ -36,6 +36,9 @@ var conversationList private as VerticalBoxWidget
 var conversationMap private as DynamicMap
 var navi private as NavigationWidget
 var currentConversationWidget private as ChatConversationWidget
+var wideScreenContainer as Widget
+var wideScreen = false
+var narrowScreen = false
 
 func isActive as bool:
 	return active
@@ -50,25 +53,36 @@ func initializeWidget override
 	navi.setEnableSidebar(false)
 	navi.setEnableActionBar(false)
 	addWidget(navi)
-	var nmw = createNewMessageWidgetObject()
-	if nmw {
-		var vbox = VerticalBoxWidget.forContext(context)
-		vbox.addWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)), 1.0)
-		Widget.setWidgetClickHandler(nmw, func {
-			onNewMessageWidgetClicked()
-		})
-		vbox.addWidget(nmw)
-		navi.pushWidget(vbox)
-	}
-	else {
-		var vbox = VerticalBoxWidget.forContext(context)
-		vbox.addWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)))
-		navi.pushWidget(vbox)
-	}
 	active = true
 }
 
-func onNewMessageWidgetClicked private
+func computeWidgetLayout(widthConstraint as int #notLiteral) override
+{
+	if(widthConstraint > context.getWidthValue("200mm")) {
+		wideScreenContainer = createChatContainerforWideScreen()
+		assert wideScreenContainer
+		if navi:
+			Widget.removeChildrenOf(navi)
+		if not wideScreen {
+			wideScreen = true
+			narrowScreen = false
+			addWidget(wideScreenContainer)
+		}
+	}
+	else {
+		if wideScreenContainer && wideScreen == true {
+			Widget.removeChildrenOf(this)
+			wideScreen = false
+		}
+		if not narrowScreen {
+			narrowScreen = true
+			createChatContainerforNarrowScreen()
+		}
+	}
+	base.computeWidgetLayout(widthConstraint)
+}
+
+func onNewMessageWidgetClicked protected
 {
 	if currentConversationWidget {
 		Log.warning(context, "ChatWidget: Current ChatConversationWidget object not null!")
@@ -142,5 +156,27 @@ func createBackgroundWidgetObject virtual as Widget:
 func createNewMessageWidgetObject virtual as Widget:
 	return null
 
+func createChatContainerforNarrowScreen
+{
+	navi = new NavigationWidget(context)
+	navi.setEnableSidebar(false)
+	navi.setEnableActionBar(false)
+	addWidget(navi)
+	var vbox = VerticalBoxWidget.forContext(context)
+	var nmw = createNewMessageWidgetObject()
+	if nmw {
+		vbox.addWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)), 1.0)
+		Widget.setWidgetClickHandler(nmw, func {
+			onNewMessageWidgetClicked()
+		})
+		vbox.addWidget(nmw)
+	}
+	else {
+		vbox.addWidget(VerticalScrollerWidget.forWidget(context, conversationList = VerticalBoxWidget.forContext(context)))
+	}
+	navi.pushWidget(vbox)
+}
+
+func createChatContainerforWideScreen abstract as Widget
 func createChatConversationItemWidgetObject abstract as ChatConversationItemWidget
 func createChatConversationWidgetObject abstract as ChatConversationWidget
