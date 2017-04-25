@@ -22,23 +22,54 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex.web:
+class:
+
+import cape
+import sympathy
+
+class MyHTTPClientListener is HTTPClientListener
+{
+	prop listener as function<void, buffer, Error>
+	var body as buffer
+
+	func onError(message as string) override
+	{
+		if listener:
+			listener(null, Error.forMessage(message))
+	}
+
+	func onAborted override
+	{
+		if listener:
+			listener(null, Error.forCode("aborted"))
+	}
+
+	func onDataReceived(buffer as buffer) override as bool
+	{
+		body = Buffer.append(body, buffer)
+		return true
+	}
+
+	func onResponseCompleted override
+	{
+		base.onResponseCompleted()
+		if listener {
+			if not body {
+				listener(null, Error.forMessage("No data received from AccuWeather"))
+				return
+			}
+			listener(body, null)
+		}
+	}
+}
 
 prop apiKey as string
 prop locationHost = "http://dataservice.accuweather.com/locations/"
 prop currentConditionHost = "http://dataservice.accuweather.com/currentconditions/"
 prop forecastHost = "http://dataservice.accuweather.com/forecasts/"
-var client as WebClient
 prop version = "v1"
 prop details = true
 prop metric = true
-var locationData as DynamicMap
-var currentConditionData as DynamicVector
-var currentWeatherData as DynamicMap
-var forecastData as DynamicMap
-
-ctor:
-	client = NativeWebClient.instance()
 
 func forApiKey(key as string) static as this
 {
@@ -47,33 +78,61 @@ func forApiKey(key as string) static as this
 	return new this().setApiKey(key)
 }
 
-func queryLocation(latitude as double, longitude as double, callback as function<void, DynamicMap>)
+func queryLocation(latitude as double, longitude as double, listener as function<void, DynamicMap, Error>)
 {
-	assert client
-	var cb final #used = callback
-	client.query("GET", locationHost .. version .. "/cities/geoposition/search.json?q=" .. String.forDouble(latitude) .. "," .. String.forDouble(longitude) .. "&apikey=" .. apiKey, null, null, func(statusCode as string, headers as KeyValueList<string, string>, location as buffer) {
-		locationData = JSONParser.parse(location)
-		cb(locationData)
-	})
+	var op = new HTTPClientOperation()
+	var req = HTTPClientRequest.forGET(locationHost .. version .. "/cities/geoposition/search.json?q=" .. String.forDouble(latitude) .. "," .. String.forDouble(longitude) .. "&apikey=" .. apiKey)
+	op.executeRequest(req, new MyHTTPClientListener().setListener(func(buff as buffer, err as Error) {
+		if err {
+			listener(null, err)
+			return
+		}
+		var data = JSONParser.parse(buff) as DynamicMap
+		if not data {
+			listener(null, Error.forMessage("Invalid JSON format from AccuWeather"))
+			return
+		}
+		listener(data, null)
+	}))
 }
 
-func queryCurrentCondition(key as string, callback as function<void, DynamicMap>)
+func queryCurrentCondition(key as string, listener as function<void, DynamicMap, Error>)
 {
-	assert client
-	var cb final #used = callback
-	client.query("GET", currentConditionHost .. version .."/" .. key .. "?apikey=" .. apiKey .. "&details=" .. String.forBoolean(details), null, null, func(statusCode as string, headers as KeyValueList<string, string>, current as buffer) {
-		currentConditionData = JSONParser.parse(current)
-		currentWeatherData =  currentConditionData.getMap(0)
-		cb(currentWeatherData)
-	})
+	var op = new HTTPClientOperation()
+	var req = HTTPClientRequest.forGET(currentConditionHost .. version .."/" .. key .. "?apikey=" .. apiKey .. "&details=" .. String.forBoolean(details))
+	op.executeRequest(req, new MyHTTPClientListener().setListener(func(buff as buffer, err as Error) {
+		if err {
+			listener(null, err)
+			return
+		}
+		var data = JSONParser.parse(buff) as DynamicVector
+		if not data {
+			listener(null, Error.forMessage("Invalid data from AccuWeather"))
+			return
+		}
+		var currentCondition = data.get(0) as DynamicMap
+		if not currentCondition {
+			listener(null, Error.forMessage("Invalid JSON format from AccuWeather"))
+			return
+		}
+		listener(currentCondition, null)
+	}))
 }
 
-func queryForecast(key as string, forecastDays as int, callback as function<void, DynamicMap>)
+func queryForecast(key as string, forecastDays as int, listener as function<void, DynamicMap, Error>)
 {
-	assert client
-	var cb final #used = callback
-	client.query("GET", forecastHost .. version .."/daily/".. String.forInteger(forecastDays) .."day/" .. key .. "?apikey=" .. apiKey .. "&metric=" .. String.forBoolean(metric), null, null, func(statusCode as string, headers as KeyValueList<string, string>, forecast as buffer) {
-		forecastData = JSONParser.parse(forecast)
-		cb(forecastData)
-	})
+	var op = new HTTPClientOperation()
+	var req = HTTPClientRequest.forGET(forecastHost .. version .."/daily/".. String.forInteger(forecastDays) .."day/" .. key .. "?apikey=" .. apiKey .. "&metric=" .. String.forBoolean(metric))
+	op.executeRequest(req, new MyHTTPClientListener().setListener(func(buff as buffer, err as Error) {
+		if err {
+			listener(null, err)
+			return
+		}
+		var data = JSONParser.parse(buff) as DynamicMap
+		if not data {
+			listener(null, Error.forMessage("Invalid JSON format from AccuWeather"))
+			return
+		}
+		listener(data, null)
+	}))
 }
