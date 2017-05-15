@@ -196,8 +196,10 @@ func createFooterWidget private as Widget
 		})
 		hbox.addWidget(send)
 	}
-	layer.addWidget(line)
-	layer.addWidget(hbox)
+	var vbox = new VerticalBoxWidget(context)
+	vbox.addWidget(line)
+	vbox.addWidget(hbox)
+	layer.addWidget(vbox)
 	return layer
 }
 
