@@ -1,0 +1,182 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is WebServer:
+
+import cape
+import capex.data
+import capex.console
+import capex.mssql
+import capex.mysql
+import sympathy
+import sympathy.app
+
+func main(args as array<string>) static as int #main
+{
+	if new this().execute(args) == false:
+		return 1
+	return 0
+}
+
+var dbs as map<string,string>
+
+func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
+{
+	if key && String.startsWith(key, "db:") {
+		var dbname = String.getSubString(key, 3)
+		if String.isNotEmpty(dbname) {
+			if not dbs:
+				dbs = new map<string,string>
+			dbs[dbname] = value
+		}
+		return true
+	}
+	return base.configure(key, value, relativeTo, error)
+}
+
+func printHeader(stdout as PrintWriter) override:
+	ConsoleApplication.PRINT_HEADER(stdout, null)
+
+func printVersion(stdout as PrintWriter, longFormat as bool) override:
+	ConsoleApplication.PRINT_VERSION(stdout, longFormat)
+
+func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
+{
+	assert base.initialize(ctx, server):
+		Log.error(ctx, "Failed to initialize HTTP server")
+	assert dbs:
+		Log.error(ctx, "No databases configured. Configure `db:*' options first.")
+	var keys as vector<string> #force = Map.getKeys(dbs)
+	var map = new HTTPServerRequestHandlerMap()
+	foreach key in keys {
+		var value = dbs[key]
+		var accessToken as string
+		var connectionString as string
+		if String.indexOf(value, '@') >= 0 {
+			var comps = String.split(value, '@', 2)
+			accessToken = comps[0]
+			connectionString = comps[1]
+		}
+		else {
+			accessToken = ""
+			connectionString = value
+		}
+		var isMSSQL = String.startsWith(connectionString, "mssql:")
+		var isMySQL = String.startsWith(connectionString, "mysql:")
+		assert isMSSQL || isMySQL:
+			Log.error(ctx, "Invalid connection string: `" .. connectionString .. "'. Should start with `mssql:' or `mysql:'")
+		var cs = String.getSubString(connectionString, 6)
+		assert String.isNotEmpty(cs):
+			Log.error(ctx, "Connection string is empty: `" .. connectionString .. "'.")
+		var db as SQLDatabase
+		if isMSSQL {
+			assert db = MSSQLDatabase.forConnectionString(cs, ctx):
+				Log.error(ctx, "Failed to initialize MSSQL database: `" .. cs .. "'")
+		}
+		else if isMySQL {
+			assert db = MySQLDatabase.forConnectionString(cs, ctx):
+				Log.error(ctx, "Failed to initialize MySQL database: `" .. cs .. "'")
+		}
+		var stack = new HTTPServerRequestHandlerStack()
+		stack.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+			var rqtoken = req.getHeader("x-access-token")
+			if not rqtoken:
+				rqtoken = req.getQueryParameter("accessToken")
+			assert String.equals(accessToken, rqtoken):
+				req.sendJSONObject(JSONResponse.forNotAllowed())
+			next()
+		})
+		stack.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+			if req.isGET() {
+				var sqlStatement = req.getQueryParameter("sqlStatement")
+				assert String.isNotEmpty(sqlStatement):
+					req.sendJSONObject(JSONResponse.forInvalidRequest())
+				var v = db.query(db.prepare(sqlStatement))
+				assert v:
+					req.sendJSONObject(JSONResponse.forInternalError())
+				req.sendJSONObject(JSONResponse.forOk(v.toVector()))
+			}
+			else if req.isPOST() {
+				var body = assert req.getBodyJSONMap():
+					req.sendJSONObject(JSONResponse.forInvalidRequest())
+				var sqlStatement = body.getString("sqlStatement")
+				assert String.isNotEmpty(sqlStatement):
+					req.sendJSONObject(JSONResponse.forInvalidRequest())
+				var params = body.getDynamicVector("sqlParameters")
+				var stmt = assert db.prepare(sqlStatement):
+					req.sendJSONObject(JSONResponse.forInternalError())
+				if params && params.getSize() > 0 {
+					foreach p as DynamicMap in params.toVector() {
+						var dt = p.getString("dataType")
+						if "string" == dt {
+							stmt.addParamString(p.getString("value"))
+						}
+						else if "integer" == dt {
+							stmt.addParamInteger(p.getInteger("value"))
+						}
+						else if "double" == dt {
+							stmt.addParamDouble(p.getDouble("value"))
+						}
+						else if "blob" == dt {
+							stmt.addParamBlob(Base64Decoder.decode(p.getString("value")))
+						}
+						else {
+							req.sendJSONObject(JSONResponse.forInvalidData("dataType"))
+							return
+						}
+					}
+				}
+				var action = body.getString("action")
+				if String.isEmpty(action) {
+					var bb = String.toLowerCase(String.getSubString(sqlStatement, 0, 6))
+					if bb == "select" {
+						action = "query"
+					}
+					else {
+						action = "nonQuery"
+					}
+				}
+				if "query" == action {
+					var v = db.query(stmt)
+					assert v:
+						req.sendJSONObject(JSONResponse.forInternalError())
+					req.sendJSONObject(JSONResponse.forOk(v.toVector()))
+				}
+				else {
+					db.execute(stmt, func(success as bool) {
+						assert success:
+							req.sendJSONObject(JSONResponse.forInternalError())
+						req.sendJSONObject(JSONResponse.forOk())
+					})
+				}
+			}
+			else {
+				req.sendJSONObject(JSONResponse.forInvalidRequest())
+			}
+		})
+		map.child(key, stack)
+	}
+	server.pushRequestHandler(map)
+	return true
+}
