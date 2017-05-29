@@ -26,6 +26,12 @@ class is HTTPClient imports cape imports capex.net:
 
 class MyResponseParser imports cape
 {
+	class Chunk
+	{
+		var data public as buffer
+		var completed public = true
+	}
+
 	var receivedData as buffer = null
 	var headers public as HTTPClientResponse
 	var isChunked public = false
@@ -121,7 +127,7 @@ class MyResponseParser imports cape
 		return(v)
 	}
 
-	func getChunk private as buffer
+	func getChunk private as Chunk
 	{
 		if(receivedData == null) {
 			return(null)
@@ -151,14 +157,14 @@ class MyResponseParser imports cape
 		if(String.isEmpty(t) == false) {
 			cl = String.toIntegerFromHex(t)
 		}
-		var v as buffer
+		var chunk = new Chunk()
 		if(cl > 0) {
 			if(Buffer.getSize(receivedData) - i < cl) {
-				// FIXME - desired chunk is larger than what we have in buffer. must still wait for the rest to come?
-				return(null)
+				chunk.completed = false
+				return chunk
 			}
-			v = MALLOC(cl)
-			Buffer.copyFrom(v, receivedData, i, 0, cl)
+			chunk.data = MALLOC(cl)
+			Buffer.copyFrom(chunk.data, receivedData, i, 0, cl)
 			i += cl
 		}
 		while(i < Buffer.getSize(receivedData) && (Buffer.getByte(receivedData, i) == '\r' || Buffer.getByte(receivedData, i) == '\n')) {
@@ -173,7 +179,7 @@ class MyResponseParser imports cape
 		else {
 			receivedData = null
 		}
-		return(v)
+		return chunk
 	}
 
 	func onDataReceived(buf as buffer, size as long)
@@ -193,9 +199,11 @@ class MyResponseParser imports cape
 			loop {
 				var r = getChunk()
 				if(r != null) {
-					var sz = Buffer.getSize(r)
+					if not r.completed:
+						break
+					var sz = Buffer.getSize(r.data)
 					dataCounter += sz
-					onBodyDataReceived(r, sz)
+					onBodyDataReceived(r.data, sz)
 				}
 				else {
 					reset()

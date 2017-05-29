@@ -46,7 +46,9 @@ prop listenPort = 8080
 prop loggingDirectory as File
 prop configFile as File
 prop enableDebugMessages = false
+prop alsoPrintOnConsole = false
 prop maintenanceTimerDelay = 60
+prop timeoutDelay = 30
 prop enableRateLimit as string
 
 func getConfigFileDirectory as File
@@ -66,8 +68,16 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 		enableRateLimit = value
 		return true
 	}
+	if key == "timeoutDelay" {
+		timeoutDelay = Integer.asInteger(value)
+		if timeoutDelay < 30:
+			timeoutDelay = 30
+		return true
+	}
 	if key == "maintenanceTimerDelay" {
 		maintenanceTimerDelay = Integer.asInteger(value)
+		if maintenanceTimerDelay < 0:
+			maintenanceTimerDelay = 0
 		return true
 	}
 	if key == "listenPort" {
@@ -84,6 +94,10 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 	}
 	if key == "enableDebugMessages" {
 		enableDebugMessages = Boolean.asBoolean(value)
+		return true
+	}
+	if key == "alsoPrintOnConsole" {
+		alsoPrintOnConsole = Boolean.asBoolean(value)
 		return true
 	}
 	return false
@@ -215,12 +229,15 @@ func execute(args as array<string>) as bool
 		Log.debug(ctx, "Configuring logging to directory: `" .. loggingDirectory.getPath() .. "'")
 		var dlc = DirectoryLogContext.create(loggingDirectory)
 		dlc.setEnableDebugMessages(enableDebugMessages)
+		dlc.setAlsoPrintOnConsole(alsoPrintOnConsole)
 		ctx = dlc
 	}
 	else {
 		(ctx as! ConsoleApplicationContext).setEnableDebugMessages(enableDebugMessages)
 	}
 	var server = new MyHTTPServer()
+	server.setTimeoutDelay(timeoutDelay)
+	server.setMaintenanceTimerDelay(maintenanceTimerDelay)
 	server.setMyParent(this)
 	server.setPort(listenPort)
 	if initialize(ctx, server) == false {
