@@ -40,7 +40,6 @@ func main(args as array<string>) static as int #main
 }
 
 var dbs as map<string,string>
-var secure = false
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
@@ -51,10 +50,6 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 				dbs = new map<string,string>
 			dbs[dbname] = value
 		}
-		return true
-	}
-	if key == "secure" {
-		secure = Boolean.asBoolean(value)
 		return true
 	}
 	return base.configure(key, value, relativeTo, error)
@@ -72,8 +67,6 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 		Log.error(ctx, "Failed to initialize HTTP server")
 	assert dbs:
 		Log.error(ctx, "No databases configured. Configure `db:*' options first.")
-	if not secure:
-		Log.warning(ctx, "Secure flag set to false. No authentication will be done")
 	var keys as vector<string> #force = Map.getKeys(dbs)
 	var map = new HTTPServerRequestHandlerMap()
 	foreach key in keys {
@@ -107,7 +100,7 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 		}
 		var stack = new HTTPServerRequestHandlerStack()
 		stack.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
-			if secure {
+			if String.isNotEmpty(accessToken) {
 				var rqtoken = req.getHeader("x-access-token")
 				if not rqtoken:
 					rqtoken = req.getQueryParameter("accessToken")
