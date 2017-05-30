@@ -73,7 +73,7 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 	assert dbs:
 		Log.error(ctx, "No databases configured. Configure `db:*' options first.")
 	if not secure:
-		Log.warning(ctx, "Secure flag set to false. No authentication will be made")
+		Log.warning(ctx, "Secure flag set to false. No authentication will be done")
 	var keys as vector<string> #force = Map.getKeys(dbs)
 	var map = new HTTPServerRequestHandlerMap()
 	foreach key in keys {
