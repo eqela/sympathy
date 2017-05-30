@@ -43,7 +43,7 @@ var dbs as map<string,string>
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
-	if key && String.startsWith(key, "db:") {
+	if key && String.startsWith(key, "db=") {
 		var dbname = String.getSubString(key, 3)
 		if String.isNotEmpty(dbname) {
 			if not dbs:
@@ -100,11 +100,13 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 		}
 		var stack = new HTTPServerRequestHandlerStack()
 		stack.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
-			var rqtoken = req.getHeader("x-access-token")
-			if not rqtoken:
-				rqtoken = req.getQueryParameter("accessToken")
-			assert String.equals(accessToken, rqtoken):
-				req.sendJSONObject(JSONResponse.forNotAllowed())
+			if String.isNotEmpty(accessToken) {
+				var rqtoken = req.getHeader("x-access-token")
+				if not rqtoken:
+					rqtoken = req.getQueryParameter("accessToken")
+				assert String.equals(accessToken, rqtoken):
+					req.sendJSONObject(JSONResponse.forNotAllowed())
+			}
 			next()
 		})
 		stack.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
