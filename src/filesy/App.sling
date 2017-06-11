@@ -87,9 +87,17 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 	var files = HTTPServerDirectoryHandler.forDirectory(contentDirectory)
 	files.setListDirectories(listDirectories)
 	files.setProcessTemplateFiles(processTemplateFiles)
-	files.setIndexFiles([
-		"index.html"
-	])
+	if processTemplateFiles {
+		files.setIndexFiles([
+			"index.html",
+			"index.html.t"
+		])
+	}
+	else {
+		files.setIndexFiles([
+			"index.html"
+		])
+	}
 	files.setServerURL(VALUE("sling_project_url"))
 	files.setServerName(VALUE("sling_project_title") .. "/" .. VALUE("sling_project_version"))
 	server.pushRequestHandler(files)
