@@ -201,6 +201,11 @@ class MyResponseParser imports cape
 				if(r != null) {
 					if not r.completed:
 						break
+					if not r.data {
+						reset()
+						onEndOfResponse()
+						break
+					}
 					var sz = Buffer.getSize(r.data)
 					dataCounter += sz
 					onBodyDataReceived(r.data, sz)

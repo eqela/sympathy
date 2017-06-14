@@ -149,16 +149,16 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 						}
 					}
 				}
+				var tableName = body.getString("tableName")
 				var action = body.getString("action")
-				if String.isEmpty(action) {
-					var bb = String.toLowerCase(String.getSubString(sqlStatement, 0, 6))
-					if bb == "select" {
-						action = "query"
-					}
-					else {
-						action = "nonQuery"
-					}
+				var bb = String.toLowerCase(String.getSubString(sqlStatement, 0, 6))
+				var insert = bb == "insert" ? true : false
+				if insert {
+					assert String.isNotEmpty(tableName):
+						req.sendJSONObject(JSONResponse.forMissingData("tableName"))
 				}
+				if String.isEmpty(action):
+					action = bb == "select" ? "query" : "nonQuery"
 				if "query" == action {
 					var v = db.query(stmt)
 					assert v:
@@ -169,6 +169,13 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 					db.execute(stmt, func(success as bool) {
 						assert success:
 							req.sendJSONObject(JSONResponse.forInternalError())
+						if insert {
+							var v = db.querySingleRow(db.prepare("SELECT IDENT_CURRENT('" .. tableName .. "') AS id;"))
+							assert v:
+								req.sendJSONObject(JSONResponse.forInternalError())
+							req.sendJSONObject(JSONResponse.forOk(v))
+							return
+						}
 						req.sendJSONObject(JSONResponse.forOk())
 					})
 				}
