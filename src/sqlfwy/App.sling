@@ -128,20 +128,21 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 				var params = body.getDynamicVector("sqlParameters")
 				var stmt = assert db.prepare(sqlStatement):
 					req.sendJSONObject(JSONResponse.forInternalError())
+				stmt.setIsStoredProcedure(body.getBoolean("isStoredProcedure"))
 				if params && params.getSize() > 0 {
 					foreach p as DynamicMap in params.toVector() {
 						var dt = p.getString("dataType")
 						if "string" == dt {
-							stmt.addParamString(p.getString("value"))
+							stmt.setParamString(p.getString("parameterName"), p.getString("value"))
 						}
 						else if "integer" == dt {
-							stmt.addParamInteger(p.getInteger("value"))
+							stmt.setParamInteger(p.getString("parameterName"), p.getInteger("value"))
 						}
 						else if "double" == dt {
-							stmt.addParamDouble(p.getDouble("value"))
+							stmt.setParamDouble(p.getString("parameterName"), p.getDouble("value"))
 						}
 						else if "blob" == dt {
-							stmt.addParamBlob(Base64Decoder.decode(p.getString("value")))
+							stmt.setParamBlob(p.getString("parameterName"), Base64Decoder.decode(p.getString("value")))
 						}
 						else {
 							req.sendJSONObject(JSONResponse.forInvalidData("dataType"))
