@@ -171,7 +171,8 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 						assert success:
 							req.sendJSONObject(JSONResponse.forInternalError())
 						if insert {
-							var v = db.querySingleRow(db.prepare("SELECT IDENT_CURRENT('" .. tableName .. "') AS id;"))
+							var v = new DynamicMap()
+							v.set("id", db.getLastInsertId(tableName))
 							assert v:
 								req.sendJSONObject(JSONResponse.forInternalError())
 							req.sendJSONObject(JSONResponse.forOk(v))
