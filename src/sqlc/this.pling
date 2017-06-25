@@ -22,6 +22,5 @@
  * SOFTWARE.
  */
 
-title = "Sympathy SQL Forwarder"
+title = "Sympathy SQL Client"
 preFilters += "@cape"
-preFilters += "@sympathy"

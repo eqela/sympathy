@@ -24,13 +24,11 @@
 
 class is WebServer:
 
-import cape
 import capex.data
 import capex.console
-import capex.mssql
-import capex.mysql
 import sympathy
 import sympathy.app
+import sympathy.db
 
 func main(args as array<string>) static as int #main
 {
@@ -43,7 +41,7 @@ var dbs as map<string,string>
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
-	if key && String.startsWith(key, "db=") {
+	if key && String.startsWith(key, "db-") {
 		var dbname = String.getSubString(key, 3)
 		if String.isNotEmpty(dbname) {
 			if not dbs:
@@ -66,7 +64,7 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 	assert base.initialize(ctx, server):
 		Log.error(ctx, "Failed to initialize HTTP server")
 	assert dbs:
-		Log.error(ctx, "No databases configured. Configure `db:*' options first.")
+		Log.error(ctx, "No databases configured. Configure `db-*' options first.")
 	var keys as vector<string> #force = Map.getKeys(dbs)
 	var map = new HTTPServerRequestHandlerMap()
 	foreach key in keys {
@@ -82,22 +80,8 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 			accessToken = ""
 			connectionString = value
 		}
-		var isMSSQL = String.startsWith(connectionString, "mssql:")
-		var isMySQL = String.startsWith(connectionString, "mysql:")
-		assert isMSSQL || isMySQL:
-			Log.error(ctx, "Invalid connection string: `" .. connectionString .. "'. Should start with `mssql:' or `mysql:'")
-		var cs = String.getSubString(connectionString, 6)
-		assert String.isNotEmpty(cs):
-			Log.error(ctx, "Connection string is empty: `" .. connectionString .. "'.")
-		var db as SQLDatabase
-		if isMSSQL {
-			assert db = MSSQLDatabase.forConnectionString(cs, ctx):
-				Log.error(ctx, "Failed to initialize MSSQL database: `" .. cs .. "'")
-		}
-		else if isMySQL {
-			assert db = MySQLDatabase.forConnectionString(cs, ctx):
-				Log.error(ctx, "Failed to initialize MySQL database: `" .. cs .. "'")
-		}
+		var db = assert SQLDatabaseProvider.getDatabase(ctx, connectionString):
+			Log.error(ctx, "Invalid connection string: `" .. connectionString .. "'")
 		var stack = new HTTPServerRequestHandlerStack()
 		stack.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
 			if String.isNotEmpty(accessToken) {
@@ -117,7 +101,7 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 				var v = db.query(db.prepare(sqlStatement))
 				assert v:
 					req.sendJSONObject(JSONResponse.forInternalError())
-				req.sendJSONObject(JSONResponse.forOk(v.toVector()))
+				req.sendResponse(HTTPServerResponse.forString(v.toVectorListJSON(), "application/json; charset=\"UTF-8\""))
 			}
 			else if req.isPOST() {
 				var body = assert req.getBodyJSONMap():
@@ -164,7 +148,7 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 					var v = db.query(stmt)
 					assert v:
 						req.sendJSONObject(JSONResponse.forInternalError())
-					req.sendJSONObject(JSONResponse.forOk(v.toVector()))
+					req.sendResponse(HTTPServerResponse.forString(v.toVectorListJSON(), "application/json; charset=\"UTF-8\""))
 				}
 				else {
 					db.execute(stmt, func(success as bool) {

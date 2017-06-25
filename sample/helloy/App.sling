@@ -22,6 +22,28 @@
  * SOFTWARE.
  */
 
-title = "Sympathy SQL Forwarder"
-preFilters += "@cape"
-preFilters += "@sympathy"
+class imports cape imports capex.console imports capex.net imports sympathy:
+
+func main(args as array<string>) as int #main
+{
+	var ctx = new ConsoleApplicationContext()
+	var ioManager = IOManager.createDefault()
+	if not ioManager {
+		Log.error(ctx, "Failed to create IO manager")
+		return 1
+	}
+	var server = new HTTPServer()
+	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+		req.sendHTMLString("<h1>Hello World</h1>")
+	})
+	if server.initialize(ioManager, ctx) == false {
+		Log.error(ctx, "Failed to initialize HTTP server.")
+		return 1
+	}
+	if ioManager.execute(ctx) == false {
+		Log.error(ctx, "Failed to execute IO manager")
+		return 1
+	}
+	Log.info(ctx, "Successfully completed.")
+	return 0
+}

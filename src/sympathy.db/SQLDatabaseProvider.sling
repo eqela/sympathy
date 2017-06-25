@@ -22,6 +22,24 @@
  * SOFTWARE.
  */
 
-title = "Sympathy SQL Forwarder"
-preFilters += "@cape"
-preFilters += "@sympathy"
+class:
+
+import capex.data
+import capex.mssql
+import capex.mysql
+
+func getDatabase(ctx as LoggingContext, connectionString as string) static as SQLDatabase
+{
+	var comps = assert String.split(connectionString, ':', 2)
+	var dbtype = Vector.get(comps, 0)
+	var dbstr = Vector.get(comps, 1)
+	assert String.isNotEmpty(dbtype)
+	assert String.isNotEmpty(dbstr)
+	if dbtype == "mssql":
+		return MSSQLDatabase.forConnectionString(dbstr, ctx)
+	if dbtype == "mysql":
+		return MySQLDatabase.forConnectionString(dbstr, ctx)
+	if dbtype == "sqlite":
+		return SQLiteDatabase.forFile(FileInstance.forPath(dbstr), true, ctx)
+	return null
+}
