@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape:
+class:
 
 class DNSCacheEntry
 {

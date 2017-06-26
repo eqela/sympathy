@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is Runnable imports cape imports capex.util:
+class is Runnable imports capex.util:
 
 prop ctx as LoggingContext
 prop server as URL

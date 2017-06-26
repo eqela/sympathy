@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is StringObject imports cape imports capex.util:
+class is StringObject imports capex.util:
 
 func forGET(url as string) static as this
 {

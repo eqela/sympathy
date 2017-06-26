@@ -99,9 +99,12 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 				assert String.isNotEmpty(sqlStatement):
 					req.sendJSONObject(JSONResponse.forInvalidRequest())
 				var v = db.query(db.prepare(sqlStatement))
-				assert v:
+				if not v {
 					req.sendJSONObject(JSONResponse.forInternalError())
-				req.sendResponse(HTTPServerResponse.forString(v.toVectorListJSON(), "application/json; charset=\"UTF-8\""))
+				}
+				else {
+					req.startResponseWorker(HTTPServerSQLResultSetToJSONResponseWorker.forResultSet(v))
+				}
 			}
 			else if req.isPOST() {
 				var body = assert req.getBodyJSONMap():
@@ -146,9 +149,12 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 					action = bb == "select" ? "query" : "nonQuery"
 				if "query" == action {
 					var v = db.query(stmt)
-					assert v:
+					if not v {
 						req.sendJSONObject(JSONResponse.forInternalError())
-					req.sendResponse(HTTPServerResponse.forString(v.toVectorListJSON(), "application/json; charset=\"UTF-8\""))
+					}
+					else {
+						req.startResponseWorker(HTTPServerSQLResultSetToJSONResponseWorker.forResultSet(v))
+					}
 				}
 				else {
 					db.execute(stmt, func(success as bool) {

@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape:
+class:
 
 class CacheEntry
 {
@@ -36,9 +36,7 @@ prop cacheTtl = 3600
 
 func onMaintenance
 {
-	if(cache == null) {
-		return
-	}
+	assert cache
 	var now = SystemClock.asSeconds()
 	var keys as vector<string> #force = Map.getKeys(cache)
 	foreach(key in keys) {

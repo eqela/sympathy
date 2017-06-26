@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class abstract imports cape imports capex.net:
+class abstract imports capex.net:
 
 prop storageIndex as int
 var ioEntry as IOManagerEntry
@@ -41,25 +41,24 @@ ctor
 	id = idcounter ++
 }
 
-func getId as long
+func getId as long:
+	return id
+
+func exportSocket as ConnectedSocket
 {
-	return(id)
+	var v = socket
+	socket = null
+	return v
 }
 
-func getSocket as ConnectedSocket
-{
-	return(socket)
-}
+func getSocket as ConnectedSocket:
+	return socket
 
-func getManager as NetworkConnectionManager
-{
-	return(manager)
-}
+func getManager as NetworkConnectionManager:
+	return manager
 
-func getLastActivity as long
-{
-	return(lastActivity)
-}
+func getLastActivity as long:
+	return lastActivity
 
 func getRemoteAddress as string
 {
@@ -146,40 +145,38 @@ func sendData(data as buffer, size as int) as int
 
 func close
 {
-	if(socket == null) {
-		return
-	}
 	var ss = socket
 	socket = null
-	if(ioEntry != null) {
+	if ioEntry {
 		ioEntry.remove()
 		ioEntry = null
 	}
-	ss.close()
-	if(manager != null) {
+	if ss:
+		ss.close()
+	if manager:
 		manager.onConnectionClosed(this)
-	}
 	cleanup()
 	onClosed()
-	// this.logContext = null
 	this.socket = null
 	this.manager = null
 }
 
+func closeSocket
+{
+	if socket:
+		socket.close()
+}
+
 func onReadReady virtual
 {
-	if(socket == null) {
-		return
-	}
+	assert socket
 	var recvBuffer as buffer
-	if(manager != null) {
+	if manager:
 		recvBuffer = manager.getReceiveBuffer()
-	}
-	if(recvBuffer == null) {
+	if recvBuffer == null:
 		recvBuffer = MALLOC(1024)
-	}
 	var n = socket.read(recvBuffer)
-	if(n < 0) {
+	if n < 0 {
 		close()
 	}
 	else {
@@ -192,46 +189,37 @@ func onWriteReady virtual
 {
 }
 
-func enableIdleMode
-{
+func enableIdleMode:
 	setListenMode(0)
-}
 
-func enableReadMode
-{
+func enableReadMode:
 	setListenMode(1)
-}
 
-func enableWriteMode
-{
+func enableWriteMode:
 	setListenMode(2)
-}
 
-func enableReadWriteMode
-{
+func enableReadWriteMode:
 	setListenMode(3)
-}
 
 func setListenMode(n as int) private
 {
-	if(ioEntry == null) {
+	if ioEntry == null {
 		defaultListenMode = n
 		return
 	}
-	if(n == currentListenMode) {
+	if n == currentListenMode:
 		return
-	}
 	currentListenMode = n
-	if(n == 0) {
+	if n == 0 {
 		ioEntry.setListeners(null, null)
 	}
-	else if(n == 1) {
+	else if n == 1 {
 		ioEntry.setListeners(onReadReady, null)
 	}
-	else if(n == 2) {
+	else if n == 2 {
 		ioEntry.setListeners(null, onWriteReady)
 	}
-	else if(n == 3) {
+	else if n == 3 {
 		ioEntry.setListeners(onReadReady, onWriteReady)
 	}
 }

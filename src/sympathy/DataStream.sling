@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-interface imports cape:
+interface:
 
 func onDataStreamStart(length as long) as bool
 func onDataStreamContent(data as buffer, size as int) as bool

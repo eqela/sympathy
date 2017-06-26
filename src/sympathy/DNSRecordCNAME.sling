@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is DNSRecord imports cape:
+class is DNSRecord:
 
 func getType override as string
 {

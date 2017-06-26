@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex.util:
+class imports capex.util:
 
 func forDetails(method as string, url as string, version as string, headers as KeyValueList<string,string>) static as this
 {
@@ -674,4 +674,23 @@ func sendResponse(resp as HTTPServerResponse)
 	responseCookies = null
 	server.sendResponse(connection, this, resp)
 	responseSent = true
+}
+
+func startResponse(resp as HTTPServerResponse) as HTTPServerResponseSession
+{
+	assert server
+	assert responseSent == false
+	foreach cookie in responseCookies:
+		resp.addCookie(cookie)
+	responseCookies = null
+	responseSent = true
+	return server.startResponse(connection, this, resp)
+}
+
+func startResponseWorker(worker as HTTPServerResponseWorker) as bool
+{
+	assert worker
+	var rs = assert startResponse(HTTPServerResponse.forOk(worker.getMimeType()))
+	worker.setSession(rs)
+	return server.startResponseWorker(worker)
 }

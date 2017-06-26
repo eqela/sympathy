@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is LoggingContext imports cape:
+class is LoggingContext:
 
 func create(logDir as File, logIdPrefix as string = null, dbg as bool = true) static as this
 {

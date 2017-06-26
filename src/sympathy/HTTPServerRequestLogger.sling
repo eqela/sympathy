@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandlerListener imports cape:
+class is HTTPServerRequestHandlerListener:
 
 prop logdir as File
 prop logContext as LoggingContext

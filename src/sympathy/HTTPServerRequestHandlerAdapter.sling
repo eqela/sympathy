@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandler is HTTPServerComponent imports cape:
+class is HTTPServerRequestHandler is HTTPServerComponent:
 
 var server as HTTPServerBase
 var logContext protected as LoggingContext

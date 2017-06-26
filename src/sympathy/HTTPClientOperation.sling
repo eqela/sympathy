@@ -22,9 +22,9 @@
  * SOFTWARE.
  */
 
-class is HTTPClient imports cape imports capex.net:
+class is HTTPClient imports capex.net:
 
-class MyResponseParser imports cape
+class MyResponseParser
 {
 	class Chunk
 	{

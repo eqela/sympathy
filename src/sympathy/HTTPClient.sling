@@ -22,18 +22,14 @@
  * SOFTWARE.
  */
 
-class abstract imports cape:
+class abstract:
 
-func createDefault static as this
-{
-	return(new HTTPClientOperation())
-}
+func createDefault static as this:
+	return new HTTPClientOperation()
 
 func execute(client as this, request as HTTPClientRequest, listener as HTTPClientListener) static
 {
-	if(client == null) {
-		return
-	}
+	assert client
 	client.executeRequest(request, listener)
 }
 

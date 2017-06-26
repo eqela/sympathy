@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is NetworkServer imports cape imports sympathy:
+class is NetworkServer:
 
 prop createConnectionHandlerObject as function<WSServerConnectionHandler>
 

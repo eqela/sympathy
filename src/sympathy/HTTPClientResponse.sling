@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is StringObject imports cape:
+class is StringObject:
 
 prop httpVersion as string
 prop httpStatus as string

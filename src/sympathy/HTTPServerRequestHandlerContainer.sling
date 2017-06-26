@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandlerAdapter abstract imports cape:
+class is HTTPServerRequestHandlerAdapter abstract:
 
 func iterateRequestHandlers abstract as Iterator<HTTPServerRequestHandler>
 

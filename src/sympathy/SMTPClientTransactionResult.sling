@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape:
+class:
 
 func forError(error as string) static as this
 {

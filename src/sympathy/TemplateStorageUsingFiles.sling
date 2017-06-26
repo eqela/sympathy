@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is TemplateStorage imports cape:
+class is TemplateStorage:
 
 func forDirectory(dir as File) static as this
 {

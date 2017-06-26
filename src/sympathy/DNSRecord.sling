@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is StringObject imports cape:
+class is StringObject:
 
 prop ttl as int
 prop address as string

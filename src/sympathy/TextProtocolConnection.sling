@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is NetworkConnection abstract imports cape:
+class is NetworkConnection abstract:
 
 prop encoding as string
 

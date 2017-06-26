@@ -36,22 +36,22 @@ func onStatus(message as string) virtual
 
 func onStartRequest(request as HTTPClientRequest) virtual as bool
 {
-	return(true)
+	return true
 }
 
 func onEndRequest virtual as bool
 {
-	return(true)
+	return true
 }
 
 func onResponseReceived(response as HTTPClientResponse) virtual as bool
 {
-	return(true)
+	return true
 }
 
 func onDataReceived(buffer as buffer) virtual as bool
 {
-	return(true)
+	return true
 }
 
 func onAborted virtual

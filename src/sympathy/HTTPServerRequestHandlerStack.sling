@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandlerContainer imports cape:
+class is HTTPServerRequestHandlerContainer:
 
 class FunctionRequestHandler is HTTPServerRequestHandler private
 {

@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is NetworkConnectionManager abstract imports cape imports capex.net:
+class is NetworkConnectionManager abstract imports capex.net:
 
 prop port as int
 var socket as TCPSocket
@@ -30,32 +30,26 @@ var esocket as IOManagerEntry
 
 func initialize override as bool
 {
-	if(base.initialize() == false) {
-		return(false)
-	}
-	socket = TCPSocket.createAndListen(port)
-	if(socket == null) {
+	assert base.initialize()
+	assert socket = TCPSocket.createAndListen(port) {
 		Log.error(logContext, "Failed to listen on TCP port " .. String.forInteger(port))
 		cleanup()
-		return(false)
 	}
-	esocket = ioManager.addWithReadListener(socket, onIncomingConnection)
-	if(esocket == null) {
+	assert esocket = ioManager.addWithReadListener(socket, onIncomingConnection) {
 		Log.error(logContext, "Failed to register with event loop")
 		cleanup()
-		return(false)
 	}
 	Log.info(logContext, "TCP server initialized, listening on port " .. String.forInteger(port))
-	return(true)
+	return true
 }
 
 func cleanup override
 {
-	if(esocket != null) {
+	if esocket {
 		esocket.remove()
 		esocket = null
 	}
-	if(socket != null) {
+	if socket {
 		socket.close()
 		socket = null
 	}
@@ -64,10 +58,7 @@ func cleanup override
 
 func onIncomingConnection private
 {
-	var nn = socket.accept()
-	if(nn == null) {
+	var nn = assert socket.accept():
 		Log.error(logContext, "Failed to accept an incoming client.")
-		return
-	}
 	onNewSocket(nn)
 }

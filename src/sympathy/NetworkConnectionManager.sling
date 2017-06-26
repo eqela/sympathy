@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class abstract imports cape imports capex.net:
+class abstract imports capex.net:
 
 class ConnectionPool protected
 {
@@ -148,13 +148,11 @@ func initialize virtual as bool
 		Log.error(logContext, "Already initialized")
 		return false
 	}
-	assert ioManager {
+	assert ioManager:
 		Log.error(logContext, "No IO manager configured for connection server")
-	}
 	recvBuffer = MALLOC(recvBufferSize)
-	assert recvBuffer {
+	assert recvBuffer:
 		Log.error(logContext, "Failed to allocate recv buffer")
-	}
 	connections = new ConnectionPool()
 	assert connections.initialize(logContext, maxConnections) {
 		Log.error(logContext, "Failed to initialize connection pool")

@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex.text:
+class imports capex.text:
 
 var rcptsTo as DynamicVector
 var rcptsCC as DynamicVector

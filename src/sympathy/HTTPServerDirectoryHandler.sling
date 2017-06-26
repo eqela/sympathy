@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandlerAdapter imports cape imports capex.text:
+class is HTTPServerRequestHandlerAdapter imports capex.text:
 
 func forDirectory(dir as File) static as this
 {

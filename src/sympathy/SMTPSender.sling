@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex.util:
+class imports capex.util:
 
 func forServerAddress(name as string, ctx as LoggingContext) static as this
 {

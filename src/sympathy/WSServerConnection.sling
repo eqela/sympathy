@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is NetworkConnection imports cape imports sympathy imports capex.crypto:
+class is NetworkConnection imports capex.crypto:
 
 class ParserState private
 {

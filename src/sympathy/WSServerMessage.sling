@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape:
+class:
 
 const CLOSE_FRAME = 8
 const PING_FRAME = 9

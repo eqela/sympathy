@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is SMTPMessage imports cape imports capex.util imports capex.crypto:
+class is SMTPMessage imports capex.util, capex.crypto:
 
 ctor
 {

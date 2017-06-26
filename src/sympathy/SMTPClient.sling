@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex.net imports capex.crypto imports capex.util:
+class imports capex.net, capex.crypto, capex.util:
 
 func connect(server as string, port as int, ctx as LoggingContext) private static as TCPSocket
 {

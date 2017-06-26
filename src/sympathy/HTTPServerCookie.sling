@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is StringObject imports cape:
+class is StringObject:
 
 ctor(key as string, value as string)
 {

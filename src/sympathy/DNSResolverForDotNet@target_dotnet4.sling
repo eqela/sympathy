@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is DNSResolver imports cape:
+class is DNSResolver:
 
 func getNSRecords(host as string, type as string, ctx as LoggingContext) override as DynamicVector
 {

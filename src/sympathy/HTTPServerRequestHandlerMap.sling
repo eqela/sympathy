@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandlerAdapter imports cape:
+class is HTTPServerRequestHandlerAdapter:
 
 var getHandlerFunctions as map<string,function<void,HTTPServerRequest>>
 var postHandlerFunctions as map<string,function<void,HTTPServerRequest>>

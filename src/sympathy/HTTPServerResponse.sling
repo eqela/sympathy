@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex.util imports capex.text imports capex.crypto:
+class imports capex.util, capex.text, capex.crypto:
 
 func parseBuffer(data as buffer) static as this
 {
@@ -167,6 +167,15 @@ func forBuffer(data as buffer, mimetype as string = null) static as this
 	return(resp)
 }
 
+func forOk(mimetype as string = null) static as this
+{
+	var resp = new this()
+	resp.setStatus("200")
+	if String.isEmpty(mimetype) == false:
+		resp.addHeader("Content-Type", mimetype)
+	return resp
+}
+
 func forString(text as string, mimetype as string) static as this
 {
 	var resp = new this()
@@ -299,6 +308,56 @@ func forHTTPMovedTemporarily(url as string) static as this
 	resp.addHeader("Location", url)
 	resp.setBody(url)
 	return(resp)
+}
+
+func getFullStatus(status as string) static as string
+{
+	var v as string = null
+	if status && String.indexOf(status, " ") < 1 {
+		if String.equals("200", status) {
+			v = "200 OK"
+		}
+		else if String.equals("301", status) {
+			v = "301 Moved Permanently"
+		}
+		else if String.equals("303", status) {
+			v = "303 See Other"
+		}
+		else if String.equals("304", status) {
+			v = "304 Not Modified"
+		}
+		else if String.equals("400", status) {
+			v = "400 Bad Request"
+		}
+		else if String.equals("401", status) {
+			v = "401 Unauthorized"
+		}
+		else if String.equals("403", status) {
+			v = "403 Forbidden"
+		}
+		else if String.equals("404", status) {
+			v = "404 Not found"
+		}
+		else if String.equals("405", status) {
+			v = "405 Method not allowed"
+		}
+		else if String.equals("500", status) {
+			v = "500 Internal server error"
+		}
+		else if String.equals("501", status) {
+			v = "501 Not implemented"
+		}
+		else if String.equals("503", status) {
+			v = "503 Service unavailable"
+		}
+		else {
+			v = status .. " Unknown"
+		}
+	}
+	else {
+		v = status
+	}
+	return v
 }
 
 prop headers as KeyValueList<string,string>

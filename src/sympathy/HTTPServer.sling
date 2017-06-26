@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerBase imports cape:
+class is HTTPServerBase:
 
 prop createOptionsResponseHandler as function<HTTPServerResponse,HTTPServerRequest>
 var requestHandlerListenerFunctions as vector<function<void,HTTPServerRequest,HTTPServerResponse,int,string>>

@@ -1,0 +1,123 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class imports capex.net, capex.text:
+
+prop socket as ConnectedSocket
+prop server as HTTPServerBase
+prop request as HTTPServerRequest
+prop response as HTTPServerResponse
+prop totalBytes = 0
+
+func createHeaderBuffer private as buffer
+{
+	var ver as string
+	var met as string
+	if request {
+		ver = request.getVersion()
+		met = request.getMethod()
+	}
+	if ver == "HTTP/0.9":
+		return null
+	var resp = response
+	if resp == null:
+		resp = HTTPServerResponse.forTextString("")
+	var status = resp.getStatus()
+	var headers = resp.getHeaders()
+	if status == null || String.getLength(status) < 1 {
+		status = "200"
+		resp.setStatus(status)
+	}
+	var fs = HTTPServerResponse.getFullStatus(status)
+	var reply = new StringBuilder()
+	if ver == null || String.getLength(ver) < 1 {
+		reply.append("HTTP/1.1")
+	}
+	else {
+		reply.append(ver)
+	}
+	reply.append(' ')
+	reply.append(fs)
+	reply.append('\r')
+	reply.append('\n')
+	if headers {
+		var it = headers.iterate()
+		while it {
+			var kvp = it.next()
+			if kvp == null:
+				break
+			reply.append(kvp.key)
+			reply.append(':')
+			reply.append(' ')
+			reply.append(kvp.value)
+			reply.append('\r')
+			reply.append('\n')
+		}
+	}
+	reply.append("Connection: close\r\n")
+	reply.append("Cache-Control: no-store\r\n")
+	if server {
+		reply.append("Server: ")
+		reply.append(server.getServerName())
+	}
+	reply.append('\r')
+	reply.append('\n')
+	reply.append("Date: ")
+	reply.append(VerboseDateTimeString.forNow())
+	reply.append('\r')
+	reply.append('\n')
+	reply.append('\r')
+	reply.append('\n')
+	return String.toUTF8Buffer(reply.toString())
+}
+
+func writeHeader as bool
+{
+	var bb = createHeaderBuffer()
+	if not bb:
+		return true
+	return writeData(bb)
+}
+
+func writeData(data as buffer, size as int = -1) as bool
+{
+	assert socket
+	if not data:
+		return true
+	var sz = size
+	if sz < 0:
+		sz = SIZE data
+	var r = socket.write(data, sz)
+	totalBytes += r
+	if r < sz:
+		return false
+	return true
+}
+
+func end
+{
+	assert socket
+	socket.close()
+	socket = null
+}

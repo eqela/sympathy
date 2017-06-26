@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class abstract imports cape:
+class abstract:
 
 var connection protected as WSServerConnection
 var logContext protected as LoggingContext
