@@ -26,6 +26,7 @@ class:
 
 import cape
 import sympathy
+import capex.http
 
 class MyHTTPClientListener is HTTPClientListener
 {

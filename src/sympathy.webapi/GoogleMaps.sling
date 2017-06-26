@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports cape imports sympathy:
+class imports cape imports sympathy, capex.http:
 
 class GoogleMapsHTTPClientListener is HTTPClientListener
 {
