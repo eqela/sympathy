@@ -93,7 +93,7 @@ func getAllPageIds(callback as function<void,DynamicVector>)
 			callback(null)
 		}
 		else {
-			callback(results.toVector())
+			callback(results.toVectorOfMaps())
 		}
 	})
 }
@@ -125,7 +125,7 @@ func getPageData(pageId as string, callback as function<void,string,DynamicMap,D
 		}
 		stmt2.addParamString(pageId)
 		database.query(stmt2, func(attrs as SQLResultSetIterator) {
-			callback(result.getString("type"), JSONParser.parse(result.getString("data")) as DynamicMap, attrs.toVector())
+			callback(result.getString("type"), JSONParser.parse(result.getString("data")) as DynamicMap, attrs.toVectorOfMaps())
 		})
 	})
 }
