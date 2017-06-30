@@ -109,7 +109,8 @@ func writeData(data as buffer, size as int = -1) as bool
 	if sz < 0:
 		sz = SIZE data
 	var r = socket.write(data, sz)
-	totalBytes += r
+	if r > 0:
+		totalBytes += r
 	if r < sz:
 		return false
 	return true
