@@ -157,19 +157,18 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 					}
 				}
 				else {
-					db.execute(stmt, func(success as bool) {
-						assert success:
+					var result = db.execute(stmt)
+					assert result:
+						req.sendJSONObject(JSONResponse.forInternalError())
+					if insert {
+						var v = new DynamicMap()
+						v.set("id", db.getLastInsertId(tableName))
+						assert v:
 							req.sendJSONObject(JSONResponse.forInternalError())
-						if insert {
-							var v = new DynamicMap()
-							v.set("id", db.getLastInsertId(tableName))
-							assert v:
-								req.sendJSONObject(JSONResponse.forInternalError())
-							req.sendJSONObject(JSONResponse.forOk(v))
-							return
-						}
-						req.sendJSONObject(JSONResponse.forOk())
-					})
+						req.sendJSONObject(JSONResponse.forOk(v))
+						return
+					}
+					req.sendJSONObject(JSONResponse.forOk())
 				}
 			}
 			else {
