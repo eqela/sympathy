@@ -131,7 +131,7 @@ func resolveMXServerForDomain(domain as string) private static as string
 	return(v)
 }
 
-func sendMessage(msg as SMTPMessage, server as URL, serverName as string, ctx as LoggingContext = null) static as SMTPClientResult
+func sendMessage(msg as SMTPMessage, server as URL, serverName as string, ctx as LoggingContext = null, acceptInvalidCertificate as bool = false) static as SMTPClientResult
 {
 	if(msg == null) {
 		return(SMTPClientResult.forMessage(msg).addTransaction(SMTPClientTransactionResult.forError("No message")))
@@ -139,7 +139,7 @@ func sendMessage(msg as SMTPMessage, server as URL, serverName as string, ctx as
 	var rcpts = msg.getAllRcpts()
 	if(server != null) {
 		// simple case. single server transaction with a supplied address.
-		var t = executeTransaction(msg, server, rcpts, serverName, ctx)
+		var t = executeTransaction(msg, server, rcpts, serverName, ctx, acceptInvalidCertificate)
 		if(t != null) {
 			t.setServer(server.getHost())
 			t.setRecipients(rcpts)
@@ -184,7 +184,7 @@ func sendMessage(msg as SMTPMessage, server as URL, serverName as string, ctx as
 		else {
 			Log.debug(ctx, "SMTP server for domain `" .. domain .. "': `" .. ds .. "'")
 			var trcpts = servers.get(domain) as DynamicVector
-			var t = executeTransaction(msg, URL.forString("smtp://" .. ds), trcpts, serverName, ctx)
+			var t = executeTransaction(msg, URL.forString("smtp://" .. ds), trcpts, serverName, ctx, acceptInvalidCertificate)
 			if(t != null) {
 				t.setDomain(domain)
 				t.setServer(ds)
@@ -200,7 +200,7 @@ func sendMessage(msg as SMTPMessage, server as URL, serverName as string, ctx as
 	return(r)
 }
 
-func executeTransaction(msg as SMTPMessage, server as URL, rcpts as DynamicVector, serverName as string, ctx as LoggingContext) private static as SMTPClientTransactionResult
+func executeTransaction(msg as SMTPMessage, server as URL, rcpts as DynamicVector, serverName as string, ctx as LoggingContext, acceptInvalidCertificate as bool) private static as SMTPClientTransactionResult
 {
 	var url = server
 	if(url == null) {
@@ -224,7 +224,7 @@ func executeTransaction(msg as SMTPMessage, server as URL, rcpts as DynamicVecto
 			}
 			var ts = connect(host, port, ctx)
 			if(ts != null) {
-				socket = SSLSocket.forClient(ts, host)
+				socket = SSLSocket.forClient(ts, host, ctx, acceptInvalidCertificate)
 				if(socket == null) {
 					return(SMTPClientTransactionResult.forError("Failed to start SSL"))
 				}
@@ -272,7 +272,7 @@ func executeTransaction(msg as SMTPMessage, server as URL, rcpts as DynamicVecto
 		}
 		ops = null
 		ins = null
-		socket = SSLSocket.forClient(socket, host)
+		socket = SSLSocket.forClient(socket, host, ctx, acceptInvalidCertificate)
 		if(socket == null) {
 			return(SMTPClientTransactionResult.forError("Failed to start SSL"))
 		}
