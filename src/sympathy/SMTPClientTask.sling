@@ -30,6 +30,7 @@ prop msg as SMTPMessage
 prop serverAddress as string
 prop listener as SMTPSenderListener
 prop sender as SMTPSender
+prop acceptInvalidCertificate = false
 
 func run
 {
@@ -38,7 +39,7 @@ func run
 		r = SMTPClientResult.forError("No message was given to SMTPClientTask", msg)
 	}
 	else {
-		r = SMTPClient.sendMessage(msg, server, serverAddress, ctx)
+		r = SMTPClient.sendMessage(msg, server, serverAddress, ctx, acceptInvalidCertificate)
 	}
 	if(r == null) {
 		r = SMTPClientResult.forError("Unknown error", msg)
