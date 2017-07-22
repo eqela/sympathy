@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class imports capex.util:
+class is DataStreamSource imports capex.util:
 
 func forDetails(method as string, url as string, version as string, headers as KeyValueList<string,string>) static as this
 {
@@ -95,6 +95,9 @@ func asBuffer as buffer
 	return v
 }
 
+func setReceiverDataStream(stream as DataStream):
+	setBodyReceiver(stream)
+
 func setBodyReceiver(receiver as DataStream)
 {
 	assert receiver
@@ -150,125 +153,90 @@ func setHeaders(headers as KeyValueList<string,string>)
 
 func getHeader(name as string) as string
 {
-	if(String.isEmpty(name)) {
-		return(null)
-	}
-	if(headers == null) {
-		return(null)
-	}
-	return(Map.get(headers, name))
+	assert String.isNotEmpty(name)
+	assert headers
+	return Map.get(headers, name)
 }
 
 func iterateHeaders as Iterator<KeyValuePair<string,string>>
 {
-	if(rawHeaders == null) {
-		return(null)
-	}
-	return(rawHeaders.iterate())
+	assert rawHeaders
+	return rawHeaders.iterate()
 }
 
 func getURL as URL
 {
-	if(url == null) {
+	if url == null:
 		url = URL.forString(urlString, true)
-	}
-	return(url)
+	return url
 }
 
 func getQueryParameters as map<string,string>
 {
-	var url = getURL()
-	if(url == null) {
-		return(null)
-	}
-	return(url.getQueryParameters())
+	var url = assert getURL()
+	return url.getQueryParameters()
 }
 
 func iterateQueryParameters as Iterator<KeyValuePair<string,string>>
 {
-	var url = getURL()
-	if(url == null) {
-		return(null)
-	}
-	var list = url.getRawQueryParameters()
-	if(list == null) {
-		return(null)
-	}
-	return(list.iterate())
+	var url = assert getURL()
+	var list = assert url.getRawQueryParameters()
+	return list.iterate()
 }
 
 func getQueryParameter(key as string) as string
 {
-	var url = getURL()
-	if(url == null) {
-		return(null)
-	}
-	return(url.getQueryParameter(key))
+	var url = assert getURL()
+	return url.getQueryParameter(key)
 }
 
 func getURLPath as string
 {
-	var url = getURL()
-	if(url == null) {
-		return(null)
-	}
-	return(url.getPath())
+	var url = assert getURL()
+	return url.getPath()
 }
 
 func getRemoteIPAddress as string
 {
-	var rr = getRemoteAddress()
-	if(rr == null) {
-		return(null)
-	}
+	var rr = assert getRemoteAddress()
 	var colon = String.indexOf(rr, ':')
-	if(colon < 0) {
-		return(rr)
-	}
-	return(String.getSubString(rr, 0, colon))
+	if colon < 0:
+		return rr
+	return String.getSubString(rr, 0, colon)
 }
 
 func getRemoteAddress as string
 {
-	if(connection == null) {
-		return(null)
-	}
-	return(connection.getRemoteAddress())
+	assert connection
+	return connection.getRemoteAddress()
 }
 
 // Header shortcuts
 
 func getConnectionClose as bool
 {
-	var hdr = getHeader("connection")
-	if(hdr == null) {
-		return(false)
-	}
-	if(hdr == "close") {
-		return(true)
-	}
-	return(false)
+	var hdr = assert getHeader("connection")
+	if hdr == "close":
+		return true
+	return false
 }
 
-func getETag as string
-{
-	return(getHeader("if-none-match"))
-}
+func getETag as string:
+	return getHeader("if-none-match")
 
 func getCookieValues as map<string,string>
 {
-	if(cookies == null) {
+	if cookies == null {
 		var v = new map<string,string>
 		var cvals = getHeader("cookie")
-		if(cvals != null) {
+		if cvals {
 			var sp = String.split(cvals, ';')
-			foreach(ck in sp) {
+			foreach ck in sp {
 				ck = String.strip(ck)
-				if(String.isEmpty(ck)) {
+				if String.isEmpty(ck):
 					continue
-				}
 				var e = String.indexOf(ck, '=')
-				if(e < 0) {
+				if e < 0 {
 					Map.set(v, ck, "")
 				}
 				else {
@@ -278,75 +246,103 @@ func getCookieValues as map<string,string>
 		}
 		cookies = v
 	}
-	return(cookies)
+	return cookies
 }
 
 func getCookieValue(name as string) as string
 {
-	var c = getCookieValues()
-	if(c == null) {
-		return(null)
-	}
-	return(Map.get(c, name))
+	var c = assert getCookieValues()
+	return Map.get(c, name)
 }
 
 // Body shortcuts
 
 func getBodyString as string
 {
-	if(bodyString == null) {
+	if bodyString == null {
 		var buffer = getBodyBuffer()
-		if(buffer != null) {
+		if buffer:
 			bodyString = String.forUTF8Buffer(buffer)
-		}
 		bodyBuffer = null
 	}
-	return(bodyString)
+	return bodyString
 }
 
-func getBodyJSONObject as object
-{
-	return(JSONParser.parse(getBodyString()))
-}
+func getBodyJSONObject as object:
+	return JSONParser.parse(getBodyString())
 
-func getBodyJSONVector as DynamicVector
-{
-	return(getBodyJSONObject() as DynamicVector)
-}
+func getBodyJSONVector as DynamicVector:
+	return getBodyJSONObject() as DynamicVector
 
-func getBodyJSONMap as DynamicMap
-{
-	return(getBodyJSONObject() as DynamicMap)
-}
+func getBodyJSONMap as DynamicMap:
+	return getBodyJSONObject() as DynamicMap
 
 func getBodyJSONMapValue(key as string) as string
 {
-	var map = getBodyJSONMap()
-	if(map == null) {
-		return(null)
-	}
-	return(map.getString(key))
+	var map = assert getBodyJSONMap()
+	return map.getString(key)
 }
 
 func getPostParameters as map<string,string>
 {
-	if(postParameters == null) {
+	if postParameters == null {
 		var bs = getBodyString()
-		if(String.isEmpty(bs)) {
-			return(null)
-		}
+		if String.isEmpty(bs):
+			return null
 		postParameters = QueryString.parse(bs)
 	}
-	return(postParameters)
+	return postParameters
 }
 
 func getPostParameter(key as string) as string
 {
-	var pps = getPostParameters()
-	if(pps == null) {
-		return(null)
+	var pps = assert getPostParameters()
+	return Map.get(pps, key)
+}
+
+// Consolidated parameter retrieval
+
+func getParameterAsString(key as string) as string
+{
+	var qp = getQueryParameter(key)
+	if qp:
+		return qp
+	var pp = getPostParameter(key)
+	if pp:
+		return pp
+	var mv = getBodyJSONMapValue(key)
+	if mv:
+		return mv
+	return null
+}
+
+func getParameterAsDynamicMap(key as string) as DynamicMap
+{
+	var mm = getBodyJSONMap()
+	if mm:
+		return mm.getDynamicMap(key)
+	return null
+}
+
+func getParameterAsDynamicVector(key as string) as DynamicVector
+{
+	var mm = getBodyJSONMap()
+	if mm:
+		return mm.getDynamicVector(key)
+	var pp = getParameterAsString(key)
+	if pp {
+		var v = new DynamicVector()
+		foreach comp in String.split(pp,','):
+			v.append(comp)
+		return v
 	}
-	return(Map.get(pps, key))
+	return null
+}
+
+func getParameterAsVector(key as string) as vector
+{
+	var dv = assert getParameterAsDynamicVector(key)
+	return dv.toVector()
 }
 
 // Unknown
@@ -354,7 +350,7 @@ func getPostParameter(key as string) as string
 func getRelativeRequestPath(relativeTo as string) as string
 {
 	var path = assert getURLPath()
-	if relativeTo != null && String.startsWith(path, relativeTo) {
+	if relativeTo && String.startsWith(path, relativeTo) {
 		path = String.getSubString(path, String.getLength(relativeTo))
 	}
 	else {
@@ -367,18 +363,14 @@ func getRelativeRequestPath(relativeTo as string) as string
 
 func initResources
 {
-	var path = getURLPath()
-	if(path == null) {
-		return
-	}
+	var path = assert getURLPath()
 	resources = String.split(path, '/')
 	Vector.removeFirst(resources)
 	var vsz = Vector.getSize(resources)
-	if(vsz > 0) {
+	if vsz > 0 {
 		var last = Vector.get(resources, vsz-1)
-		if(String.isEmpty(last)) {
+		if String.isEmpty(last):
 			Vector.removeLast(resources)
-		}
 	}
 	currentResource = 0
 }
@@ -405,22 +397,17 @@ func getRemainingResourceCount as int
 func acceptMethodAndResource(methodToAccept as string, resource as string, mustBeLastResource as bool = false) as bool
 {
 	assert resource
-	if(methodToAccept == null || method == methodToAccept) {
-		var cc = peekResource()
-		if(cc == null) {
-			return(false)
-		}
-		if(cc != resource) {
-			return(false)
-		}
+	if methodToAccept == null || method == methodToAccept {
+		var cc = assert peekResource()
+		assert cc == resource
 		popResource()
-		if(mustBeLastResource && hasMoreResources()) {
+		if mustBeLastResource && hasMoreResources() {
 			unpopResource()
-			return(false)
+			return false
 		}
-		return(true)
+		return true
 	}
-	return(false)
+	return false
 }
 
 func acceptResource(resource as string, mustBeLastResource as bool = false) as bool
@@ -439,22 +426,16 @@ func acceptResource(resource as string, mustBeLastResource as bool = false) as b
 
 func peekResource as string
 {
-	if(resources == null) {
+	if resources == null:
 		initResources()
-	}
-	if(resources == null) {
-		return(null)
-	}
-	if(currentResource < Vector.getSize(resources)) {
-		return(resources[currentResource])
-	}
-	return(null)
+	assert resources
+	if currentResource < Vector.getSize(resources):
+		return resources[currentResource]
+	return null
 }
 
-func getCurrentResource as int
-{
-	return(currentResource)
-}
+func getCurrentResource as int:
+	return currentResource
 
 func setCurrentResource(value as int)
 {
@@ -464,20 +445,19 @@ func setCurrentResource(value as int)
 
 func popResource as string
 {
-	if(resources == null) {
+	if resources == null:
 		initResources()
-	}
 	var v = peekResource()
-	if(v != null) {
+	if v {
 		currentResource ++
 		relativeResourcePath = null
 	}
-	return(v)
+	return v
 }
 
 func unpopResource
 {
-	if(currentResource > 0) {
+	if currentResource > 0 {
 		currentResource --
 		relativeResourcePath = null
 	}
@@ -530,26 +510,24 @@ func getResourcePathComponent(index as int, nTrailingComponents as int = -1) as 
 
 func getRelativeResourcePath as string
 {
-	if(resources == null) {
-		return(getURLPath())
-	}
-	if(relativeResourcePath == null) {
+	if resources == null:
+		return getURLPath()
+	if relativeResourcePath == null {
 		var rrs = getRelativeResources()
-		if(rrs != null) {
+		if rrs {
 			var sb = new StringBuilder()
-			foreach(rr in rrs) {
-				if(String.isEmpty(rr) == false) {
+			foreach rr in rrs {
+				if String.isEmpty(rr) == false {
 					sb.append('/')
 					sb.append(rr)
 				}
 			}
-			if(sb.count() < 1) {
+			if sb.count() < 1:
 				sb.append('/')
-			}
 			relativeResourcePath = sb.toString()
 		}
 	}
-	return(relativeResourcePath)
+	return relativeResourcePath
 }
 
 func isForResource(res as string) as bool

@@ -215,3 +215,10 @@ func delete(path as string, handler as function<void,HTTPServerRequest>) as this
 
 func patch(path as string, handler as function<void,HTTPServerRequest>) as this:
 	IMPLEMENT_ADD_HANDLER_FUNCTION(patchHandlerFunctions, path, handler)
+
+func getOrPost(path as string, handler as function<void,HTTPServerRequest>) as this
+{
+	get(path, handler)
+	post(path, handler)
+	return this
+}

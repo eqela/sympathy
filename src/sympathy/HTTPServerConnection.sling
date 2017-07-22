@@ -112,7 +112,7 @@ func updateListeningMode
 	var readFlag = true
 	if responseToSend:
 		writeFlag = true
-	if isWaitingForBodyReceiver:
+	if isWaitingForBodyReceiver || closeAfterSend:
 		readFlag = false
 	if readFlag && writeFlag {
 		enableReadWriteMode()
