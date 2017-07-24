@@ -37,7 +37,7 @@ func main(args as array<string>) as int #main
 		req = HTTPClientRequest.forGET(args[0])
 	}
 	else if asz >= 3 {
-		var ff = FileInstance.forPath(args[2])
+		var ff = File.forPath(args[2])
 		if not ff.isFile() {
 			PRINT "Not a file: `" .. args[2] .. "'"
 			return 1
@@ -70,7 +70,7 @@ func main(args as array<string>) as int #main
 		}
 		PRINT resp.toString()
 		if SIZE(args) >= 4 {
-			var of = FileInstance.forPath(args[3])
+			var of = File.forPath(args[3])
 			if not of.setContentsBuffer(data):
 				PRINT "FAILED to write output file: " .. of.getPath()
 		}

@@ -93,7 +93,7 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 		return true
 	}
 	if key == "loggingDirectory" {
-		loggingDirectory = FileInstance.forRelativePath(value, relativeTo)
+		loggingDirectory = File.forRelativePath(value, relativeTo)
 		return true
 	}
 	if key == "enableDebugMessages" {
@@ -184,10 +184,13 @@ func execute(args as array<string>) as bool
 				Log.error(ctx, "Duplicate config file parameter supplied: `" .. arg.getComplete() .. "'")
 				return false
 			}
-			configFile = FileInstance.forPath(arg.getStringValue())
+			configFile = File.forPath(arg.getStringValue())
 		}
 		else if arg.isFlag("help") || arg.isFlag("h") {
 			showHelp = true
+		}
+		else if arg.isFlag("debug") {
+			enableDebugMessages = true
 		}
 		else if arg.key && String.startsWith(arg.key, "O") {
 			var key = String.getSubString(arg.key, 1)

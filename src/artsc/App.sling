@@ -320,7 +320,7 @@ func execute(args as array<string>) as bool
 				Log.error(ctx, "Only one config file can be supplied.")
 				return(false)
 			}
-			configFile = FileInstance.forPath(arg.getComplete())
+			configFile = File.forPath(arg.getComplete())
 		}
 		else if(arg.isFlag("help") || arg.isFlag("h")) {
 			showHelp = true

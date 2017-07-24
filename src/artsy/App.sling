@@ -64,19 +64,19 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 		return(true)
 	}
 	if(key == "siteDirectory") {
-		siteDirectory = FileInstance.forRelativePath(value, relativeTo)
+		siteDirectory = File.forRelativePath(value, relativeTo)
 		return(true)
 	}
 	if(key == "dataDirectory") {
-		dataDirectory = FileInstance.forRelativePath(value, relativeTo)
+		dataDirectory = File.forRelativePath(value, relativeTo)
 		return(true)
 	}
 	if(key == "themeDirectory") {
-		themeDirectory = FileInstance.forRelativePath(value, relativeTo)
+		themeDirectory = File.forRelativePath(value, relativeTo)
 		return(true)
 	}
 	if(key == "publicDirectory") {
-		publicDirectory = FileInstance.forRelativePath(value, relativeTo)
+		publicDirectory = File.forRelativePath(value, relativeTo)
 		return(true)
 	}
 	if(key == "urlPrefix") {

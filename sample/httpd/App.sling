@@ -36,7 +36,7 @@ class MyBodyReceiver is DataStream
 	func onDataStreamStart(length as long) as bool
 	{
 		Log.debug(logContext, "DataStream started: " .. String.forInteger(length) .. " bytes")
-		var file = FileInstance.forPath(fileName)
+		var file = File.forPath(fileName)
 		writer = file.write()
 		if(writer == null) {
 			Log.error(logContext, "Failed to open file for writing: `" .. file.getPath() .. "'")
@@ -246,7 +246,7 @@ func main(args as array<string>) as int #main
 
 	// Serves all files in the current directory of the process (where you execute
 	// this program from) under the URL /allfiles
-	var files = HTTPServerDirectoryHandler.forDirectory(FileInstance.forPath("."))
+	var files = HTTPServerDirectoryHandler.forDirectory(File.forPath("."))
 	files.setListDirectories(true)
 	files.setProcessTemplateFiles(true)
 	files.setIndexFiles([

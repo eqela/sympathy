@@ -40,6 +40,6 @@ func getDatabase(ctx as LoggingContext, connectionString as string) static as SQ
 	if dbtype == "mysql":
 		return MySQLDatabase.forConnectionString(dbstr, ctx)
 	if dbtype == "sqlite":
-		return SQLiteDatabase.forFile(FileInstance.forPath(dbstr), true, ctx)
+		return SQLiteDatabase.forFile(File.forPath(dbstr), true, ctx)
 	return null
 }

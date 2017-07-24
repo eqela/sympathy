@@ -56,7 +56,7 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 		return(true)
 	}
 	if(key == "contentDirectory") {
-		contentDirectory = FileInstance.forRelativePath(value, relativeTo)
+		contentDirectory = File.forRelativePath(value, relativeTo)
 		return(true)
 	}
 	if(key == "listDirectories") {
