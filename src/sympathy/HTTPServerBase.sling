@@ -39,12 +39,12 @@ var maintenanceTimer as IOManagerTimer
 ctor
 {
 	setPort(8080)
-	setServerName(VALUE("sling_project_title") .. "/" .. VALUE("sling_project_version"))
+	setServerName(VALUE "sling_project_title" .. "/" .. VALUE "sling_project_version")
 }
 
 macro UPDATE_SERVER_NAME
 {
-	thisObject.setServerName(VALUE("sling_project_title") .. "/" .. VALUE("sling_project_version"))
+	thisObject.setServerName(VALUE "sling_project_title" .. "/" .. VALUE "sling_project_version")
 }
 
 func createConnectionObject override as NetworkConnection:
@@ -92,24 +92,24 @@ func initialize override as bool
 {
 	assert base.initialize()
 	if timeoutDelay < 1 {
-		Log.debug(logContext, VALUE("__THIS__") .. ": Timeout timer disabled")
+		Log.debug(logContext, VALUE "__THIS__" .. ": Timeout timer disabled")
 	}
 	else {
-		Log.debug(logContext, VALUE("__THIS__") .. ": Starting a timeout timer with a " .. String.forInteger(timeoutDelay) .. " second delay.")
+		Log.debug(logContext, VALUE "__THIS__" .. ": Starting a timeout timer with a " .. String.forInteger(timeoutDelay) .. " second delay.")
 		timeoutTimer = ioManager.startTimer((timeoutDelay as long) * 1000000, onTimeoutTimer)
 		if timeoutTimer == null:
-			Log.error(logContext, VALUE("__THIS__") .. ": Failed to start timeout timer")
+			Log.error(logContext, VALUE "__THIS__" .. ": Failed to start timeout timer")
 	}
 	if maintenanceTimerDelay < 1 {
 		Log.debug(logContext, "Maintenance timer disabled")
 	}
 	else {
-		Log.debug(logContext, VALUE("__THIS__") .. ": Starting a maintenance timer with a " .. String.forInteger(maintenanceTimerDelay) .. " second delay.")
+		Log.debug(logContext, VALUE "__THIS__" .. ": Starting a maintenance timer with a " .. String.forInteger(maintenanceTimerDelay) .. " second delay.")
 		maintenanceTimer = ioManager.startTimer((maintenanceTimerDelay as long) * 1000000, onMaintenanceTimer)
 		if maintenanceTimer == null:
-			Log.error(logContext, VALUE("__THIS__") .. ": Failed to start maintenance timer")
+			Log.error(logContext, VALUE "__THIS__" .. ": Failed to start maintenance timer")
 	}
-	Log.info(logContext, VALUE("__THIS__") .. ": initialized: `" .. getServerName() .. "'")
+	Log.info(logContext, VALUE "__THIS__" .. ": initialized: `" .. getServerName() .. "'")
 	return true
 }
 
@@ -208,7 +208,7 @@ func startResponseWorker(worker as HTTPServerResponseWorker) as bool
 		worker.abort()
 		return fail
 	}
-	Log.debug(logContext, VALUE("__THIS__") .. ": Starting a new worker thread. We now have " .. String.forInteger(WorkerThread.workerThreadCount+1) .. " thread(s).")
+	Log.debug(logContext, VALUE "__THIS__" .. ": Starting a new worker thread. We now have " .. String.forInteger(WorkerThread.workerThreadCount+1) .. " thread(s).")
 	return Thread.start(new WorkerThread().setWorker(worker))
 }
 

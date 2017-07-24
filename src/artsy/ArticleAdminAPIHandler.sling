@@ -50,8 +50,8 @@ func handleRequest(req as HTTPServerRequest, next as function)
 	var resource = req.popResource()
 	if(resource == null) {
 		req.sendJSONObject(new DynamicMap()
-			.set("server", VALUE("title"))
-			.set("version", VALUE("version"))
+			.set("server", VALUE "title")
+			.set("version", VALUE "version")
 		)
 		return
 	}

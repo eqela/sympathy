@@ -98,8 +98,8 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 			"index.html"
 		])
 	}
-	files.setServerURL(VALUE("sling_project_url"))
-	files.setServerName(VALUE("sling_project_title") .. "/" .. VALUE("sling_project_version"))
+	files.setServerURL(VALUE "sling_project_url")
+	files.setServerName(VALUE "sling_project_title" .. "/" .. VALUE "sling_project_version")
 	server.pushRequestHandler(files)
 	return(true)
 }

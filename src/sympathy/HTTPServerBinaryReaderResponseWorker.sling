@@ -62,7 +62,7 @@ func tick override as bool
 	if r < 1:
 		return false
 	if not session.writeData(workBuffer, r) {
-		Log.debug(context, "Remote connection closed. " .. VALUE("__THIS__") .. " aborted.")
+		Log.debug(context, "Remote connection closed. " .. VALUE "__THIS__" .. " aborted.")
 		return false
 	}
 	return true

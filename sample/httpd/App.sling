@@ -79,25 +79,25 @@ class MySpecialRequestHandler is HTTPServerRequestHandlerAdapter
 	func initialize(server as HTTPServerBase) override
 	{
 		base.initialize(server)
-		Log.info(logContext, "Running initialize for " .. VALUE("__THIS__"))
+		Log.info(logContext, "Running initialize for " .. VALUE "__THIS__")
 	}
 
 	func onMaintenance override
 	{
 		base.onMaintenance()
-		Log.info(logContext, "Running maintenance for " .. VALUE("__THIS__"))
+		Log.info(logContext, "Running maintenance for " .. VALUE "__THIS__")
 	}
 
 	func onRefresh override
 	{
 		base.onRefresh()
-		Log.info(logContext, "Running refresh for " .. VALUE("__THIS__"))
+		Log.info(logContext, "Running refresh for " .. VALUE "__THIS__")
 	}
 
 	func cleanup override
 	{
 		base.cleanup()
-		Log.info(logContext, "Running cleanup for " .. VALUE("__THIS__"))
+		Log.info(logContext, "Running cleanup for " .. VALUE "__THIS__")
 	}
 
 	func onGET(req as HTTPServerRequest) override as bool

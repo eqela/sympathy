@@ -40,7 +40,7 @@ func getMimeType override as string:
 	return "application/json; charset=\"UTF-8\""
 
 func getWorkerDescription override as string:
-	return VALUE("__THIS__")
+	return VALUE "__THIS__"
 
 func onStart override
 {
@@ -65,7 +65,7 @@ func tick override as bool
 	var ss = sb.toString()
 	if String.getLength(ss) > 0 {
 		if not session.writeData(String.toUTF8Buffer(ss)) {
-			Log.debug(context, "Remote connection closed. " .. VALUE("__THIS__") .. " aborted.")
+			Log.debug(context, "Remote connection closed. " .. VALUE "__THIS__" .. " aborted.")
 			v = false
 		}
 	}
@@ -75,6 +75,6 @@ func tick override as bool
 func onEnd override
 {
 	session.writeData(String.toUTF8Buffer("]"))
-	Log.debug(context, VALUE("__THIS__") .. " ended. " .. String.formatLongInteger(totalRecords, ',') .. " records were sent.")
+	Log.debug(context, VALUE "__THIS__" .. " ended. " .. String.formatLongInteger(totalRecords, ',') .. " records were sent.")
 	base.onEnd()
 }
