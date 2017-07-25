@@ -84,7 +84,7 @@ func forDetails(status as string, code as string, message as string) static as D
 
 func forMissingData(type as string = null) static as DynamicMap
 {
-	if String.isNotEmpty(type)
+	if String.isNotEmpty(type):
 		return forErrorMessage("Missing data: " .. type, "missing_data")
 	return forErrorMessage("Missing data", "missing_data")
 }
