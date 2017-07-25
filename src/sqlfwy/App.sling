@@ -30,12 +30,8 @@ import sympathy
 import sympathy.app
 import sympathy.db
 
-func main(args as array<string>) static as int #main
-{
-	if new this().execute(args) == false:
-		return 1
-	return 0
-}
+func main(args as array<string>) static as int #main:
+	return new this().execute(args) ? 0 : 1
 
 var dbs as map<string,string>
 
@@ -59,9 +55,9 @@ func printHeader(stdout as PrintWriter) override:
 func printVersion(stdout as PrintWriter, longFormat as bool) override:
 	ConsoleApplication.PRINT_VERSION(stdout, longFormat)
 
-func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
+func initializeServer(server as HTTPServer) override as bool
 {
-	assert base.initialize(ctx, server):
+	assert base.initializeServer(server):
 		Log.error(ctx, "Failed to initialize HTTP server")
 	assert dbs:
 		Log.error(ctx, "No databases configured. Configure `db-*' options first.")
