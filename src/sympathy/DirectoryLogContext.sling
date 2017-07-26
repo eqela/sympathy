@@ -75,7 +75,25 @@ func message(type as string, text as string) private
 	else {
 		logTime = "DATE/TIME"
 	}
-	var logLine = "[" .. String.padToLength(type, 7) .. "] [" .. logTime .. "]: " .. text
+	var logLine = "[" .. logTime .. "]: " .. text
+	if alsoPrintOnConsole && ctx {
+		if "ERROR" == type {
+			Log.error(ctx, logLine)
+		}
+		else if "WARNING" == type {
+			Log.warning(ctx, logLine)
+		}
+		else if "INFO" == type {
+			Log.info(ctx, logLine)
+		}
+		else if "DEBUG" == type {
+			Log.debug(ctx, logLine)
+		}
+		else if "STATUS" == type {
+			Log.status(ctx, logLine)
+		}
+	}
+	logLine = "[" .. String.padToLength(type, 7) .. "] " .. logLine
 	if logDir {
 		var logIdName as string
 		if dt {
@@ -97,23 +115,6 @@ func message(type as string, text as string) private
 				return
 			if os is FlushableWriter:
 				(os as! FlushableWriter).flush()
-		}
-	}
-	if alsoPrintOnConsole && ctx {
-		if "ERROR" == type {
-			Log.error(ctx, logLine)
-		}
-		else if "WARNING" == type {
-			Log.warning(ctx, logLine)
-		}
-		else if "INFO" == type {
-			Log.info(ctx, logLine)
-		}
-		else if "DEBUG" == type {
-			Log.debug(ctx, logLine)
-		}
-		else if "STATUS" == type {
-			Log.status(ctx, logLine)
 		}
 	}
 }
