@@ -24,14 +24,15 @@
 
 class is LoggingContext:
 
-func create(logDir as File, logIdPrefix as string = null, dbg as bool = true, ctx as LoggingContext = null) static as this
+import capex.console
+
+func create(logDir as File, logIdPrefix as string = null, dbg as bool = true) static as this
 {
 	var v = new this()
 	v.setLogDir(logDir)
 	v.setEnableDebugMessages(dbg)
 	if String.isNotEmpty(logIdPrefix):
 		v.setLogIdPrefix(logIdPrefix)
-	v.setCtx(ctx)
 	return v
 }
 
@@ -46,20 +47,19 @@ var alsoPrintOnConsole private = false
 func setEnableDebugMessages(value as bool)
 {
 	enableDebugMessages = value
-	if ctx:
-		ctx.setEnableDebugMessages(enableDebugMessages)
+	var cac = ctx as ConsoleApplicationContext
+	if cac:
+		cac.setEnableDebugMessages(enableDebugMessages)
 }
 
 func setAlsoPrintOnConsole(value as bool)
 {
 	alsoPrintOnConsole = value
 	if alsoPrintOnConsole {
-		ctx = new ConsoleApplicationContext()
-		ctx.setEnableDebugMessages(enableDebugMessages)
+		ctx = new ConsoleApplicationContext().setEnableDebugMessages(enableDebugMessages)
+		return
 	}
-	else {
-		ctx = null
-	}
+	ctx = null
 }
 
 func logError(text as string):
