@@ -36,12 +36,31 @@ func create(logDir as File, logIdPrefix as string = null, dbg as bool = true, ct
 }
 
 prop ctx as LoggingContext
-prop enableDebugMessages = true
+var enableDebugMessages private = true
 prop logDir as File
 prop logIdPrefix = "messages"
 var os as PrintWriter
 var currentLogIdName as string
-prop alsoPrintOnConsole = false
+var alsoPrintOnConsole private = false
+
+func setEnableDebugMessages(value as bool)
+{
+	enableDebugMessages = value
+	if ctx:
+		ctx.setEnableDebugMessages(enableDebugMessages)
+}
+
+func setAlsoPrintOnConsole(value as bool)
+{
+	alsoPrintOnConsole = value
+	if alsoPrintOnConsole {
+		ctx = new ConsoleApplicationContext()
+		ctx.setEnableDebugMessages(enableDebugMessages)
+	}
+	else {
+		ctx = null
+	}
+}
 
 func logError(text as string):
 	message("ERROR", text)
@@ -76,7 +95,7 @@ func message(type as string, text as string) private
 		logTime = "DATE/TIME"
 	}
 	var logLine = "[" .. logTime .. "]: " .. text
-	if alsoPrintOnConsole && ctx {
+	if alsoPrintOnConsole {
 		if "ERROR" == type {
 			Log.error(ctx, logLine)
 		}
