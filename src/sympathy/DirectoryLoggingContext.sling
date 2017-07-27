@@ -24,57 +24,66 @@
 
 class is LoggingContext:
 
+import capex.console
+
 func create(logDir as File, logIdPrefix as string = null, dbg as bool = true) static as this
 {
 	var v = new this()
 	v.setLogDir(logDir)
 	v.setEnableDebugMessages(dbg)
-	if(String.isEmpty(logIdPrefix) == false) {
+	if String.isNotEmpty(logIdPrefix):
 		v.setLogIdPrefix(logIdPrefix)
-	}
-	return(v)
+	return v
 }
 
-prop enableDebugMessages = true
 prop logDir as File
 prop logIdPrefix = "messages"
-var os as PrintWriter
 var currentLogIdName as string
-prop alsoPrintOnConsole = false
+var os as PrintWriter
+var ctx as LoggingContext
+var enableDebugMessages private = true
+var alsoPrintOnConsole private = false
 
-func logError(text as string)
+func setEnableDebugMessages(value as bool)
 {
-	message("ERROR", text)
+	enableDebugMessages = value
+	var cac = ctx as ConsoleApplicationContext
+	if cac:
+		cac.setEnableDebugMessages(enableDebugMessages)
 }
 
-func logWarning(text as string)
+func setAlsoPrintOnConsole(value as bool)
 {
-	message("WARNING", text)
-}
-
-func logInfo(text as string)
-{
-	message("INFO", text)
-}
-
-func logDebug(text as string)
-{
-	message("DEBUG", text)
-}
-
-func logStatus(text as string)
-{
-	message("STATUS", text)
-}
-
-func message(type as string, text as string)
-{
-	if(enableDebugMessages == false && String.equalsIgnoreCase("debug", type)) {
+	alsoPrintOnConsole = value
+	if alsoPrintOnConsole {
+		ctx = new ConsoleApplicationContext().setEnableDebugMessages(enableDebugMessages)
 		return
 	}
+	ctx = null
+}
+
+func logError(text as string):
+	message("ERROR", text)
+
+func logWarning(text as string):
+	message("WARNING", text)
+
+func logInfo(text as string):
+	message("INFO", text)
+
+func logDebug(text as string):
+	message("DEBUG", text)
+
+func logStatus(text as string):
+	message("STATUS", text)
+
+func message(type as string, text as string) private
+{
+	if not enableDebugMessages && String.equalsIgnoreCase("debug", type):
+		return
 	var dt = DateTime.forNow()
 	var logTime as string
-	if(dt != null) {
+	if dt {
 		logTime = String.forInteger(dt.getYear()) .. "-" ..
 			String.forIntegerWithPadding(dt.getMonth(), 2) .. "-" ..
 			String.forIntegerWithPadding(dt.getDayOfMonth(), 2) .. " " ..
@@ -85,43 +94,55 @@ func message(type as string, text as string)
 	else {
 		logTime = "DATE/TIME"
 	}
-	var logLine = "[" .. String.padToLength(type, 7) .. "] [" .. logTime .. "]: " .. text
-	if(logDir != null) {
+	var logLine = "[" .. logTime .. "]: " .. text
+	if alsoPrintOnConsole {
+		if "ERROR" == type {
+			Log.error(ctx, logLine)
+		}
+		else if "WARNING" == type {
+			Log.warning(ctx, logLine)
+		}
+		else if "INFO" == type {
+			Log.info(ctx, logLine)
+		}
+		else if "DEBUG" == type {
+			Log.debug(ctx, logLine)
+		}
+		else if "STATUS" == type {
+			Log.status(ctx, logLine)
+		}
+	}
+	logLine = "[" .. String.padToLength(type, 7) .. "] " .. logLine
+	if logDir {
 		var logIdName as string
-		if(dt != null) {
+		if dt {
 			logIdName = logIdPrefix .. "_" .. String.forInteger(dt.getYear()) .. String.forIntegerWithPadding(dt.getMonth(), 2) .. String.forIntegerWithPadding(dt.getDayOfMonth(), 2) .. ".log"
 		}
 		else {
 			logIdName = logIdPrefix .. ".log"
 		}
-		if(os == null || currentLogIdName != logIdName) {
+		if not os || currentLogIdName != logIdName {
 			currentLogIdName = logIdName
 			os = PrintWriterWrapper.forWriter(logDir.entry(currentLogIdName).append())
-			if(os == null && logDir.isDirectory() == false) {
+			if not os && not logDir.isDirectory() {
 				logDir.createDirectoryRecursive()
 				os = PrintWriterWrapper.forWriter(logDir.entry(currentLogIdName).append())
 			}
 		}
-		if(os != null) {
-			if(os.println(logLine) == false) {
+		if os {
+			if not os.println(logLine):
 				return
-			}
-			if(os is FlushableWriter) {
+			if os is FlushableWriter:
 				(os as! FlushableWriter).flush()
-			}
 		}
-	}
-	if(alsoPrintOnConsole) {
-		PRINT(logLine)
 	}
 }
 
 dtor
 {
-	if(os != null) {
-		if(os is Closable) {
+	if os {
+		if os is Closable:
 			(os as! Closable).close()
-		}
 		os = null
 	}
 }
