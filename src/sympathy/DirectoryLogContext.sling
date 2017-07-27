@@ -35,12 +35,12 @@ func create(logDir as File, logIdPrefix as string = null, dbg as bool = true, ct
 	return v
 }
 
-prop ctx as LoggingContext
-var enableDebugMessages private = true
 prop logDir as File
 prop logIdPrefix = "messages"
-var os as PrintWriter
 var currentLogIdName as string
+var os as PrintWriter
+var ctx as LoggingContext
+var enableDebugMessages private = true
 var alsoPrintOnConsole private = false
 
 func setEnableDebugMessages(value as bool)
