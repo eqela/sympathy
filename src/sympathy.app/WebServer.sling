@@ -240,10 +240,7 @@ func execute(args as array<string>) as bool
 		Log.debug(ctx, "Configuring logging to directory: `" .. loggingDirectory.getPath() .. "'")
 		var dlc = DirectoryLogContext.create(loggingDirectory)
 		dlc.setEnableDebugMessages(enableDebugMessages)
-		if alsoPrintOnConsole {
-			dlc.setAlsoPrintOnConsole(alsoPrintOnConsole)
-			dlc.setCtx(new ConsoleApplicationContext().setEnableDebugMessages(enableDebugMessages))
-		}
+		dlc.setAlsoPrintOnConsole(alsoPrintOnConsole)
 		ctx = dlc
 	}
 	else {
