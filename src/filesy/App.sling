@@ -30,60 +30,48 @@ import sympathy
 
 func main(args as array<string>) static as int #main
 {
-	if(new this().execute(args) == false) {
-		return(1)
-	}
-	return(0)
+	if new this().execute(args) == false:
+		return 1
+	return 0
 }
 
 var contentDirectory as File
 var listDirectories = true
 var processTemplateFiles = false
 
-func printHeader(stdout as PrintWriter) override
-{
+func printHeader(stdout as PrintWriter) override:
 	ConsoleApplication.PRINT_HEADER(stdout, null)
-}
 
-func printVersion(stdout as PrintWriter, longFormat as bool) override
-{
+func printVersion(stdout as PrintWriter, longFormat as bool) override:
 	ConsoleApplication.PRINT_VERSION(stdout, longFormat)
-}
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
-	if(base.configure(key, value, relativeTo, error)) {
-		return(true)
-	}
-	if(key == "contentDirectory") {
+	if base.configure(key, value, relativeTo, error):
+		return true
+	if key == "contentDirectory" {
 		contentDirectory = File.forRelativePath(value, relativeTo)
-		return(true)
+		return true
 	}
-	if(key == "listDirectories") {
+	if key == "listDirectories" {
 		listDirectories = Boolean.asBoolean(value)
-		return(true)
+		return true
 	}
-	if(key == "processTemplateFiles") {
+	if key == "processTemplateFiles" {
 		processTemplateFiles = Boolean.asBoolean(value)
-		return(true)
+		return true
 	}
-	return(false)
+	return false
 }
 
-func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
+func initializeServer(server as HTTPServer) override as bool
 {
-	if(base.initialize(ctx, server) == false) {
-		return(false)
-	}
+	assert base.initializeServer(server)
 	server.UPDATE_SERVER_NAME()
-	if(contentDirectory == null) {
+	assert contentDirectory:
 		Log.error(ctx, "No `contentDirectory' specified. Either use a config file or specify -OcontentDirectory=<directory>")
-		return(false)
-	}
-	if(contentDirectory.isDirectory() == false) {
+	assert contentDirectory.isDirectory():
 		Log.error(ctx, "Not a directory: `" .. contentDirectory.getPath() .. "'")
-		return(false)
-	}
 	var files = HTTPServerDirectoryHandler.forDirectory(contentDirectory)
 	files.setListDirectories(listDirectories)
 	files.setProcessTemplateFiles(processTemplateFiles)
@@ -101,5 +89,5 @@ func initialize(ctx as LoggingContext, server as HTTPServer) override as bool
 	files.setServerURL(VALUE "sling_project_url")
 	files.setServerName(VALUE "sling_project_title" .. "/" .. VALUE "sling_project_version")
 	server.pushRequestHandler(files)
-	return(true)
+	return true
 }
