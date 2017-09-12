@@ -46,13 +46,21 @@ func getIPAddress(hostname as string, ctx as LoggingContext) override as string
 func getIPAddresses(hostname as string, ctx as LoggingContext) override as DynamicVector
 {
 	var v = new DynamicVector()
-	lang "cs" {{{
-		foreach(System.Net.IPAddress address in System.Net.Dns.GetHostAddresses(hostname)) {
-			System.Console.WriteLine("SMTP ADDRESS: " + address.ToString());
-	}}}
-	v.append(lang "cs" string {{{ address.ToString() }}})
-	lang "cs" {{{
+	var error as string #preserve
+	try {
+		var addresses = assert lang "cs" array<!"System.Net.IPAddress"> {{{ System.Net.Dns.GetHostAddresses(hostname) }}}
+		foreach address in addresses {
+			var ip = lang "cs" string {{{ address.ToString() }}}
+			if String.isNotEmpty(ip) {
+				Log.debug(ctx, "SMTP ADDRESS: " .. ip)
+				v.append(ip)
+			}
 		}
-	}}}
-	return(v)
+	}
+	catch(e as !"System.Exception") {
+		error = lang "cs" string {{{ e.ToString() }}}
+	}
+	if String.isNotEmpty(error):
+		Log.error(ctx, error)
+	return v
 }
