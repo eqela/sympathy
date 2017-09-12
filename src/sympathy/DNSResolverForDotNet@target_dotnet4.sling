@@ -48,17 +48,14 @@ func getIPAddresses(hostname as string, ctx as LoggingContext) override as Dynam
 	var v = new DynamicVector()
 	var error as string #preserve
 	try {
-		lang "cs" {{{
-			foreach(System.Net.IPAddress address in System.Net.Dns.GetHostAddresses(hostname)) {
-		}}}
-		var ip = lang "cs" string {{{ address.ToString() }}}
-		if String.isNotEmpty(ip) {
-			Log.debug(ctx, "SMTP ADDRESS: " .. ip)
-			v.append(ip)
-		}
-		lang "cs" {{{
+		var addresses = assert lang "cs" array<!"System.Net.IPAddress"> {{{ System.Net.Dns.GetHostAddresses(hostname) }}}
+		foreach address in addresses {
+			var ip = lang "cs" string {{{ address.ToString() }}}
+			if String.isNotEmpty(ip) {
+				Log.debug(ctx, "SMTP ADDRESS: " .. ip)
+				v.append(ip)
 			}
-		}}}
+		}
 	}
 	catch(e as !"System.Exception") {
 		error = lang "cs" string {{{ e.ToString() }}}
