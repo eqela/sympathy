@@ -43,6 +43,10 @@ var os as PrintWriter
 var ctx as LoggingContext
 var enableDebugMessages private = true
 var alsoPrintOnConsole private = false
+var errorCount private = 0
+var warningCount private = 0
+var infoCount private = 0
+var debugCount private = 0
 
 func setEnableDebugMessages(value as bool)
 {
@@ -62,17 +66,29 @@ func setAlsoPrintOnConsole(value as bool)
 	ctx = null
 }
 
-func logError(text as string):
+func logError(text as string)
+{
 	message("ERROR", text)
+	errorCount ++
+}
 
-func logWarning(text as string):
+func logWarning(text as string)
+{
 	message("WARNING", text)
+	warningCount ++
+}
 
-func logInfo(text as string):
+func logInfo(text as string)
+{
 	message("INFO", text)
+	infoCount ++
+}
 
-func logDebug(text as string):
+func logDebug(text as string)
+{
 	message("DEBUG", text)
+	debugCount ++
+}
 
 func logStatus(text as string):
 	message("STATUS", text)
@@ -136,6 +152,29 @@ func message(type as string, text as string) private
 				(os as! FlushableWriter).flush()
 		}
 	}
+}
+
+func isInDebugMode as bool:
+	return enableDebugMessages
+
+func getErrorCount as int:
+	return errorCount
+
+func getWarningCount as int:
+	return warningCount
+
+func getInfoCount as int:
+	return infoCount
+
+func getDebugCount as int:
+	return debugCount
+
+func resetCounters
+{
+	errorCount = 0
+	warningCount = 0
+	infoCount = 0
+	debugCount = 0
 }
 
 dtor
