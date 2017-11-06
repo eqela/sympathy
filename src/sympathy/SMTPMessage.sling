@@ -39,176 +39,145 @@ var date as string
 prop excludeAddresses as DynamicVector
 var counter private static = 0
 
-ctor
-{
-	date = VerboseDateTimeString.forNow()
-}
+ctor:
+	date = VerboseDateTimeString.forUTCNow()
 
-func onChanged private
-{
+func onChanged private:
 	messageBody = null
-}
 
 func generateMessageID(host as string) as this
 {
 	messageID = String.forInteger(SystemClock.asSeconds()) .. "-" .. String.forInteger(new Random().nextInt(1000000)) .. "-" .. String.forInteger(counter) .. "@" .. host
 	counter++
 	onChanged()
-	return(this)
+	return this
 }
 
-func getDate as string
-{
-	return(date)
-}
+func getDate as string:
+	return date
 
-func getReplyTo as string
-{
-	return(replyTo)
-}
+func getReplyTo as string:
+	return replyTo
 
 func setDate(date as string) as this
 {
 	this.date = date
 	onChanged()
-	return(this)
+	return this
 }
 
 func setMessageID(id as string) as this
 {
 	messageID = id
 	onChanged()
-	return(this)
+	return this
 }
 
 func setReplyTo(v as string) as this
 {
 	replyTo = v
 	onChanged()
-	return(this)
+	return this
 }
 
-func getMessageID as string
-{
-	return(messageID)
-}
+func getMessageID as string:
+	return messageID
 
 func isExcludedAddress(add as string) private as bool
 {
-	if(excludeAddresses == null || excludeAddresses.getSize() < 1) {
-		return(false)
+	if excludeAddresses == null || excludeAddresses.getSize() < 1:
+		return false
+	foreach ea as string in excludeAddresses.toVector() {
+		if String.equals(ea, add):
+			return true
 	}
-	foreach(ea as string in excludeAddresses.toVector()) {
-		if(String.equals(ea, add)) {
-			return(true)
-		}
-	}
-	return(false)
+	return false
 }
 
 func getAllRcpts as DynamicVector
 {
 	var rcpts = new DynamicVector()
-	if(rcptsTo != null) {
-		foreach(r as string in rcptsTo.toVector()) {
-			if(isExcludedAddress(r)) {
+	if rcptsTo {
+		foreach r as string in rcptsTo.toVector() {
+			if isExcludedAddress(r):
 				continue
-			}
 			rcpts.append(r)
 		}
 	}
-	if(rcptsCC != null) {
-		foreach(r as string in rcptsCC.toVector()) {
-			if(isExcludedAddress(r)) {
+	if rcptsCC {
+		foreach r as string in rcptsCC.toVector() {
+			if isExcludedAddress(r):
 				continue
-			}
 			rcpts.append(r)
 		}
 	}
-	if(rcptsBCC != null) {
-		foreach(r as string in rcptsBCC.toVector()) {
-			if(isExcludedAddress(r)) {
+	if rcptsBCC {
+		foreach r as string in rcptsBCC.toVector() {
+			if isExcludedAddress(r):
 				continue
-			}
 			rcpts.append(r)
 		}
 	}
-	return(rcpts)
+	return rcpts
 }
 
-func getRcptsTo as DynamicVector
-{
-	return(rcptsTo)
-}
+func getRcptsTo as DynamicVector:
+	return rcptsTo
 
-func getRcptsCC as DynamicVector
-{
-	return(rcptsCC)
-}
+func getRcptsCC as DynamicVector:
+	return rcptsCC
 
-func getRcptsBCC as DynamicVector
-{
-	return(rcptsBCC)
-}
+func getRcptsBCC as DynamicVector:
+	return rcptsBCC
 
-func getSubject as string
-{
-	return(subject)
-}
+func getSubject as string:
+	return subject
 
-func getContentType as string
-{
-	return(contentType)
-}
+func getContentType as string:
+	return contentType
 
-func getText as string
-{
-	return(text)
-}
+func getText as string:
+	return text
 
-func getMyName as string
-{
-	return(myName)
-}
+func getMyName as string:
+	return myName
 
-func getMyAddress as string
-{
-	return(myAddress)
-}
+func getMyAddress as string:
+	return myAddress
 
 func setSubject(s as string) as this
 {
 	subject = s
 	onChanged()
-	return(this)
+	return this
 }
 
 func setContentType(c as string) as this
 {
 	contentType = c
 	onChanged()
-	return(this)
+	return this
 }
 
 func setText(t as string) as this
 {
 	text = t
 	onChanged()
-	return(this)
+	return this
 }
 
 func setMyName(n as string) as this
 {
 	myName = n
 	onChanged()
-	return(this)
+	return this
 }
 
 func setMyAddress(a as string) as this
 {
 	myAddress = a
 	onChanged()
-	return(this)
+	return this
 }
 
 func setTo(address as string) as this
@@ -216,43 +185,40 @@ func setTo(address as string) as this
 	rcptsTo = new DynamicVector()
 	rcptsTo.append(address)
 	onChanged()
-	return(this)
+	return this
 }
 
 func addTo(address as string) as this
 {
-	if(String.isEmpty(address) == false) {
-		if(rcptsTo == null) {
+	if String.isNotEmpty(address) {
+		if not rcptsTo:
 			rcptsTo = new DynamicVector()
-		}
 		rcptsTo.append(address)
 	}
 	onChanged()
-	return(this)
+	return this
 }
 
 func addCC(address as string) as this
 {
-	if(String.isEmpty(address) == false) {
-		if(rcptsCC == null) {
+	if String.isNotEmpty(address) {
+		if not rcptsCC:
 			rcptsCC = new DynamicVector()
-		}
 		rcptsCC.append(address)
 	}
 	onChanged()
-	return(this)
+	return this
 }
 
 func addBCC(address as string) as this
 {
-	if(String.isEmpty(address) == false) {
-		if(rcptsBCC == null) {
+	if String.isNotEmpty(address) {
+		if not rcptsBCC:
 			rcptsBCC = new DynamicVector()
-		}
 		rcptsBCC.append(address)
 	}
 	onChanged()
-	return(this)
+	return this
 }
 
 func setRecipients(to as DynamicVector, cc as DynamicVector, bcc as DynamicVector) as this
@@ -261,33 +227,28 @@ func setRecipients(to as DynamicVector, cc as DynamicVector, bcc as DynamicVecto
 	rcptsCC = cc
 	rcptsBCC = bcc
 	onChanged()
-	return(this)
+	return this
 }
 
 func getSizeBytes as int
 {
-	var b = getMessageBody()
-	if(b == null) {
-		return(0)
-	}
+	var b = assert getMessageBody()
 	var bb = String.toUTF8Buffer(b)
-	if(bb == null) {
-		return(0)
-	}
-	return(Buffer.getSize(bb))
+	if not bb:
+		return 0
+	return Buffer.getSize(bb)
 }
 
 func getMessageBody virtual as string
 {
-	if(messageBody != null) {
-		return(messageBody)
-	}
+	if messageBody:
+		return messageBody
 	var sb = new StringBuilder()
 	sb.append("From: ")
 	sb.append(myName)
 	sb.append(" <")
 	sb.append(myAddress)
-	if(String.isEmpty(replyTo) == false) {
+	if String.isNotEmpty(replyTo) {
 		sb.append(">\r\nReply-To: ")
 		sb.append(myName)
 		sb.append(" <")
@@ -295,22 +256,20 @@ func getMessageBody virtual as string
 	}
 	sb.append(">\r\nTo: ")
 	var first = true
-	if(rcptsTo != null) {
-		foreach(to as string in rcptsTo.toVector()) {
-			if(first == false) {
+	if rcptsTo {
+		foreach to as string in rcptsTo.toVector() {
+			if not first:
 				sb.append(", ")
-			}
 			sb.append(to)
 			first = false
 		}
 	}
 	sb.append("\r\nCc: ")
 	first = true
-	if(rcptsCC != null) {
-		foreach(to as string in rcptsCC.toVector()) {
-			if(first == false) {
+	if rcptsCC {
+		foreach to as string in rcptsCC.toVector() {
+			if not first:
 				sb.append(", ")
-			}
 			sb.append(to)
 			first = false
 		}
@@ -327,5 +286,5 @@ func getMessageBody virtual as string
 	sb.append(">\r\n\r\n")
 	sb.append(text)
 	messageBody = sb.toString()
-	return(messageBody)
+	return messageBody
 }
