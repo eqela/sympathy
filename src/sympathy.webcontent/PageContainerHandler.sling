@@ -96,21 +96,20 @@ func onGET(req as HTTPServerRequest, next as function) override
 		return
 	}
 	pageContainer.getPageData(pageId, func(type as string, data as DynamicMap, attachments as DynamicVector) {
-		templateStorage.getTemplate(pageId, func(template as string) {
+		var t = type
+		if String.isEmpty(t):
+			t = pageId
+		templateStorage.getTemplate(t, func(template as string) {
+			assert String.isNotEmpty(template) {
+				req.unpopResource()
+				next()
+			}
 			var rdata = new DynamicMap()
 			rdata.set("country", country)
 			rdata.set("type", type)
 			rdata.set("content", data)
 			rdata.set("attachments", attachments)
 			rdata.set("site", siteData)
-			if not template {
-				assert data {
-					req.unpopResource()
-					next()
-				}
-				req.sendJSONObject(rdata)
-				return
-			}
 			sendCompleteResponse(req, rdata, template)
 		})
 	})
