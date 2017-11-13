@@ -232,7 +232,9 @@ func setRecipients(to as DynamicVector, cc as DynamicVector, bcc as DynamicVecto
 
 func getSizeBytes as int
 {
-	var b = assert getMessageBody()
+	var b = getMessageBody()
+	if not b:
+		return 0
 	var bb = String.toUTF8Buffer(b)
 	if not bb:
 		return 0
