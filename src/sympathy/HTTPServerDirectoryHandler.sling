@@ -225,6 +225,7 @@ func dirToHTML(dir as File) as string
 
 func onGET(req as HTTPServerRequest) override as bool
 {
+	var startingResource = req.getCurrentResource()
 	if(directory == null) {
 		return(false)
 	}
@@ -251,6 +252,8 @@ func onGET(req as HTTPServerRequest) override as bool
 			return(true)
 		}
 		if(listDirectories == false) {
+			if startingResource != req.getCurrentResource():
+				req.setCurrentResource(startingResource)
 			return(false)
 		}
 		req.sendHTMLString(dirToHTML(dd))
@@ -345,5 +348,7 @@ func onGET(req as HTTPServerRequest) override as bool
 		req.sendResponse(resp)
 		return(true)
 	}
+	if startingResource != req.getCurrentResource():
+		req.setCurrentResource(startingResource)
 	return(false)
 }
