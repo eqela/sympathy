@@ -97,7 +97,7 @@ func message(type as string, text as string) private
 {
 	if not enableDebugMessages && String.equalsIgnoreCase("debug", type):
 		return
-	var dt = DateTime.forNow()
+	var dt = DateTime.forUTCNow()
 	var logTime as string
 	if dt {
 		logTime = String.forInteger(dt.getYear()) .. "-" ..
