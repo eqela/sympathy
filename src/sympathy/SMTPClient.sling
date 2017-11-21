@@ -245,7 +245,7 @@ func executeTransaction(msg as SMTPMessage, server as URL, rcpts as DynamicVecto
 		return(SMTPClientTransactionResult.forError("Unable to connect to SMTP server `" .. host .. ":" .. String.forInteger(port) .. "'"))
 	}
 	var ops = PrintWriterWrapper.forWriter(socket)
-	var ins = new PrintReader(socket)
+	var ins = PrintReader.forReader(socket)
 	if(ops == null || ins == null) {
 		return(SMTPClientTransactionResult.forError("Unable to establish SMTP I/O streams"))
 	}
@@ -277,7 +277,7 @@ func executeTransaction(msg as SMTPMessage, server as URL, rcpts as DynamicVecto
 			return(SMTPClientTransactionResult.forError("Failed to start SSL"))
 		}
 		ops = PrintWriterWrapper.forWriter(socket)
-		ins = new PrintReader(socket)
+		ins = PrintReader.forReader(socket)
 	}
 	var username = url.getUsername()
 	var password = url.getPassword()
