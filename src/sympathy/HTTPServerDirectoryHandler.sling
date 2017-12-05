@@ -302,10 +302,10 @@ func onGET(req as HTTPServerRequest) override as bool
 				}
 				var tt as TextTemplate
 				if(isHTMLTemplate || isCSSTemplate) {
-					tt = TextTemplate.forHTMLString(data, includeDirs, logContext)
+					tt = TextTemplate.forHTMLString(data, includeDirs, null, logContext)
 				}
 				else {
-					tt = TextTemplate.forJSONString(data, includeDirs, logContext)
+					tt = TextTemplate.forJSONString(data, includeDirs, null, logContext)
 				}
 				if(tt == null) {
 					Log.error(logContext, "Failed to process template file content: `" .. dd.getPath() .. "'")

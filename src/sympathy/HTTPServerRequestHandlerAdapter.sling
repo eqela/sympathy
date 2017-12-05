@@ -27,23 +27,20 @@ class is HTTPServerRequestHandler is HTTPServerComponent:
 var server as HTTPServerBase
 var logContext protected as LoggingContext
 
-func getServer as HTTPServerBase
-{
-	return(server)
-}
+func getServer as HTTPServerBase:
+	return server
 
 func isInitialized as bool
 {
-	if(server == null) {
-		return(false)
-	}
-	return(true)
+	if server == null:
+		return false
+	return true
 }
 
 func initialize(server as HTTPServerBase) virtual
 {
 	this.server = server
-	if(server != null) {
+	if server {
 		this.logContext = server.getLogContext()
 	}
 	else {
@@ -59,89 +56,72 @@ func onRefresh virtual
 {
 }
 
-func cleanup virtual
-{
+func cleanup virtual:
 	this.server = null
-}
 
-func onGET(req as HTTPServerRequest) virtual as bool
-{
-	return(false)
-}
+func onGET(req as HTTPServerRequest) virtual as bool:
+	return false
 
 func onGET(req as HTTPServerRequest, next as function) virtual
 {
-	if(onGET(req) == false) {
+	if onGET(req) == false:
 		next()
-	}
 }
 
-func onPOST(req as HTTPServerRequest) virtual as bool
-{
-	return(false)
-}
+func onPOST(req as HTTPServerRequest) virtual as bool:
+	return false
 
 func onPOST(req as HTTPServerRequest, next as function) virtual
 {
-	if(onPOST(req) == false) {
+	if onPOST(req) == false:
 		next()
-	}
 }
 
-func onPUT(req as HTTPServerRequest) virtual as bool
-{
-	return(false)
-}
+func onPUT(req as HTTPServerRequest) virtual as bool:
+	return false
 
 func onPUT(req as HTTPServerRequest, next as function) virtual
 {
-	if(onPUT(req) == false) {
+	if onPUT(req) == false:
 		next()
-	}
 }
 
-func onDELETE(req as HTTPServerRequest) virtual as bool
-{
-	return(false)
-}
+func onDELETE(req as HTTPServerRequest) virtual as bool:
+	return false
 
 func onDELETE(req as HTTPServerRequest, next as function) virtual
 {
-	if(onDELETE(req) == false) {
+	if onDELETE(req) == false:
 		next()
-	}
 }
 
-func onPATCH(req as HTTPServerRequest) virtual as bool
-{
-	return(false)
-}
+func onPATCH(req as HTTPServerRequest) virtual as bool:
+	return false
 
 func onPATCH(req as HTTPServerRequest, next as function) virtual
 {
-	if(onPATCH(req) == false) {
+	if onPATCH(req) == false:
 		next()
-	}
 }
 
 func handleRequest(req as HTTPServerRequest, next as function) virtual
 {
-	if(req == null) {
+	if req == null {
 		next()
 	}
-	else if(req.isGET()) {
+	else if req.isGET() {
 		onGET(req, next)
 	}
-	else if(req.isPOST()) {
+	else if req.isPOST() {
 		onPOST(req, next)
 	}
-	else if(req.isPUT()) {
+	else if req.isPUT() {
 		onPUT(req, next)
 	}
-	else if(req.isDELETE()) {
+	else if req.isDELETE() {
 		onDELETE(req, next)
 	}
-	else if(req.isPATCH()) {
+	else if req.isPATCH() {
 		onPATCH(req, next)
 	}
 	else {
