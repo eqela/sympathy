@@ -98,10 +98,14 @@ func onHTTPMethod(req as HTTPServerRequest, functions as map<string,function<voi
 		rsc = ""
 	var handler as function<void,HTTPServerRequest>
 	var rsccount = req.getRemainingResourceCount()
+	var pop = true
 	if rsccount < 1 {
 		handler = Map.get(functions, rsc)
-		if not handler:
+		if not handler {
 			handler = Map.get(functions, "*")
+			if handler:
+				pop = false
+		}
 	}
 	else if rsccount == 1 {
 		handler = Map.get(functions, rsc .. "/*")
@@ -112,7 +116,8 @@ func onHTTPMethod(req as HTTPServerRequest, functions as map<string,function<voi
 		handler = Map.get(functions, rsc .. "/**")
 	}
 	if handler {
-		req.popResource()
+		if pop:
+			req.popResource()
 		handler(req)
 		return true
 	}

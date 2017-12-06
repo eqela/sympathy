@@ -31,6 +31,9 @@ func execute(ctx as LoggingContext, rootHandler as HTTPServerRequestHandler) sta
 	var ioManager = assert IOManager.createDefault():
 		Log.error(ctx, "Failed to create IO manager")
 	var server = new HTTPServer()
+	var port = Environment.getVariable("HTTP_SERVER_PORT")
+	if port:
+		server.setPort(String.toInteger(port))
 	if rootHandler:
 		server.pushRequestHandler(rootHandler)
 	assert server.initialize(ioManager, ctx):
