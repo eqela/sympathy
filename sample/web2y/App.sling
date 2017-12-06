@@ -25,12 +25,14 @@
 class #webapi #main:
 
 import capex.text
+import capex.util
 
 var templates = TextTemplateManager.forTemplates(DIRECTORY "templates")
+var resources = DIRECTORY "resources"
 
 initialize
 {
-	PRINT "Application starting"
+	Log.info(logContext, "Application starting")
 }
 
 GET ""
@@ -45,4 +47,19 @@ GET "about"
 	var vars = new DynamicMap()
 	vars.set("pageName", "About")
 	req.sendHTMLString(templates.getText("about.html.t", vars))
+}
+
+GET "resources/*"
+{
+	var name = req.popResource()
+	if String.isEmpty(name) {
+		req.sendNotFound()
+		return
+	}
+	var data = Buffer.asBuffer(Map.get(resources, name))
+	if not data {
+		req.sendNotFound()
+		return
+	}
+	req.sendBuffer(data, MimeTypeRegistry.instance().getMimetype(name))
 }
