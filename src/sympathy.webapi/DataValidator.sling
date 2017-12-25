@@ -31,7 +31,7 @@ func toValidJSONString(response as string) static as string
 	}
 	var prev as char
 	var sb = new StringBuilder()
-	var iter = new CharacterIteratorForString(response)
+	var iter = CharacterIteratorForString.forString(response)
 	var hasOpeningQuote = false
 	var hasClosingQuote = false
 	while(true) {
