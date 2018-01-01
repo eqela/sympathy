@@ -117,10 +117,8 @@ func doConfigure(key as string, value as string, relativeTo as File) private as 
 	return true
 }
 
-func initialize virtual as bool
-{
+func initialize virtual as bool:
 	return true
-}
 
 func initializeServer(server as HTTPServer) virtual as bool
 {
@@ -269,6 +267,13 @@ func execute(args as array<string>) as bool
 		Log.error(ctx, "Failed to execute IO manager")
 	Log.info(ctx, "Exiting normally.")
 	return true
+}
+
+func executeMain(args as array<string>) as int
+{
+	if execute(args) == false:
+		return 1
+	return 0
 }
 
 func initializeWithIOManager(ioManager as IOManager, ctx as LoggingContext) virtual as bool:
