@@ -1,7 +1,7 @@
 
 /*
  * This file is part of Sympathy
- * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,14 +22,14 @@
  * SOFTWARE.
  */
 
-class is NavigationWidget imports cape imports cave imports cave.ui:
+class is NavigationWidget imports cape imports cave imports cave.ui #widget:
 
 prop api as APIClient
 
 ctor(ctx as GuiApplicationContext)
 {
 	base(ctx)
-	setBackgroundColor(Color.white())
+	setWidgetBackgroundColor(Color.white())
 }
 
 func createMainWidget override as Widget

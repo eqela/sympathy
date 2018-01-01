@@ -1,7 +1,7 @@
 #! /bin/bash
 #
 # This file is part of Sympathy
-# Copyright (c) 2017 Job and Esther Technologies, Inc.
+# Copyright (c) 2017-2018 Job and Esther Technologies Oy
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal

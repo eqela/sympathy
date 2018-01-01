@@ -1,7 +1,7 @@
 
 /*
  * This file is part of Sympathy
- * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,21 +22,5 @@
  * SOFTWARE.
  */
 
-class abstract:
-
-func create static as this
-{
-	IFDEF "target_dotnet4" {
-		return new DNSResolverForDotNet()
-	}
-	ELSE {
-		return null
-	}
-}
-
-func instance static as this:
-	return create()
-
-func getNSRecords(host as string, type as string, ctx as LoggingContext) abstract as DynamicVector
-func getIPAddress(hostname as string, ctx as LoggingContext) abstract as string
-func getIPAddresses(hostname as string, ctx as LoggingContext) abstract as DynamicVector
+title = "Chat Client"
+preFilters += "@caveui"

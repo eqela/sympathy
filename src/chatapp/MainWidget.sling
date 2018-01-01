@@ -1,7 +1,7 @@
 
 /*
  * This file is part of Sympathy
- * Copyright (c) 2017 Job and Esther Technologies, Inc.
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,9 +22,14 @@
  * SOFTWARE.
  */
 
-class imports cape imports cave imports cave.ui imports chaty.client #mainWidget:
+class #widget #main:
 
-class MyChatConversationWidget is ChatConversationWidget
+import cape
+import cave
+import cave.ui
+import chaty.client
+
+class MyChatConversationWidget is ChatConversationWidget #widget
 {
 	ctor(context as GuiApplicationContext):
 		base(context)
@@ -39,7 +44,7 @@ class MyChatConversationWidget is ChatConversationWidget
 		return new MyChatMessageWidget(context)
 }
 
-class MyChatConversationItemWidget is ChatConversationItemWidget
+class MyChatConversationItemWidget is ChatConversationItemWidget #widget
 {
 	var label as LabelWidget
 
@@ -53,7 +58,7 @@ class MyChatConversationItemWidget is ChatConversationItemWidget
 	}
 }
 
-class MyChatMessageWidget is ChatMessageWidget
+class MyChatMessageWidget is ChatMessageWidget #widget
 {
 	var label as LabelWidget
 
@@ -67,7 +72,7 @@ class MyChatMessageWidget is ChatMessageWidget
 	}
 }
 
-class MyChatWidget is ChatWidget
+class MyChatWidget is ChatWidget #widget
 {
 	ctor(context as GuiApplicationContext):
 		base(context)
