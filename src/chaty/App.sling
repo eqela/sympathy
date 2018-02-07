@@ -22,7 +22,13 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex.console imports capex.net imports sympathy:
+class:
+
+import cape
+import capex.console
+import capex.net
+import sympathy
+import sympathy.chat
 
 func execute(args as array<string>) as bool
 {
@@ -34,32 +40,18 @@ func execute(args as array<string>) as bool
 	}
 	var ctx as LoggingContext = new ConsoleApplicationContext()
 	(ctx as! ConsoleApplicationContext).setEnableDebugMessages(true)
-	var server = new WSServer()
-	server.setPort(port)
-	var engine = new ChatEngine()
-	engine.setCtx(ctx)
+	var engine = ChatEngine.create(port, ctx)
 	engine.setAuthenticateConnectionCallback(func(data as buffer) as string {
 		return String.forUTF8Buffer(data)
 	})
-	server.setCreateConnectionHandlerObject(func as WSServerConnectionHandler {
-		return(new ChatConnectionHandler().setEngine(engine).setLogContext(ctx))
-	})
-	var ioManager = assert IOManager.createDefault() {
+	var ioManager = assert IOManager.createDefault():
 		Log.error(ctx, "Failed to create IO manager")
-	}
-	assert server.initialize(ioManager, ctx) {
-		Log.error(ctx, "Failed to initialize WebSocket server.")
-	}
-	assert ioManager.execute(ctx) {
+	assert engine.initialize(ioManager)
+	assert ioManager.execute(ctx):
 		Log.error(ctx, "Failed to execute IO manager")
-	}
 	Log.info(ctx, "Exiting normally.")
 	return true
 }
 
-func main(args as array<string>) static as int #main
-{
-	if new this().execute(args) == false:
-		return 1
-	return 0
-}
+func main(args as array<string>) static as int #main:
+	return new this().execute(args) ? 0 : 1
