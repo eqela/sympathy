@@ -22,10 +22,11 @@
  * SOFTWARE.
  */
 
-class imports cape imports capex.console:
+class:
 
-IFDEF("target_mono")
-{
+import capex.console
+
+IFDEF "target_mono" {
 	depend "dll:Mono.Posix.dll"
 
 	class SignalMonitorThread is Runnable
@@ -46,7 +47,7 @@ IFDEF("target_mono")
 					};
 					index = Mono.Unix.UnixSignal.WaitAny(signals);
 				}}}
-				if(index >= 0) {
+				if index >= 0 {
 					app.onExitRequestSignal()
 					break
 				}
@@ -58,37 +59,41 @@ IFDEF("target_mono")
 
 func main(args as array<string>) static as int #main
 {
-	if(new this().execute(args) == false) {
-		return(1)
-	}
-	return(0)
+	if new this().execute(args) == false:
+		return 1
+	return 0
 }
 
 prop exitFlag = false
 prop process as Process
+prop serviceManager as ServiceManager
 var ctx as ConsoleApplicationContext
 
 func printUsage(stdout as PrintWriter)
 {
+	var parameters = [
+		[ "command", "The command to execute, along with any arguments" ]
+	]
 	var flags = [
 		[ "bg|background", "Execute the command in the background" ],
 		[ "quiet", "Suppress all output messages from the keepalive process" ],
 		[ "debug", "Display debug information" ],
 		[ "h|help", "Usage information" ]
 	]
-	var parameters = [
-		[ "command", "The command to execute, along with any arguments" ]
+	var options = [
+		[ "services", "Specify a service directory" ]
 	]
-	ConsoleApplication.printUsage(stdout, null, parameters, flags, null)
+	ConsoleApplication.printUsage(stdout, null, parameters, flags, options)
 }
 
 func onExitRequestSignal
 {
 	Log.info(ctx, "Exit request signal was received.")
 	exitFlag = true
-	if(process != null) {
+	if process:
 		process.kill(5)
-	}
+	if serviceManager:
+		serviceManager.terminate()
 }
 
 func execute(args as array<string>) as bool
@@ -99,32 +104,35 @@ func execute(args as array<string>) as bool
 	var background = false
 	var command as string
 	var commandArgs as vector<string>
-	foreach(arg in ConsoleApplication.parseCommandLineArguments(args)) {
-		if(command == null) {
-			if(arg.isFlag("help") || arg.isFlag("h")) {
+	var serviceDir as File
+	foreach arg in ConsoleApplication.parseCommandLineArguments(args) {
+		if not command {
+			if arg.isFlag("help") || arg.isFlag("h") {
 				showHelp = true
 				continue
 			}
-			if(arg.isFlag("bg") || arg.isFlag("background")) {
+			if arg.isFlag("bg") || arg.isFlag("background") {
 				background = true
 				continue
 			}
-			if(arg.isFlag("debug")) {
-				if(ctx != null) {
+			if arg.isFlag("debug") {
+				if ctx:
 					ctx.setEnableDebugMessages(true)
-				}
 				continue
 			}
-			if(arg.isFlag("quiet")) {
+			if arg.isFlag("quiet") {
 				ctx = null
+				continue
+			}
+			if arg.isOption("services") {
+				serviceDir = File.forPath(arg.getStringValue())
 				continue
 			}
 		}
 		var str = arg.getComplete()
-		if(String.isEmpty(str)) {
+		if String.isEmpty(str):
 			continue
-		}
-		if(command == null) {
+		if not command {
 			command = str
 			commandArgs = new vector<string>
 		}
@@ -132,60 +140,74 @@ func execute(args as array<string>) as bool
 			commandArgs += str
 		}
 	}
-	if(command == null || showHelp) {
+	if command && serviceDir {
+		Log.error(ctx, "You cannot specify both a command and a service directory.")
+		return false
+	}
+	if((command == null && serviceDir == null) || showHelp) {
 		ConsoleApplication.PRINT_HEADER(stdout, null)
 		printUsage(stdout)
-		return(true)
+		return true
 	}
-	if(background) {
+	if background {
 		var pl = ProcessLauncher.forSelf()
-		if(pl == null) {
+		if not pl {
 			Log.error(ctx, "Failed to create a process launcher")
-			return(false)
+			return false
 		}
 		pl.addToParams("-quiet")
-		pl.addToParams(command)
-		foreach(arg in commandArgs) {
-			pl.addToParams(arg)
+		if serviceDir:
+			pl.addToParams("-services=" .. serviceDir.getPath())
+		if command {
+			pl.addToParams(command)
+			foreach arg in commandArgs:
+				pl.addToParams(arg)
 		}
-		if(pl.start() == null) {
+		if pl.start() == null {
 			Log.error(ctx, "Failed to create a new background process")
-			return(false)
+			return false
 		}
-		return(true)
+		return true
 	}
-	var pl = ProcessLauncher.forCommand(command)
-	if(pl == null) {
-		Log.error(ctx, "Failed to create a process launcher for command: `" .. command .. "'")
-		return(false)
-	}
-	foreach(arg in commandArgs) {
-		pl.addToParams(arg)
-	}
-	IFDEF("target_mono")
-	{
+	IFDEF "target_mono" {
 		Thread.start(new SignalMonitorThread().setCtx(ctx).setApp(this))
 	}
-	loop {
-		Log.info(ctx, "Executing: `" .. pl.toString() .. "'")
-		var startTime = SystemClock.asSeconds()
-		process = pl.start()
-		if(process == null) {
-			Log.error(ctx, "Process failed to start.")
+	var v = true
+	if serviceDir {
+		serviceManager = ServiceManager.forDirectory(serviceDir)
+		serviceManager.setCtx(ctx)
+		v = serviceManager.execute()
+	}
+	else {
+		var pl = ProcessLauncher.forCommand(command)
+		if not pl {
+			Log.error(ctx, "Failed to create a process launcher for command: `" .. command .. "'")
+			return false
 		}
-		else {
-			var r = process.waitForExit()
-			process = null
-			Log.info(ctx, "Process exited: " .. String.forInteger(r))
-		}
-		if(exitFlag) {
-			Log.info(ctx, "Exit has been requested. Ending process.")
-			break
-		}
-		if(SystemClock.asSeconds() - startTime < 5) {
-			Log.warning(ctx, "Process lived for less than five seconds. Waiting for five seconds before restarting ..")
-			CurrentThread.sleepSeconds(5)
+		foreach arg in commandArgs:
+			pl.addToParams(arg)
+		loop {
+			Log.info(ctx, "Executing: `" .. pl.toString() .. "'")
+			var startTime = SystemClock.asSeconds()
+			process = pl.start()
+			if not process {
+				Log.error(ctx, "Process failed to start.")
+			}
+			else {
+				var r = process.waitForExit()
+				process = null
+				Log.info(ctx, "Process exited: " .. String.forInteger(r))
+			}
+			if exitFlag {
+				Log.info(ctx, "Exit has been requested. Ending process.")
+				break
+			}
+			if SystemClock.asSeconds() - startTime < 5 {
+				Log.warning(ctx, "Process lived for less than five seconds. Waiting for five seconds before restarting ..")
+				CurrentThread.sleepSeconds(5)
+			}
 		}
 	}
-	return(true)
+	Log.debug(ctx, "Exiting application.")
+	return v
 }
