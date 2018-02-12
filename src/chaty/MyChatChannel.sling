@@ -22,33 +22,40 @@
  * SOFTWARE.
  */
 
-class:
+class is ChatChannel:
 
 import cape
-import capex.console
-import capex.net
-import sympathy
 import sympathy.chat
 
-func execute(args as array<string>) as bool
+func create(engine as ChatEngine, message as ChatMessage) static as this
 {
-	var port = 8080
-	var arguments = ConsoleApplication.parseCommandLineArguments(args)
-	foreach arg in arguments {
-		if arg.isOption("port") || arg.isOption("listenPort"):
-			port = arg.getIntegerValue()
-	}
-	var ctx as LoggingContext = new ConsoleApplicationContext()
-	(ctx as! ConsoleApplicationContext).setEnableDebugMessages(true)
-	var ioManager = assert IOManager.createDefault():
-		Log.error(ctx, "Failed to create IO manager")
-	var engine = MyChatEngine.create(port, ctx)
-	assert engine.initializeEngine(ioManager)
-	assert ioManager.execute(ctx):
-		Log.error(ctx, "Failed to execute IO manager")
-	Log.info(ctx, "Exiting normally.")
-	return true
+	var v = new this().setEngine(engine)
+	assert v.initialize(message)
+	return v
 }
 
-func main(args as array<string>) static as int #main:
-	return new this().execute(args) ? 0 : 1
+prop engine as ChatEngine
+var users private as DynamicVector
+var channelId private as string
+
+func initialize(message as ChatMessage) as bool
+{
+	assert message
+	users = message.getRecipients()
+	assert users
+	return users.getSize() > 1
+}
+
+func setChannelId(channelId as string):
+	this.channelId = channelId
+
+func getChannelId override as string:
+	return channelId
+
+func onNewDataMessage(message as ChatMessage) override
+{
+	var m = message as MyChatMessage
+	assert engine && m
+	m.setRecipients(users)
+	engine.broadcastMessage(m)
+}

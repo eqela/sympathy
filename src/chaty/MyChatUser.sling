@@ -22,33 +22,15 @@
  * SOFTWARE.
  */
 
-class:
+class is ChatUser:
 
 import cape
-import capex.console
-import capex.net
-import sympathy
 import sympathy.chat
 
-func execute(args as array<string>) as bool
-{
-	var port = 8080
-	var arguments = ConsoleApplication.parseCommandLineArguments(args)
-	foreach arg in arguments {
-		if arg.isOption("port") || arg.isOption("listenPort"):
-			port = arg.getIntegerValue()
-	}
-	var ctx as LoggingContext = new ConsoleApplicationContext()
-	(ctx as! ConsoleApplicationContext).setEnableDebugMessages(true)
-	var ioManager = assert IOManager.createDefault():
-		Log.error(ctx, "Failed to create IO manager")
-	var engine = MyChatEngine.create(port, ctx)
-	assert engine.initializeEngine(ioManager)
-	assert ioManager.execute(ctx):
-		Log.error(ctx, "Failed to execute IO manager")
-	Log.info(ctx, "Exiting normally.")
-	return true
-}
+prop userId as string
 
-func main(args as array<string>) static as int #main:
-	return new this().execute(args) ? 0 : 1
+func setUserId(userId as string):
+	this.userId = userId
+
+func getUserId override as string:
+	return userId
