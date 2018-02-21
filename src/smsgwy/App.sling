@@ -1,0 +1,108 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is WebServer:
+
+import capex.net
+import smsy
+import sympathy
+import sympathy.app
+
+var secretKey as string
+var enginePort = 8081
+var smsEngine as SMSEngine
+
+func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
+{
+	if key == "secretKey" {
+		secretKey = value
+		return true
+	}
+	if key == "enginePort" {
+		enginePort = Integer.asInteger(value)
+		return true
+	}
+	return base.configure(key, value, relativeTo, error)
+}
+
+func initializeServer(server as HTTPServer) override as bool
+{
+	assert base.initializeServer(server):
+		Log.error(ctx, "Failed to initialize HTTP server")
+	assert String.isNotEmpty(secretKey):
+		Log.error(ctx, "No secret key was set")
+
+	// Initialize SMSEngine
+
+	smsEngine = new SMSEngine()
+	smsEngine.setAuthenticateConnectionCallback(func(data as buffer) as string {
+		var cred = String.forUTF8Buffer(data)
+		assert String.equals(secretKey, cred)
+		return cred
+	})
+	smsEngine.setCtx(ctx)
+	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
+		if req.isPOST() {
+			var data = assert req.getBodyJSONMap():
+				req.sendJSONObject(JSONResponse.forMissingData())
+			var type = data.getInteger("type")
+			assert type == SMSMessage.UNKNOWN_TYPE || type == SMSMessage.DATA_TYPE:
+				req.sendJSONObject(JSONResponse.forErrorMessage("Invalid type"))
+			var priority = data.getInteger("priority", -1)
+			assert priority > 0:
+				req.sendJSONObject(JSONResponse.forErrorMessage("Invalid priority"))
+			var message = data.getString("message")
+			assert String.isNotEmpty(message):
+				req.sendJSONObject(JSONResponse.forErrorMessage("Invalid or empty message"))
+			var recipients = assert data.getDynamicVector("recipients"):
+				req.sendJSONObject(JSONResponse.forErrorMessage("Invalid or no recipients"))
+			var smsMessage = new SMSMessage()
+			smsMessage.setData(data)
+			assert smsMessage.initialize():
+				req.sendJSONObject(JSONResponse.forInvalidData())
+			smsEngine.broadCastMessage(smsMessage)
+			req.sendJSONObject(JSONResponse.forOk())
+			return
+		}
+		next()
+	})
+	return true
+}
+
+func initializeWithIOManager(ioManager as IOManager, ctx as LoggingContext) override as bool
+{
+	var server = new WSServer()
+	server.setPort(enginePort)
+	server.setCreateConnectionHandlerObject(func as WSServerConnectionHandler {
+		return new SMSConnectionHandler().setEngine(smsEngine)
+	})
+	assert server.initialize(ioManager, ctx):
+		Log.error(ctx, "Failed to initialize SMSServer.")
+	return true
+}
+
+main
+{
+	return new this().executeMain(args)
+}
