@@ -27,9 +27,8 @@ class is WSServerConnectionHandler:
 import capex.console
 import sympathy
 
-prop connectionId as string
+prop authenticated as bool
 prop engine as SMSEngine
-prop user as SMSUser
 
 func onOpened override
 {
@@ -37,9 +36,12 @@ func onOpened override
 
 func onClosed override
 {
-	assert (engine && user)
-	engine.onUserDisconnect(user.getId(), this)
+	assert engine
+	engine.onDisconnect(this)
 }
+
+func isNotAuthenticated as bool:
+	return authenticated == false
 
 func onDataMessage(message as WSServerMessage) override
 {

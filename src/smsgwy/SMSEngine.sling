@@ -27,22 +27,67 @@ class:
 import capex.data
 import capex.crypto
 
-prop authenticateConnectionCallback as function<string, buffer>
-prop messageReceivedCallback as function<void, SMSMessage>
-prop ctx as LoggingContext
-var userMap private as DynamicMap
-var connectionSize private as int
-var random private as Random
-
-ctor
+class ConnectionManager
 {
-	userMap = new DynamicMap()
-	connectionSize = 0
-	random = new Random()
+	ctor(prnt as parent)
+	{
+		op = prnt
+		index = 0
+		connections = new vector<SMSConnectionHandler>
+	}
+
+	var connections as vector<SMSConnectionHandler>
+	var index as int
+	var op as parent
+
+	func add(connection as SMSConnectionHandler)
+	{
+		assert connection
+		Vector.append(connections, connection)
+		op.logDebug("New connection. Now: (" .. String.forInteger(SIZE connections) .. ") connected")
+	}
+
+	func remove(connection as SMSConnectionHandler)
+	{
+		assert connection
+		Vector.removeValue(connections, connection)
+		op.logDebug("Connection closed. Now: (" .. String.forInteger(SIZE connections) .. ") connected")
+	}
+
+	func sendMessage(message as buffer) as bool
+	{
+		var sent as bool
+		var s = SIZE connections
+		var c = 0
+		loop {
+			if c >= s:
+				break
+			var connection = Vector.get(connections, index)
+			if not connection:
+				continue
+			if connection.sendMessage(message) > 0 {
+				sent = true
+				break
+			}
+			if index >= s - 1 {
+				index = 0
+			}
+			else {
+				index ++
+			}
+			c ++
+		}
+		return sent
+	}
 }
 
-func generateId private as string:
-	return MD5Encoder.encode(String.forInteger(SystemClock.asSeconds()) .. String.forInteger(random.nextInt(9999999)) .. String.forInteger(random.nextInt(9999999)) .. String.forInteger(random.nextInt(9999999)))
+prop ctx as LoggingContext
+prop authenticateConnectionCallback as function<bool, buffer>
+prop messageReceivedCallback as function<void, SMSMessage>
+var connections as ConnectionManager
+
+ctor:
+	connections = new ConnectionManager(this)
 
 func logError(message as string)
 {
@@ -73,8 +118,9 @@ func onDataReceived(data as buffer, connection as SMSConnectionHandler)
 	assert connection
 	assert data:
 		connection.close()
-	var user = assert connection.getUser() {
+	if connection.isNotAuthenticated() {
 		onAuthenticateConnection(data, connection)
+		return
 	}
 	onParseData(data, connection)
 }
@@ -98,77 +144,45 @@ func onMessageReceived(data as DynamicMap)
 		messageReceivedCallback(String.toUTF8Buffer(JSONEncoder.encode(data)))
 }
 
-func onNewMessage(message as SMSMessage, connection as SMSConnectionHandler)
-{
-	assert message
-	connection.sendMessage(message.toBuffer())
-}
-
 func onAuthenticateConnection(data as buffer, connection as SMSConnectionHandler)
 {
-	var id as string
-	if authenticateConnectionCallback == null {
-		logWarning("No 'authenticateConnectionCallback' set. No authentication done.")
-		id = generateId()
-	}
-	else {
-		id = authenticateConnectionCallback(data)
-	}
-	var user = getUser(id)
-	if user == null {
-		user = new SMSUser()
-		user.setId(id)
-		userMap.set(id, user)
-	}
-	connection.setUser(user)
-	loop {
-		var connectionId = generateId()
-		if user.getConnection(connectionId) == null {
-			connection.setConnectionId(connectionId)
-			break
-		}
-	}
-	user.addConnection(connection)
-	connectionSize++
-	logDebug("New connection. Now: (" .. String.forInteger(connectionSize) .. ") connected")
-	var v = new DynamicMap()
-	v.set("userId", id)
-	v.set("type", 2)
-	var message = assert String.toUTF8Buffer(JSONEncoder.encode(v)) {
-		logWarning("User details null in SMSEngine")
+	assert authenticateConnectionCallback {
+		logError("No authentication callback set. Closing the connection")
 		connection.close()
 	}
-	var r = connection.sendMessage(message)
-	if r < 1:
-		return
+	assert authenticateConnectionCallback(data) {
+		logError("Failed to authenticate connection")
+		connection.close()
+	}
+
+	// FIXME: Including a userId since the SMS Manager App requires it but doesn't really use it.
+
+	var v = new DynamicMap()
+	v.set("type", 2)
+	v.set("userId", "someuserid")
+	var m = assert String.toUTF8Buffer(JSONEncoder.encode(v)) {
+		logError("Failed to create authentication message")
+		connection.close()
+	}
+	assert connection.sendMessage(m) > 0 {
+		logError("Failed to send authentication message")
+		connection.close()
+	}
+	connection.setAuthenticated(true)
+	connections.add(connection)
 }
 
-func getUser(id as string) as SMSUser:
-	return userMap.get(id) as SMSUser
+func onDisconnect(connection as SMSConnectionHandler):
+	connections.remove(connection)
 
-func onUserDisconnect(id as string, connection as SMSConnectionHandler)
-{
-	var user = assert getUser(id)
-	user.removeConnection(connection)
-	connectionSize--
-	logDebug("Connection closed. Now: (" .. String.forInteger(connectionSize) .. "/" .. String.forInteger(userMap.getCount()) .. ") connected")
-}
-
-func broadCastMessage(message as SMSMessage)
+func sendMessage(message as SMSMessage)
 {
 	assert message
 	var messageBuffer = message.toBuffer()
-	var iter = assert userMap.iterateValues()
-	loop {
-		var user = iter.next() as SMSUser
-		if not user:
-			break
-		foreach connectionId in user.getConnectionIds() {
-			var connection = user.getConnection(connectionId)
-			if not connection:
-				continue
-			if connection.sendMessage(messageBuffer) < 1:
-				logError("Failed to send SMS message")
-		}
+	if connections.sendMessage(messageBuffer) {
+		logDebug("Message successfuly sent")
+	}
+	else {
+		logError("Failed to send message to available connections")
 	}
 }

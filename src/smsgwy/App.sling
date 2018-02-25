@@ -55,10 +55,9 @@ func initializeServer(server as HTTPServer) override as bool
 	// Initialize SMSEngine
 
 	smsEngine = new SMSEngine()
-	smsEngine.setAuthenticateConnectionCallback(func(data as buffer) as string {
+	smsEngine.setAuthenticateConnectionCallback(func(data as buffer) as bool {
 		var cred = String.forUTF8Buffer(data)
-		assert String.equals(secretKey, cred)
-		return cred
+		return String.equals(secretKey, cred)
 	})
 	smsEngine.setCtx(ctx)
 	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
@@ -80,7 +79,7 @@ func initializeServer(server as HTTPServer) override as bool
 			smsMessage.setData(data)
 			assert smsMessage.initialize():
 				req.sendJSONObject(JSONResponse.forInvalidData())
-			smsEngine.broadCastMessage(smsMessage)
+			smsEngine.sendMessage(smsMessage)
 			req.sendJSONObject(JSONResponse.forOk())
 			return
 		}
