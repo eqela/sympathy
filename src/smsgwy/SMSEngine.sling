@@ -63,11 +63,11 @@ class ConnectionManager
 			if c >= s:
 				break
 			var connection = Vector.get(connections, index)
-			if not connection:
-				continue
-			if connection.sendMessage(message) > 0 {
-				sent = true
-				break
+			if connection {
+				if connection.sendMessage(message) > 0 {
+					sent = true
+					break
+				}
 			}
 			if index >= s - 1 {
 				index = 0
