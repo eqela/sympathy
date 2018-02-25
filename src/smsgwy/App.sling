@@ -25,7 +25,6 @@
 class is WebServer:
 
 import capex.net
-import smsy
 import sympathy
 import sympathy.app
 
