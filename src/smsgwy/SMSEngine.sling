@@ -1,0 +1,188 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+import capex.data
+import capex.crypto
+
+class ConnectionManager
+{
+	ctor(prnt as parent)
+	{
+		op = prnt
+		index = 0
+		connections = new vector<SMSConnectionHandler>
+	}
+
+	var connections as vector<SMSConnectionHandler>
+	var index as int
+	var op as parent
+
+	func add(connection as SMSConnectionHandler)
+	{
+		assert connection
+		Vector.append(connections, connection)
+		op.logDebug("New connection. Now: (" .. String.forInteger(SIZE connections) .. ") connected")
+	}
+
+	func remove(connection as SMSConnectionHandler)
+	{
+		assert connection
+		Vector.removeValue(connections, connection)
+		op.logDebug("Connection closed. Now: (" .. String.forInteger(SIZE connections) .. ") connected")
+	}
+
+	func sendMessage(message as buffer) as bool
+	{
+		var sent as bool
+		var s = SIZE connections
+		var c = 0
+		loop {
+			if c >= s:
+				break
+			var connection = Vector.get(connections, index)
+			if connection {
+				if connection.sendMessage(message) > 0 {
+					sent = true
+					break
+				}
+			}
+			if index >= s - 1 {
+				index = 0
+			}
+			else {
+				index ++
+			}
+			c ++
+		}
+		return sent
+	}
+}
+
+prop ctx as LoggingContext
+prop authenticateConnectionCallback as function<bool, buffer>
+prop messageReceivedCallback as function<void, SMSMessage>
+var connections as ConnectionManager
+
+ctor:
+	connections = new ConnectionManager(this)
+
+func logError(message as string)
+{
+	assert ctx
+	ctx.logError(VALUE "__THIS__" .. ": " .. message)
+}
+
+func logWarning(message as string)
+{
+	assert ctx
+	ctx.logWarning(VALUE "__THIS__" .. ": " .. message)
+}
+
+func logInfo(message as string)
+{
+	assert ctx
+	ctx.logInfo(VALUE "__THIS__" .. ": " .. message)
+}
+
+func logDebug(message as string)
+{
+	assert ctx
+	ctx.logDebug(VALUE "__THIS__" .. ": " .. message)
+}
+
+func onDataReceived(data as buffer, connection as SMSConnectionHandler)
+{
+	assert connection
+	assert data:
+		connection.close()
+	if connection.isNotAuthenticated() {
+		onAuthenticateConnection(data, connection)
+		return
+	}
+	onParseData(data, connection)
+}
+
+func onParseData(data as buffer, connection as SMSConnectionHandler) private
+{
+	assert connection
+	assert data:
+		connection.close()
+	var d = assert JSONParser.parse(data) as DynamicMap {
+		connection.close()
+	}
+	onMessageReceived(d)
+}
+
+func onMessageReceived(data as DynamicMap)
+{
+	assert data
+	logDebug("New message received: " .. String.asString(data))
+	if messageReceivedCallback:
+		messageReceivedCallback(String.toUTF8Buffer(JSONEncoder.encode(data)))
+}
+
+func onAuthenticateConnection(data as buffer, connection as SMSConnectionHandler)
+{
+	assert authenticateConnectionCallback {
+		logError("No authentication callback set. Closing the connection")
+		connection.close()
+	}
+	assert authenticateConnectionCallback(data) {
+		logError("Failed to authenticate connection")
+		connection.close()
+	}
+
+	// FIXME: Including a userId since the SMS Manager App requires it but doesn't really use it.
+
+	var v = new DynamicMap()
+	v.set("type", 2)
+	v.set("userId", "someuserid")
+	var m = assert String.toUTF8Buffer(JSONEncoder.encode(v)) {
+		logError("Failed to create authentication message")
+		connection.close()
+	}
+	assert connection.sendMessage(m) > 0 {
+		logError("Failed to send authentication message")
+		connection.close()
+	}
+	connection.setAuthenticated(true)
+	connections.add(connection)
+}
+
+func onDisconnect(connection as SMSConnectionHandler):
+	connections.remove(connection)
+
+func sendMessage(message as SMSMessage)
+{
+	assert message
+	var messageBuffer = message.toBuffer()
+	if connections.sendMessage(messageBuffer) {
+		logDebug("Message successfuly sent")
+	}
+	else {
+		logError("Failed to send message to available connections")
+	}
+}

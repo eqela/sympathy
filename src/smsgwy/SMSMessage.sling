@@ -1,0 +1,93 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+import capex.crypto
+
+const UNKNOWN_TYPE = 0
+const DATA_TYPE = 1
+
+func forDataBuffer(data as buffer) static as this
+{
+	var v = new this().setData(data)
+	assert v.initialize()
+	return v
+}
+
+prop smsId as string
+prop recipients as DynamicVector
+prop message as string
+prop priority as int
+var timestamp private as long
+var data private as buffer
+var dataMap private as DynamicMap
+var type private as int
+
+func generateId as string
+{
+	var sb = new StringBuilder()
+	sb.append(new Random().nextInt())
+	sb.append(SystemClock.asSeconds())
+	return "SMS-" .. MD5Encoder.encode(sb.toString())
+}
+
+func initialize as bool
+{
+	dataMap = JSONParser.parse(data) as DynamicMap
+	assert dataMap
+	timestamp = SystemClock.asSeconds()
+	smsId = generateId()
+	recipients = dataMap.getDynamicVector("recipients")
+	message = dataMap.getString("message")
+	type = dataMap.getInteger("type")
+	priority = dataMap.getInteger("priority")
+	return true
+}
+
+func setData(data as buffer) as this
+{
+	this.data = data
+	return this
+}
+
+func setData(data as DynamicMap) as this
+{
+	this.data = String.toUTF8Buffer(JSONEncoder.encode(data, false))
+	return this
+}
+
+func getType as int:
+	return type
+
+func toBuffer as buffer
+{
+	assert dataMap
+	dataMap.set("smsId", smsId)
+	dataMap.set("recipients", recipients)
+	dataMap.set("timestamp", timestamp)
+	dataMap.set("type", type)
+	dataMap.set("priority", priority)
+	return String.toUTF8Buffer(JSONEncoder.encode(dataMap))
+}
