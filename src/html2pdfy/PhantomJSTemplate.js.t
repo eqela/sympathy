@@ -12,8 +12,10 @@ phantom.onError = function(msg, trace) {
 	phantom.exit(1);
 };
 <% if ${useUrl} == "true" %>var url = '<%= url %>';<% end %>
-<% if ${useUrl} == "false" %>var content = '<%= contentString %>';
-var url = 'html2pdfy';
+<% if ${useUrl} == "false" %>
+var content = <% for cp in contentStrings %><% if ${__for_first} == "false" %>+
+<% end %>'<%= cp %>'<% end %>;
+var url = '';
 page.setContent(content, url);<% end %>
 page.paperSize = {
 	width : '<%= paperWidth %>',

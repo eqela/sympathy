@@ -43,11 +43,15 @@ func initializeServer(server as HTTPServer) override as bool
 {
 	assert base.initializeServer(server):
 		Log.error(ctx, "Failed to initialize HTTP server")
-	if String.isEmpty(phantomJSExecPath):
-		phantomJSExecPath = "phantomjs"
-	var phantomJSExec = findPhantomJSExecutable(phantomJSExecPath)
-	if not phantomJSExec {
-		Log.error(ctx, "Failed to find executable for phantomjs")
+	var phantomJSExec as File
+	if String.isNotEmpty(phantomJSExecPath) {
+		phantomJSExec = File.forPath(phantomJSExecPath)
+	}
+	else {
+		phantomJSExec = Environment.findCommand("phantomjs")
+	}
+	if not phantomJSExec || phantomJSExec.isFile() == false {
+		Log.error(ctx, "Failed to find phantomjs")
 		return false
 	}
 	var requestHandler = new MyRequestHandler()
@@ -56,17 +60,6 @@ func initializeServer(server as HTTPServer) override as bool
 	requestHandler.setPhantomJSExec(phantomJSExec)
 	server.pushRequestHandler(requestHandler)
 	return true
-}
-
-func findPhantomJSExecutable(path as string) private as File
-{
-	var f = File.forPath(path)
-	if f.isFile():
-		return f
-	f = Environment.findCommand(path)
-	if f.isFile():
-		return f
-	return null
 }
 
 main
