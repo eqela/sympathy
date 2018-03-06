@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-class is HTTPServerRequestHandlerMap #webapi:
+class #webapi:
 
 import capex.util
 import capex.text
