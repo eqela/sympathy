@@ -26,7 +26,6 @@ class #webapi:
 
 import capex.util
 import capex.text
-import sympathy
 
 prop ctx as LoggingContext
 prop filename as string
