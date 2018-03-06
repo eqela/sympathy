@@ -22,6 +22,6 @@ page.paperSize = {
 };
 page.open(url);
 page.onLoadFinished = function() {
-	page.render('html2pdfy.pdf');
+	page.render('<%= destination %>');
 	phantom.exit();
 }

@@ -1,0 +1,202 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is HTTPServerRequestHandlerMap #webapi:
+
+import capex.util
+import capex.text
+import sympathy
+
+prop ctx as LoggingContext
+prop filename as string
+prop phantomJSExec as File
+
+POST ""
+{
+	var content = req.getBodyString()
+	assert String.isNotEmpty(content):
+		req.sendJSONObject(JSONResponse.forMissingData())
+	var data = new DynamicMap()
+	data.set("useUrl", false)
+	data.set("contentString", toOneLiner(content))
+	processResponse(req, data)
+}
+
+GET ""
+{
+	var url = req.getQueryParameter("url")
+	assert String.isNotEmpty(url):
+		req.sendJSONObject(JSONResponse.forMissingData("url in query parameters"))
+	var data = new DynamicMap()
+	data.set("useUrl", true)
+	data.set("url", url)
+	processResponse(req, data)
+}
+
+func processResponse(req as HTTPServerRequest, data as DynamicMap)
+{
+	assert getQueryParametersTo(req, data, func(error as Error) {
+		req.sendJSONError(error)
+		Log.error(ctx, "Failed to get query parameters: " .. error.getMessage())
+	})
+	var template = assert TextTemplate.forString(TEXTFILE "PhantomJSTemplate.js.t", "<%", "%>") {
+		req.sendJSONObject(JSONResponse.forInternalError("Failed to parse template"))
+		Log.error(ctx, "Failed to parse phantomjs template file")
+	}
+	var outDir = assert TemporaryDirectory.create() {
+		req.sendJSONObject(JSONResponse.forInternalError())
+		Log.error(ctx, "Failed to create temporary directory")
+	}
+	var pdfFileName = filename .. ".pdf"
+	data.set("destination", getSanitizedPath(outDir, pdfFileName))
+	var phantomJSContent = template.execute(data)
+	assert String.isNotEmpty(phantomJSContent) {
+		req.sendJSONObject(JSONResponse.forInternalError("Failed to generate content"))
+		Log.error(ctx, "Failed to generate content for phantomjs js file")
+	}
+	var phantomJSFile = outDir.entry(filename .. ".js")
+	assert phantomJSFile.setContentsUTF8(phantomJSContent) {
+		req.sendJSONObject(JSONResponse.forInternalError("Failed to write to file"))
+		Log.error(ctx, "Failed to write: `" .. phantomJSFile.getPath() .. "'")
+	}
+	var pl = ProcessLauncher.forFile(phantomJSExec, [ phantomJSFile.getPath() ])
+	var r = pl.execute()
+	assert r == 0 {
+		req.sendJSONObject(JSONResponse.forInternalError())
+		Log.error(ctx, phantomJSExec.getPath() .. " returned an error status: " .. String.asString(r))
+	}
+	var pdf = outDir.entry(pdfFileName)
+	assert pdf.isFile() {
+		req.sendJSONObject(JSONResponse.forInternalError())
+		Log.error(ctx, "Failed to get pdf file after phantomjs execution")
+	}
+	var buf = assert pdf.getContentsBuffer() {
+		req.sendJSONObject(JSONResponse.forInternalError())
+		Log.error(ctx, "Failed to get content buffer of `" .. pdf.getPath() .. "'")
+	}
+	req.sendBuffer(buf, MimeTypeRegistry.determineTypeForFile(pdf))
+	if not outDir.removeRecursive():
+		Log.error(ctx, "Failed to remove `" .. outDir.getPath() .. "'")
+}
+
+func getQueryParametersTo(req as HTTPServerRequest, data as DynamicMap, callback as function<void, Error>) as bool
+{
+	var size = req.getQueryParameter("size")
+	if String.isEmpty(size):
+		size = "a4"
+	assert getActualPaperSizeTo(size, data):
+		callback(Error.forMessage("Invalid size `" .. size .. "'"))
+	var orientation = req.getQueryParameter("orientation")
+	if String.isEmpty(orientation):
+		orientation = "portrait"
+	if String.isNotEqual(orientation, "portrait") && String.isNotEqual(orientation, "landscape") {
+		callback(Error.forMessage("Invalid orientation `" .. orientation .. "'"))
+		return false
+	}
+	data.set("paperOrientation", orientation)
+	return true
+}
+
+func getActualPaperSizeTo(size as string, data as DynamicMap) private as bool
+{
+	var w as string
+	var h as string
+	if String.equalsIgnoreCase(size, "letter") {
+		w = "8.5"
+		h = "11"
+	}
+	else if String.equalsIgnoreCase(size, "legal") {
+		w = "8.5"
+		h = "14"
+	}
+	else if String.equalsIgnoreCase(size, "a3") {
+		w = "11.7"
+		h = "16.5"
+	}
+	else if String.equalsIgnoreCase(size, "a4") {
+		w = "8.27"
+		h = "11.7"
+	}
+	else if String.equalsIgnoreCase(size, "a5") {
+		w = "5.8"
+		h = "8.3"
+	}
+	else if String.equalsIgnoreCase(size, "b4") {
+		w = "9.8"
+		h = "13.9"
+	}
+	else if String.equalsIgnoreCase(size, "b5") {
+		w = "6.9"
+		h = "9.8"
+	}
+	else {
+		return false
+	}
+	data.set("paperWidth", w .. "in")
+	data.set("paperHeight", h .. "in")
+	return true
+}
+
+func getSanitizedPath(tempDir as File, filename as string) private as string
+{
+	var tp = tempDir.getPath() .. String.asString(Environment.getPathSeparator()) .. filename
+	if OS.isWindows() {
+		var sb = new StringBuilder()
+		var it = String.iterate(tp)
+		loop {
+			var c = it.getNextChar()
+			if c < 1:
+				break
+			if c == '\\':
+				sb.append('\\')
+			sb.append(c)
+		}
+		return sb.toString()
+	}
+	return tp
+}
+
+func getDefaultPaperConfiguration private as DynamicMap
+{
+	var default = new DynamicMap()
+	default.set("paperWidth", "8.27in")
+	default.set("paperHeight", "11.7in")
+	default.set("paperOrientation", "portrait")
+	return default
+}
+
+func toOneLiner(str as string) as string
+{
+	var sb = new StringBuilder()
+	var it = String.iterate(str)
+	loop {
+		var c = it.getNextChar()
+		if c < 1:
+			break
+		if c == '\r' || c == '\t' || c == ' ' || c == '\n':
+			continue
+		sb.append(c)
+	}
+	return sb.toString()
+}
