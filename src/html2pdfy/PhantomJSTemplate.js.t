@@ -11,7 +11,7 @@ phantom.onError = function(msg, trace) {
 	console.log(msgStack.join('\n'));
 	phantom.exit(1);
 };
-<% if ${useUrl} == "true" %><% end %>
+<% if ${useUrl} == "true" %>var url = '<%= url %>';<% end %>
 <% if ${useUrl} == "false" %>var content = '<%= contentString %>';
 var url = 'html2pdfy';
 page.setContent(content, url);<% end %>
