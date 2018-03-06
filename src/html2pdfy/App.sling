@@ -1,0 +1,229 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is WebServer:
+
+import capex.util
+import capex.text
+import capex.console
+import sympathy
+import sympathy.app
+
+var phantomJSExec as File
+var phantomJSExecPath as string
+var phantomOutputDirectory as File
+var validUnitMeasurement as StringSet
+
+func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
+{
+	if key == "phantomJSExecPath" {
+		phantomJSExecPath = value
+		return true
+	}
+	if key == "phantomOutputDirectory" {
+		phantomOutputDirectory = File.forRelativePath(value, relativeTo)
+		return true
+	}
+	return base.configure(key, value, relativeTo, error)
+}
+
+func initializeServer(server as HTTPServer) override as bool
+{
+	assert base.initializeServer(server):
+		Log.error(ctx, "Failed to initialize HTTP server")
+	if String.isEmpty(phantomJSExecPath):
+		phantomJSExecPath = "phantomjs"
+	phantomJSExec = findPhantomJSExecutable(phantomJSExecPath)
+	if not phantomJSExec {
+		Log.error(ctx, "Failed to find executable for phantomjs")
+		return false
+	}
+	if not phantomOutputDirectory || phantomOutputDirectory.isDirectory() == false:
+		phantomOutputDirectory = Environment.getCurrentDirectory()
+	validUnitMeasurement = new StringSet()
+	validUnitMeasurement.add("mm")
+	validUnitMeasurement.add("cm")
+	validUnitMeasurement.add("in")
+	validUnitMeasurement.add("px")
+	server.pushRequestHandler(requestHandler)
+	return true
+}
+
+func requestHandler(req as HTTPServerRequest, next as function)
+{
+	if req.isPOST() {
+		var data = assert validateAndGetData(req.getBodyJSONMap(), func(error as Error) {
+			Log.error(ctx, "Failed in validating data")
+			req.sendJSONError(error)
+		})
+		var template = assert TextTemplate.forString(TEXTFILE "PhantomJSTemplate.js.t", "<%", "%>") {
+			req.sendJSONObject(JSONResponse.forInternalError("Failed to parse template"))
+			Log.error(ctx, "Failed to parse phantomjs template file")
+		}
+		var phantomJSContent = template.execute(data)
+		assert String.isNotEmpty(phantomJSContent) {
+			req.sendJSONObject(JSONResponse.forInternalError("Failed to generate content"))
+			Log.error(ctx, "Failed to generate content for phantomjs js file")
+		}
+		var phantomJSFile = phantomOutputDirectory.entry("html2pdfy.js")
+		assert phantomJSFile.setContentsUTF8(phantomJSContent) {
+			req.sendJSONObject(JSONResponse.forInternalError("Failed to write to file"))
+			Log.error(ctx, "Failed to write: `" .. phantomJSFile.getPath() .. "'")
+		}
+		var pl = ProcessLauncher.forFile(phantomJSExec, [ phantomJSFile.getPath() ])
+		var r = pl.execute()
+		assert r == 0 {
+			req.sendJSONObject(JSONResponse.forInternalError())
+			Log.error(ctx, phantomJSExec.getPath() .. " returned an error status: " .. String.asString(r))
+		}
+		var pdf = phantomOutputDirectory.entry("html2pdfy.pdf")
+		assert pdf.isFile() {
+			req.sendJSONObject(JSONResponse.forInternalError())
+			Log.error(ctx, "Failed to get pdf file after phantomjs execution")
+		}
+		var buf = assert pdf.getContentsBuffer() {
+			req.sendJSONObject(JSONResponse.forInternalError())
+			Log.error(ctx, "Failed to get content buffer of `" .. pdf.getPath() .. "'")
+		}
+		req.sendBuffer(buf, MimeTypeRegistry.determineTypeForFile(pdf))
+		return
+	}
+	next()
+}
+
+func validateAndGetData(data as DynamicMap, callback as function<void, Error>) private as DynamicMap
+{
+	assert data:
+		callback(Error.forMessage("Invalid POST data"))
+	var contentString = data.getString("contentString")
+	var urlString = data.getString("url")
+	var map = new DynamicMap()
+	if String.isNotEmpty(urlString) {
+		map.set("useUrl", true)
+		map.set("url", urlString)
+	}
+	else {
+		assert String.isNotEmpty(contentString):
+			callback(Error.forMessage("No url or contentString is specified"))
+		map.set("useUrl", false)
+		map.set("contentString", contentString)
+	}
+	var paperConfiguration = data.getDynamicMap("paperConfiguration")
+	if not paperConfiguration:
+		paperConfiguration = getDefaultPaperConfiguration()
+	assert validateMeasurement(paperConfiguration.getString("paperWidth")):
+		callback(Error.forMessage("Invalid paperWidth in paperConfiguration"))
+	assert validateMeasurement(paperConfiguration.getString("paperHeight")):
+		callback(Error.forMessage("Invalid paperWidth in paperConfiguration"))
+	var orientation = assert paperConfiguration.getString("paperOrientation"):
+		callback(Error.forMessage("Invalid paperOrientation in paperConfiguration"))
+	if String.isNotEqual(orientation, "portrait") && String.isNotEqual(orientation, "landscape"):
+		paperConfiguration.set("paperOrientation", "portrait")
+	return map.mergeFrom(paperConfiguration)
+}
+
+func validateMeasurement(mstr as string) private as bool
+{
+	assert String.isNotEmpty(mstr)
+	var ll = String.getLength(mstr) - 2
+	var ms = String.getSubString(mstr, 0, ll)
+	assert String.isNotEmpty(ms)
+	var un = String.getSubString(mstr, ll)
+	if String.isNotEmpty(un):
+		assert validUnitMeasurement.contains(un)
+	assert isDouble(ms)
+	return true
+}
+
+func isDouble(str as string) private as bool
+{
+	var it = assert String.iterate(str)
+	loop {
+		var c = it.getNextChar()
+		if c < 1:
+			break
+		if c == '.':
+			continue
+		if c < '0' || c > '9':
+			return false
+	}
+	return true
+}
+
+func findPhantomJSExecutable(path as string) private as File
+{
+	var f = File.forPath(path)
+	if f.isFile():
+		return f
+	if f.isDirectory() {
+		f = findPhantomJSExecutableInDirectory(path, f)
+		if f && f.isFile():
+			return f
+	}
+	foreach dir as File in getDirectoriesToLookForPhantomJSExecutable() {
+		f = findPhantomJSExecutableInDirectory(path, dir)
+		if f && f.isFile():
+			return f
+	}
+	return null
+}
+
+func findPhantomJSExecutableInDirectory(path as string, dir as File) private as File
+{
+	assert dir
+	Log.debug(ctx, "Looking for `" .. path .. "' in `" .. dir.getPath() .. "'")
+	var ee = assert dir.entries()
+	loop {
+		var e = ee.next()
+		if not e:
+			break
+		var b = e.baseName()
+		if String.equals(b, path):
+			return e
+	}
+	return null
+}
+
+func getDirectoriesToLookForPhantomJSExecutable private as array
+{
+	return [
+		Environment.getCurrentDirectory(),
+		Environment.getAppDirectory(),
+		Environment.getHomeDirectory()
+	]
+}
+
+func getDefaultPaperConfiguration private as DynamicMap
+{
+	var default = new DynamicMap()
+	default.set("paperWidth", "8.27in")
+	default.set("paperHeight", "11.7in")
+	default.set("paperOrientation", "portrait")
+	return default
+}
+
+main
+{
+	return new this().executeMain(args)
+}
