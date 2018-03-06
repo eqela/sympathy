@@ -176,15 +176,6 @@ func getSanitizedPath(tempDir as File, filename as string) private as string
 	return tp
 }
 
-func getDefaultPaperConfiguration private as DynamicMap
-{
-	var default = new DynamicMap()
-	default.set("paperWidth", "8.27in")
-	default.set("paperHeight", "11.7in")
-	default.set("paperOrientation", "portrait")
-	return default
-}
-
 func toOneLiner(str as string) as string
 {
 	var sb = new StringBuilder()
