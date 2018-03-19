@@ -1,0 +1,50 @@
+#
+# This file is part of Sympathy
+# Copyright (c) 2017-2018 Job and Esther Technologies Oy
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+
+tool eqela:sling:r300
+tool igelle:tools:r3
+lib eqela:jkop:r2
+set version 4.0.20180319
+
+build {
+	igelle:tools/delete build
+	eqela:sling/slingc src/artsc -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/artsc
+	eqela:sling/slingc src/artsy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/artsy
+	eqela:sling/slingc src/authdbusry -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/authdbusry
+	eqela:sling/slingc src/authdbsysy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/authdbsysy
+	# eqela:sling/slingc src/chaty -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/chaty
+	eqela:sling/slingc src/dby -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/dby
+	eqela:sling/slingc src/filesy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/filesy
+	eqela:sling/slingc src/html2pdfy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/html2pdfy
+	eqela:sling/slingc src/keepalive -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/keepalive
+	eqela:sling/slingc src/pnfwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/pnfwy
+	eqela:sling/slingc src/profileusry -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/profileusry
+	eqela:sling/slingc src/smsgwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/smsgwy
+	eqela:sling/slingc src/sqlc -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/sqlc
+	eqela:sling/slingc src/sqlfwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/sqlfwy
+    igelle:tools/cpto build/sympathy-web-services-${version} \
+        build/app/*/*.dll \
+        build/app/*/*.exe
+	igelle:tools/delete build/sympathy-web-services-${version}.zip
+    igelle:tools/zipdir build/sympathy-web-services-${version}
+}
