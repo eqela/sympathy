@@ -423,7 +423,76 @@ func onNewDataMessage(message as ChatMessage, connection as ChatConnectionHandle
 	getChannel(channelId, func(channel as ChatChannel) {
 		assert channel && String.equals(channel.getChannelId(), channelId) {
 			logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
-			connection.close()
+			var data = new DynamicMap()
+			data.set("command", "message_saved")
+			data.set("channelId", channelId)
+			data.set("status", "error")
+			data.set("code", "invalid_channel_id")
+			data.set("message", "Invalid channel id")
+			var v = new DynamicMap()
+			v.set("messageType", ChatMessage.COMMAND_TYPE)
+			v.set("data", data)
+			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+			var r = connection.sendMessage(reply)
+			assert r > 0 {
+				logError("Failed to send message. Closing the connection instead.")
+				connection.close()
+			}
+		}
+		var recipients = DataManager.getRecipients(channelId)
+		assert recipients && recipients.getSize() > 1 {
+			var data = new DynamicMap()
+			data.set("command", "message_saved")
+			data.set("channelId", channelId)
+			data.set("status", "error")
+			data.set("code", "internal_error")
+			data.set("message", "Internal error")
+			var v = new DynamicMap()
+			v.set("messageType", ChatMessage.COMMAND_TYPE)
+			v.set("data", data)
+			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+			var r = connection.sendMessage(reply)
+			assert r > 0 {
+				logError("Failed to send message. Closing the connection instead.")
+				connection.close()
+			}
+		}
+		var recipientMap = new DynamicMap()
+		foreach userId in recipients.toVectorOfStrings():
+			recipientMap.set(userId, userId)
+		assert recipientMap.getCount() > 1 {
+			var data = new DynamicMap()
+			data.set("command", "message_saved")
+			data.set("channelId", channelId)
+			data.set("status", "error")
+			data.set("code", "internal_error")
+			data.set("message", "Internal error")
+			var v = new DynamicMap()
+			v.set("messageType", ChatMessage.COMMAND_TYPE)
+			v.set("data", data)
+			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+			var r = connection.sendMessage(reply)
+			assert r > 0 {
+				logError("Failed to send message. Closing the connection instead.")
+				connection.close()
+			}
+		}
+		assert recipientMap.containsKey(creatorUserId) {
+			var data = new DynamicMap()
+			data.set("command", "message_saved")
+			data.set("channelId", channelId)
+			data.set("status", "error")
+			data.set("code", "user_does_not_belong")
+			data.set("message", "You're not part of this conversation anymore.")
+			var v = new DynamicMap()
+			v.set("messageType", ChatMessage.COMMAND_TYPE)
+			v.set("data", data)
+			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+			var r = connection.sendMessage(reply)
+			assert r > 0 {
+				logError("Failed to send message. Closing the connection instead.")
+				connection.close()
+			}
 		}
 		onSaveMessage(message, channel, connection)
 	})

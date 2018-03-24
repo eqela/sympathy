@@ -36,6 +36,7 @@ func forMessageSavedCommand(message as this, channel as ChatChannel) static as t
 	v.setMessageType(COMMAND_TYPE)
 	var data = new DynamicMap()
 	data.set("command", "message_saved")
+	data.set("status", "ok")
 	data.set("sendId", message.getSendId())
 	data.set("messageId", message.getMessageId())
 	data.set("creatorUserId", message.getCreatorUserId())
