@@ -23,3 +23,5 @@
  */
 
 title = "Sympathy Chat Server"
+preFilters += "@cape"
+preFilters += "@sympathy"

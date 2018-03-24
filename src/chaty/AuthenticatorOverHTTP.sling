@@ -1,0 +1,160 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is JSONAPIClient is Authenticator:
+
+import capex.http
+import capex.web
+
+macro CHECK_SESSION(sessionId, callback)
+{
+	assert String.isNotEmpty(sessionId):
+		callback(null, Error.instance("no_session_id", "No session id"))
+	var headers = new KeyValueList<string,string>()
+	headers.add(authParameterKey, sessionId)
+	headers.add("Content-Type", "application/json")
+}
+
+func forConfiguration(authConfig as DynamicMap) static as this
+{
+	assert authConfig
+	var authBaseURL = authConfig.getString("authBaseURL")
+	assert String.isNotEmpty(authBaseURL)
+	var authParameterKey = authConfig.getString("authParameterKey")
+	assert String.isNotEmpty(authParameterKey)
+	var authenticateURL = authConfig.getString("authenticateURL")
+	assert String.isNotEmpty(authenticateURL)
+	var verifyUserIdsURL = authConfig.getString("verifyUserIdsURL")
+	assert String.isNotEmpty(verifyUserIdsURL)
+	var verifyExternalIdURL = authConfig.getString("verifyExternalIdURL")
+	assert String.isNotEmpty(verifyExternalIdURL)
+	var v = new this()
+	v.setApiUrl(authBaseURL)
+	v.setAuthParameterKey(authParameterKey)
+	v.setAuthenticateURL(authenticateURL)
+	v.setVerifyUserIdsURL(verifyUserIdsURL)
+	v.setVerifyExternalIdURL(verifyExternalIdURL)
+	return v
+}
+
+ctor:
+	setWebClient(new CustomWebClient())
+
+prop authBaseURL as string
+prop authParameterKey as string
+prop authenticateURL as string
+prop verifyUserIdsURL as string
+prop verifyExternalIdURL as string
+
+func get(url as string, headers as KeyValueList<string,string>, callback as function<void, DynamicMap, Error>) private
+{
+	doSendRequest("GET", getFullURL(url), headers, null, func(responseHeaders as KeyValueList<string,string>, body as buffer) {
+		assert body:
+			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
+		var json = assert JSONParser.parse(body) as DynamicMap:
+			callback(null, Error.forMessage("Invalid JSON Format from auth server: '" .. String.asString(body) .. "'"))
+		callback(json, null)
+	}, func(error as Error) {
+		callback(null, error)
+	})
+}
+
+func post(url as string, headers as KeyValueList<string,string>, data as DynamicMap, callback as function<void, DynamicMap, Error>) private
+{
+	doSendRequest("POST", getFullURL(url), headers, String.toUTF8Buffer(JSONEncoder.encode(data)), func(responseHeaders as KeyValueList<string,string>, body as buffer) {
+		assert body:
+			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
+		var json = assert JSONParser.parse(body) as DynamicMap:
+			callback(null, Error.forMessage("Invalid JSON Format from auth server: '" .. String.asString(body) .. "'"))
+		callback(json, null)
+	}, func(error as Error) {
+		callback(null, error)
+	})
+}
+
+func put(url as string, headers as KeyValueList<string,string>, data as DynamicMap, callback as function<void, DynamicMap, Error>) private
+{
+	doSendRequest("PUT", getFullURL(url), headers, String.toUTF8Buffer(JSONEncoder.encode(data)), func(responseHeaders as KeyValueList<string,string>, body as buffer) {
+		assert body:
+			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
+		var json = assert JSONParser.parse(body) as DynamicMap:
+			callback(null, Error.forMessage("Invalid JSON Format from auth server: '" .. String.asString(body) .. "'"))
+		callback(json, null)
+	}, func(error as Error) {
+		callback(null, error)
+	})
+}
+
+func delete(url as string, headers as KeyValueList<string,string>, callback as function<void, DynamicMap, Error>) private
+{
+	doSendRequest("DELETE", getFullURL(url), headers, null, func(responseHeaders as KeyValueList<string,string>, body as buffer) {
+		assert body:
+			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
+		var json = assert JSONParser.parse(body) as DynamicMap:
+			callback(null, Error.forMessage("Invalid JSON Format from auth server: '" .. String.asString(body) .. "'"))
+		callback(json, null)
+	}, func(error as Error) {
+		callback(null, error)
+	})
+}
+
+func authenticate(sessionId as string, callback as function<void, DynamicMap, Error>)
+{
+	CHECK_SESSION(sessionId, callback)
+	get(authenticateURL, headers, func(response as DynamicMap, e as Error) {
+		assert not e:
+			callback(null, e)
+		var data = assert response.getDynamicMap("data"):
+			callback(null, Error.instance("invalid_server_response", "Invalid response from authentication server"))
+		callback(data, null)
+	})
+}
+
+func verifyUserIds(sessionId as string, userIds as DynamicVector, callback as function<void, DynamicVector, Error>)
+{
+	CHECK_SESSION(sessionId, callback)
+	var data = new DynamicMap()
+	data.set("userIds", userIds)
+	post(verifyUserIdsURL, headers, data, func(response as DynamicMap, e as Error) {
+		assert not e:
+			callback(null, e)
+		var list = assert response.getDynamicVector("data"):
+			callback(null, Error.instance("invalid_server_response", "Invalid response from authentication server"))
+		callback(list, null)
+	})
+}
+
+func verifyExternalId(sessionId as string, externalId as string, callback as function<void, DynamicVector, Error>)
+{
+	CHECK_SESSION(sessionId, callback)
+	var data = new DynamicMap()
+	data.set("externalId", externalId)
+	post(verifyExternalIdURL, headers, data, func(response as DynamicMap, e as Error) {
+		assert not e:
+			callback(null, e)
+		var list = assert response.getDynamicVector("data"):
+			callback(null, Error.instance("invalid_server_response", "Invalid response from authentication server"))
+		callback(list, null)
+	})
+}
