@@ -22,15 +22,55 @@
  * SOFTWARE.
  */
 
-class is ChatUser:
+class:
 
 import cape
-import sympathy.chat
 
+prop sessionId as string
 prop userId as string
+var engine protected as ChatEngine
 
-func setUserId(userId as string):
-	this.userId = userId
+func create(userId as string) static as this
+{
+	assert String.isNotEmpty(userId)
+	return new this().setUserId(userId)
+}
 
-func getUserId override as string:
-	return userId
+func setEngine(engine as ChatEngine):
+	this.engine = engine
+
+func getConnection(connectionId as string) as ChatConnectionHandler
+{
+	assert engine
+	return engine.getUserConnection(getUserId(), connectionId)
+}
+
+func removeConnection(connectionId as string)
+{
+	assert engine
+	engine.removeUserConnection(getUserId(), connectionId)
+}
+
+func getConnectionCount as int
+{
+	assert engine
+	return engine.getUserConnectionCount(getUserId())
+}
+
+func getConnectionIds as vector<string>
+{
+	assert engine
+	return engine.getUserConnectionIds(getUserId())
+}
+
+func isOnline as bool
+{
+	assert engine
+	return engine.isUserOnline(getUserId())
+}
+
+func getLastActive as long
+{
+	assert engine
+	return engine.getUserLastActive(getUserId())
+}

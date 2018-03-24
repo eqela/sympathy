@@ -1,0 +1,109 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class #dataModel:
+
+import cape
+import capex.data
+
+prop channelId as string #dataField #index
+prop userId as string #dataField #index
+prop timeStampCreated as long #dataField #index
+prop timeStampLastUpdated as long #dataField #index
+
+func onInsert #onInsert
+{
+	timeStampCreated = SystemClock.asUTCSeconds()
+	timeStampLastUpdated = timeStampCreated
+}
+
+func getRecipients(channelId as string) static as DynamicVector
+{
+	var db = DataManager.getDb()
+	if not db:
+		return new DynamicVector()
+	if String.isEmpty(channelId):
+		return new DynamicVector()
+	var itr = db.query(db.prepare("SELECT userId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE channelId = ? ORDER BY timeStampLastUpdated DESC;").addParamString(channelId))
+	if not itr:
+		return new DynamicVector()
+	var recipients = new DynamicVector()
+	loop {
+		var recipient = itr.next()
+		if not recipient:
+			break
+		recipients.append(recipient.getString("userId"))
+	}
+	return recipients
+}
+
+func getChannelIdForRecipients(recipients as DynamicVector, creatorUserId as string) static as string
+{
+	var db = assert DataManager.getDb()
+	assert String.isNotEmpty(creatorUserId)
+	assert recipients && recipients.getSize() > 0
+	var userIds = assert recipients.toVectorOfStrings()
+	userIds += creatorUserId
+	var userMap = new DynamicMap()
+	foreach userId in userIds:
+		userMap.set(userId, userId)
+	userIds = userMap.getKeys()
+	assert userIds && SIZE(userIds) > 1
+	var sb = new StringBuilder()
+	sb.append("SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId IN (")
+	var first = true
+	foreach userId in userIds {
+		if not first:
+			sb.append(", ")
+		first = false
+		sb.append("?")
+	}
+	sb.append(") AND userId NOT IN (SELECT DISTINCT userId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId NOT IN (")
+	first = true
+	foreach userId in userIds {
+		if not first:
+			sb.append(", ")
+		first = false
+		sb.append("?")
+	}
+	sb.append(")) AND channelId NOT IN (SELECT DISTINCT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId NOT IN (")
+	first = true
+	foreach userId in userIds {
+		if not first:
+			sb.append(", ")
+		first = false
+		sb.append("?")
+	}
+	sb.append(")) GROUP BY channelId HAVING COUNT(channelId) = ? LIMIT 1;")
+	var stmt = assert db.prepare(sb.toString())
+	var i = 0
+	while i < 3 {
+		foreach userId in userIds:
+			stmt.addParamString(userId)
+		i ++
+	}
+	stmt.addParamInteger(SIZE(userIds))
+	var v = assert db.querySingleRow(stmt)
+	return v.getString("channelId")
+}

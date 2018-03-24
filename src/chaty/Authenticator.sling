@@ -22,40 +22,8 @@
  * SOFTWARE.
  */
 
-class is ChatChannel:
+interface:
 
-import cape
-import sympathy.chat
-
-func create(engine as ChatEngine, message as ChatMessage) static as this
-{
-	var v = new this().setEngine(engine)
-	assert v.initialize(message)
-	return v
-}
-
-prop engine as ChatEngine
-var users private as DynamicVector
-var channelId private as string
-
-func initialize(message as ChatMessage) as bool
-{
-	assert message
-	users = message.getRecipients()
-	assert users
-	return users.getSize() > 1
-}
-
-func setChannelId(channelId as string):
-	this.channelId = channelId
-
-func getChannelId override as string:
-	return channelId
-
-func onNewDataMessage(message as ChatMessage) override
-{
-	var m = message as MyChatMessage
-	assert engine && m
-	m.setRecipients(users)
-	engine.broadcastMessage(m)
-}
+func authenticate(sessionId as string, callback as function<void, DynamicMap, Error>)
+func verifyUserIds(sessionId as string, userIds as DynamicVector, callback as function<void, DynamicVector, Error>)
+func verifyExternalId(sessionId as string, externalId as string, callback as function<void, DynamicVector, Error>)
