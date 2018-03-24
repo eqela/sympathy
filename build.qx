@@ -24,7 +24,7 @@
 tool eqela:sling:r300
 tool igelle:tools:r3
 lib eqela:jkop:r2
-set version 4.0.20180319
+set version 4.0.20180324
 
 build {
 	igelle:tools/delete build
@@ -32,7 +32,7 @@ build {
 	eqela:sling/slingc src/artsy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/artsy
 	eqela:sling/slingc src/authdbusry -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/authdbusry
 	eqela:sling/slingc src/authdbsysy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/authdbsysy
-	# eqela:sling/slingc src/chaty -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/chaty
+	eqela:sling/slingc src/chaty -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/chaty
 	eqela:sling/slingc src/dby -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/dby
 	eqela:sling/slingc src/filesy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/filesy
 	eqela:sling/slingc src/html2pdfy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/html2pdfy
