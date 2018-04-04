@@ -1,7 +1,7 @@
 
 /*
- * This file is part of Sympathy
- * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ * This file is part of Jkop
+ * Copyright (c) 2016-2018 Job and Esther Technologies Oy
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,42 +22,8 @@
  * SOFTWARE.
  */
 
-class is WebServerWithDatabase:
+interface:
 
 import sympathy
-import sympathy.dbapp
-import sympathy.service
-import capex.data
 
-func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
-{
-	if key == "authServerUrl" {
-		AuthServerApi.setAuthServerUrl(value)
-		return true
-	}
-	return base.configure(key, value, relativeTo, error)
-}
-
-func initializeDatabase as bool
-{
-	var profile = SQLTableInfo.forName("profile")
-	profile.addStringKeyColumn("userid")
-	profile.addStringColumn("firstname")
-	profile.addStringColumn("lastname")
-	profile.addStringColumn("organization")
-	assert ensureTableExists(profile)
-	return true
-}
-
-func initializeServer(server as HTTPServer) override as bool
-{
-	assert base.initializeServer(server)
-	assert initializeDatabase()
-	var handler = new ApiHandler()
-	handler.setDb(getDb())
-	server.pushRequestHandler(handler)
-	return true
-}
-
-main:
-	return new this().executeMain(args)
+func handleAuthenticatedRequest(req as HTTPServerRequest, handler as function<void,string,string,HTTPServerRequest>)

@@ -22,19 +22,15 @@
  * SOFTWARE.
  */
 
-class is WebServerWithDatabase:
+class:
 
-import sympathy
-import sympathy.dbapp
+prop method as string
+prop target as string
+prop auth as bool
 
-func initializeServer(server as HTTPServer) override as bool
+ctor(method as string, target as string, auth as bool)
 {
-	assert base.initializeServer(server)
-	var handler = new ApiHandler()
-	handler.setDb(getDb())
-	server.pushRequestHandler(handler)
-	return true
+	this.method = method
+	this.target = target
+	this.auth = auth
 }
-
-main:
-	return new this().executeMain(args)

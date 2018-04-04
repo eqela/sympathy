@@ -25,7 +25,6 @@
 class #webapi:
 
 import capex.data
-import sympathy.service
 
 prop db as SQLDatabase
 
@@ -50,43 +49,53 @@ func validateProfileDataField(key as string, val as string) private as bool
 	return false
 }
 
-POST "getMyProfile"
+macro INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST
 {
-	AuthServerApi.handleAuthenticatedRequest(req, func(userid as string, params as DynamicMap) {
-		var stmt = assert db.prepareSelectStatement("profile", new DynamicMap().set("userid", userid)):
-			req.sendJSONError(ServerError.internalError())
-		db.querySingleRow(stmt, func(v as DynamicMap) {
-			var vv = v
-			if not vv:
-				vv = new DynamicMap()
-			vv.set("userid", userid)
-			req.sendJSONOK(vv)
-		})
+	var userid = req.getHeader("x-sympathy-apigwy-userid")
+	assert String.isNotEmpty(userid):
+		req.sendJSONError(ServerError.notAllowed())
+	var sessionid = req.getHeader("x-sympathy-apigwy-sessionid")
+	assert String.isNotEmpty(sessionid):
+		req.sendJSONError(ServerError.notAllowed())
+}
+
+POST "getOwnProfile"
+{
+	INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST()
+	var stmt = assert db.prepareSelectStatement("profile", new DynamicMap().set("userid", userid)):
+		req.sendJSONError(ServerError.internalError())
+	db.querySingleRow(stmt, func(v as DynamicMap) {
+		var vv = v
+		if not vv:
+			vv = new DynamicMap()
+		vv.set("userid", userid)
+		req.sendJSONOK(vv)
 	})
 }
 
-POST "updateMyProfile"
+POST "updateOwnProfile"
 {
-	AuthServerApi.handleAuthenticatedRequest(req, func(userid as string, params as DynamicMap) {
-		assert params.getCount() > 0:
+	INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST()
+	var params = assert req.getBodyJSONMap():
+		req.sendJSONError(ServerError.invalidRequest())
+	assert params.getCount() > 0:
+		req.sendJSONError(ServerError.invalidRequest())
+	foreach key in params.getKeys() {
+		assert validateProfileDataField(key, params.getString(key)):
 			req.sendJSONError(ServerError.invalidRequest())
-		foreach key in params.getKeys() {
-			assert validateProfileDataField(key, params.getString(key)):
-				req.sendJSONError(ServerError.invalidRequest())
-		}
-		var criteria = new DynamicMap().set("userid", userid)
-		db.executeUpdateDelete(db.prepareUpdateStatement("profile", criteria, params), func(rows as int) {
-			if rows < 1 {
-				params.set("userid", userid)
-				db.executeUpdateDelete(db.prepareInsertStatement("profile", params), func(rows as int) {
-					assert rows > 0:
-						req.sendJSONError(ServerError.failedToSave())
-					req.sendJSONOK()
-				})
-			}
-			else {
+	}
+	var criteria = new DynamicMap().set("userid", userid)
+	db.executeUpdateDelete(db.prepareUpdateStatement("profile", criteria, params), func(rows as int) {
+		if rows < 1 {
+			params.set("userid", userid)
+			db.executeUpdateDelete(db.prepareInsertStatement("profile", params), func(rows as int) {
+				assert rows > 0:
+					req.sendJSONError(ServerError.failedToSave())
 				req.sendJSONOK()
-			}
-		})
+			})
+		}
+		else {
+			req.sendJSONOK()
+		}
 	})
 }

@@ -22,28 +22,37 @@
  * SOFTWARE.
  */
 
-class #webapi:
+class is WebServerWithDatabase:
 
+import sympathy
+import sympathy.dbapp
 import capex.data
 
-prop db as SQLDatabase
-
-POST "checkSession"
+func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
-	var params = assert req.getBodyJSONMap():
-		req.sendJSONError(ServerError.invalidRequest())
-	var sessionid = params.getString("sessionid")
-	assert sessionid:
-		req.sendJSONError(ServerError.invalidRequest())
-	var stmt = assert db.prepareSelectStatement("auth_session", new DynamicMap().set("id", sessionid)):
-		req.sendJSONError(ServerError.internalError())
-	db.querySingleRow(stmt, func(v as DynamicMap) {
-		assert v:
-			req.sendJSONError(ServerError.notFound())
-		var userid = assert v.getString("userid"):
-			req.sendJSONError(ServerError.notFound())
-		req.sendJSONOK(DynamicMap.forObjectMap({
-			"userid" : userid
-		}))
-	})
+	return base.configure(key, value, relativeTo, error)
 }
+
+func initializeDatabase as bool
+{
+	var profile = SQLTableInfo.forName("profile")
+	profile.addStringKeyColumn("userid")
+	profile.addStringColumn("firstname")
+	profile.addStringColumn("lastname")
+	profile.addStringColumn("organization")
+	assert ensureTableExists(profile)
+	return true
+}
+
+func initializeServer(server as HTTPServer) override as bool
+{
+	assert base.initializeServer(server)
+	assert initializeDatabase()
+	var handler = new ApiHandler()
+	handler.setDb(getDb())
+	server.pushRequestHandler(handler)
+	return true
+}
+
+main:
+	return new this().executeMain(args)

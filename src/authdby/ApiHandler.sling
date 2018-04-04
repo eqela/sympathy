@@ -28,6 +28,16 @@ import sympathy
 import capex.data
 import capex.crypto
 
+macro INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST
+{
+	var userid = req.getHeader("x-sympathy-apigwy-userid")
+	assert String.isNotEmpty(userid):
+		req.sendJSONError(ServerError.notAllowed())
+	var sessionid = req.getHeader("x-sympathy-apigwy-sessionid")
+	assert String.isNotEmpty(sessionid):
+		req.sendJSONError(ServerError.notAllowed())
+}
+
 prop allowRegistration = true
 prop db as SQLDatabase
 prop validationEmailTemplate as string
@@ -367,6 +377,21 @@ POST "deleteSession"
 	})
 }
 
+POST "deleteUserSession"
+{
+	INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST()
+	var stmt = assert db.prepareDeleteStatement("auth_session", new DynamicMap().set("id", sessionid)):
+		req.sendJSONError(ServerError.internalError())
+	db.execute(stmt, func(v as bool) {
+		if v == false {
+			req.sendJSONError(ServerError.failedToSave())
+		}
+		else {
+			req.sendJSONOK()
+		}
+	})
+}
+
 POST "registerUser"
 {
 	var params = assert req.getBodyJSONMap():
@@ -454,10 +479,10 @@ POST "validateAddress"
 
 POST "addUserAddress"
 {
+	INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST()
 	var params = assert req.getBodyJSONMap():
 		req.sendJSONError(ServerError.invalidRequest())
 	var address = params.getString("address")
-	var sessionid = params.getString("sessionid")
 	assert address:
 		req.sendJSONError(ServerError.invalidRequest())
 	assert isAddressFormatValid(address):
@@ -492,10 +517,10 @@ POST "addUserAddress"
 
 POST "deleteUserAddress"
 {
+	INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST()
 	var params = assert req.getBodyJSONMap():
 		req.sendJSONError(ServerError.invalidRequest())
 	var address = params.getString("address")
-	var sessionid = params.getString("sessionid")
 	assert address:
 		req.sendJSONError(ServerError.invalidRequest())
 	assert isAddressFormatValid(address):
@@ -526,9 +551,9 @@ POST "deleteUserAddress"
 
 POST "changePassword"
 {
+	INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST()
 	var params = assert req.getBodyJSONMap():
 		req.sendJSONError(ServerError.invalidRequest())
-	var sessionid = params.getString("sessionid")
 	var oldPassword = params.getString("oldPassword")
 	var newPassword = params.getString("newPassword")
 	getSession(sessionid, func(session as SessionModel) {
@@ -626,5 +651,25 @@ POST "resetPassword"
 				}
 			})
 		})
+	})
+}
+
+POST "checkSession"
+{
+	var params = assert req.getBodyJSONMap():
+		req.sendJSONError(ServerError.invalidRequest())
+	var sessionid = params.getString("sessionid")
+	assert sessionid:
+		req.sendJSONError(ServerError.invalidRequest())
+	var stmt = assert db.prepareSelectStatement("auth_session", new DynamicMap().set("id", sessionid)):
+		req.sendJSONError(ServerError.internalError())
+	db.querySingleRow(stmt, func(v as DynamicMap) {
+		assert v:
+			req.sendJSONError(ServerError.notFound())
+		var userid = assert v.getString("userid"):
+			req.sendJSONError(ServerError.notFound())
+		req.sendJSONOK(DynamicMap.forObjectMap({
+			"userid" : userid
+		}))
 	})
 }
