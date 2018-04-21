@@ -21,12 +21,12 @@
 # SOFTWARE.
 #
 
-tool eqela:sling:r300
-tool igelle:tools:r3
-lib eqela:jkop:r2
-set version 4.0.20180404
+use eqela:sling:r304
+use igelle:tools:r3
+use eqela:jkop:20180421
+set version 4.0.${date}
 
-build {
+release {
 	igelle:tools/delete build
 	eqela:sling/slingc src/apigwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/apigwy
 	eqela:sling/slingc src/artsc -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/artsc

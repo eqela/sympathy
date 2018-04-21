@@ -50,7 +50,7 @@ func sessionidToUserid(sessionid as string, callback as function<void,string>)
 		callback(null)
 	var params = new DynamicMap()
 	params.set("sessionid", sessionid)
-	api.postWithStatus("checkSession", params, func(v as DynamicMap, error as Error) {
+	api.postWithStatus("checkSession", params, null, func(v as DynamicMap, error as Error) {
 		assert error == null && v:
 			callback(null)
 		callback(v.getString("userid"))

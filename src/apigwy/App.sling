@@ -30,6 +30,7 @@ import capex.web
 
 var auth as AuthApi = new AuthApiForDummy()
 var endpoints = new map<string,Endpoint>
+var maxRequestSize = 1024 * 1024
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
@@ -42,6 +43,10 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 			asy.setAuthServerUrl(value)
 			auth = asy
 		}
+		return true
+	}
+	if key == "maxRequestSize" {
+		maxRequestSize = String.toInteger(value)
 		return true
 	}
 	var epswa = "api.endpoint.auth."
@@ -66,6 +71,7 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 func initializeServer(server as HTTPServer) override as bool
 {
 	assert base.initializeServer(server)
+	server.setSmallBodyLimit(maxRequestSize)
 	var handler = new ApiHandler()
 	handler.setCtx(ctx)
 	handler.setAuth(auth)
