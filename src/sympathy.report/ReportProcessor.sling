@@ -1,0 +1,609 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+import capex.pdf.maker
+import cave
+import capex.text
+import capex.util
+
+prop ctx as LoggingContext
+prop report as ReportDefinition
+prop dataSource as ReportDataSource
+var document as PdfMakerDocument
+var page as PdfMakerPage
+var currentPageNumber as int
+var pages as vector<PdfMakerPage>
+var headerHeight = -1.0
+var footerHeight = -1.0
+var currentY as double
+var maxY as double
+var currentRecord as DynamicMap
+var previousRecord as DynamicMap
+var groupCounts as array<int>
+var currentGroupCount = 0
+
+ctor
+{
+	currentPageNumber = 0
+	pages = new vector<PdfMakerPage>
+	groupCounts = new int[64]
+	for(var n=0; n<64; n++):
+		groupCounts[n] = -1
+}
+
+macro ON_ERROR(x)
+{
+	throw ExceptionWithString.forString(x)
+}
+
+func getOffsetX as double:
+	return px(report.getLeftMargin())
+
+func getOffsetY as double:
+	return py(report.getTopMargin())
+
+func px(rx as double) as double
+{
+	var tt = report.getPageContentWidth() + report.getLeftMargin() + report.getRightMargin()
+	return page.getWidth() * rx / (tt as! double)
+}
+
+func py(ry as double) as double
+{
+	var tt = report.getPageContentHeight() + report.getTopMargin() + report.getBottomMargin()
+	return page.getHeight() * ry / (tt as! double)
+}
+
+func sanitizeSortField(sort as ReportDefinition.SortField) as string
+{
+	assert sort
+	var v = assert sort.getField()
+	assert ReportDefinition.FormulaUtil.isFormula(v)
+	return ReportDefinition.FormulaUtil.formulaToFieldQualifier(v)
+}
+
+func getSqlQuery as string
+{
+	var mainTable = assert report.getMainTable()
+	var sb = new StringBuilder()
+	sb.append("SELECT ")
+	var first = true
+	foreach table in report.getDatabaseTables() {
+		var fields = table.getFields()
+		if not fields:
+			continue
+		foreach field in fields {
+			if not first:
+				sb.append(", ")
+			first = false
+			sb.append(field.getLongName())
+			sb.append(" AS [")
+			sb.append(field.getLongName())
+			sb.append("]")
+		}
+	}
+	sb.append(" FROM ")
+	sb.append(mainTable.getNameToUse())
+	foreach link in report.getTableLinks() {
+		var jt = link.getJoinType()
+		if jt == "LeftOuter" {
+			sb.append(" LEFT JOIN ")
+		}
+		else if jt == "RightOuter" {
+			sb.append(" RIGHT JOIN ")
+		}
+		else if jt == "Equal" {
+			sb.append(" INNER JOIN ")
+		}
+		else {
+			ON_ERROR("Unsupported table link join type: `" .. jt .. "'")
+		}
+		var table = link.getDestinationTableName()
+		if not table:
+			ON_ERROR("Failed to determine destination table from table link")
+		sb.append(table)
+		var sfs = link.getSourceFields()
+		var dfs = link.getDestinationFields()
+		var max = Vector.getSize(sfs)
+		for(var n=0; n<max; n++) {
+			var sfo = Vector.get(sfs, n)
+			var dfo = Vector.get(dfs, n)
+			if sfo == null || dfo == null:
+				ON_ERROR("Null field in table link relationship data")
+			var sf = sfo.getFormulaName()
+			var df = dfo.getFormulaName()
+			if String.isEmpty(sf) || String.isEmpty(df):
+				ON_ERROR("Empty field in table link relationship data")
+			if n == 0 {
+				sb.append(" ON ")
+			}
+			else {
+				sb.append(" AND ")
+			}
+			sb.append(ReportDefinition.FormulaUtil.formulaToFieldQualifier(sf))
+			sb.append(" = ")
+			sb.append(ReportDefinition.FormulaUtil.formulaToFieldQualifier(df))
+		}
+	}
+	var sorts = report.getSortFields()
+	if sorts && Vector.getSize(sorts) > 0 {
+		sb.append(" ORDER BY ")
+		var first = true
+		foreach sort in sorts {
+			if not first:
+				sb.append(", ")
+			first = false
+			var sf = sanitizeSortField(sort)
+			if not sf:
+				ON_ERROR("Failed to sanitize sort field: `" .. sort.getField() .. "'")
+			sb.append(sf)
+			var dir = sort.getSortDirection()
+			if dir == "AscendingOrder" {
+				sb.append(" ASC")
+			}
+			else if dir == "DescendingOrder" {
+				sb.append(" DESC")
+			}
+		}
+	}
+	return sb.toString()
+}
+
+func isFunctionCall(string as string, function as string) as bool
+{
+	assert string && function
+	if((String.startsWith(string, function .. "(") || String.startsWith(string, function .. " (")) && String.endsWith(string, ")")):
+		return true
+	return false
+}
+
+func getFunctionCallParameter(string as string) as string
+{
+	assert string
+	var idx = String.indexOf(string, '(')
+	assert idx >= 0
+	var end = String.indexOf(string, ')', idx)
+	assert end >= 0
+	return String.getSubString(string, idx + 1, end - idx - 1)
+}
+
+func getFieldContent(field as ReportDefinition.FieldObject) as string
+{
+	var ds = field.getDataSource()
+	if ds == "PrintDate" {
+		return VerboseDateTimeString.getDateStringForDateTime(DateTime.forNow())
+	}
+	else if ds == "PageNofM" {
+		return String.forInteger(currentPageNumber) .. " of " .. String.forInteger(Vector.getSize(pages))
+	}
+	else if isFunctionCall(ds, "GroupName") {
+		return getFunctionCallParameter(ds)
+	}
+	else if isFunctionCall(ds, "Count") {
+		return String.forInteger(currentGroupCount)
+	}
+	return ds
+}
+
+func getPaperSize as PaperSize
+{
+	var dps = report.getPaperSize()
+	if String.equalsIgnoreCase(dps, "PaperA4") || String.equalsIgnoreCase(dps, "A4"):
+		return PaperSize.forA4()
+	if String.equalsIgnoreCase(dps, "PaperA3") || String.equalsIgnoreCase(dps, "A3"):
+		return PaperSize.forA3()
+	if String.equalsIgnoreCase(dps, "PaperA5") || String.equalsIgnoreCase(dps, "A5"):
+		return PaperSize.forA5()
+	if String.equalsIgnoreCase(dps, "PaperB4") || String.equalsIgnoreCase(dps, "B4"):
+		return PaperSize.forB4()
+	if String.equalsIgnoreCase(dps, "PaperB5") || String.equalsIgnoreCase(dps, "B5"):
+		return PaperSize.forB5()
+	if String.equalsIgnoreCase(dps, "PaperLegal") || String.equalsIgnoreCase(dps, "Legal"):
+		return PaperSize.forLegal()
+	if String.equalsIgnoreCase(dps, "PaperLetter") || String.equalsIgnoreCase(dps, "Letter"):
+		return PaperSize.forLetter()
+	ON_ERROR("Unsupported paper size: `" .. dps .. "'")
+	return null
+}
+
+func addPage
+{
+	page = document.addPageWithSize(getPaperSize())
+	pages += page
+	currentPageNumber ++
+	currentY = py(report.getTopMargin()) + getHeaderHeight()
+	maxY = page.getHeight() - getFooterHeight() - py(report.getBottomMargin())
+}
+
+func getHeaderHeight as double
+{
+	if headerHeight < 0.0 {
+		var header = report.getPageHeader()
+		if header {
+			var totalHeightRep = 0
+			foreach section in header.getSections():
+				totalHeightRep += section.getHeight()
+			headerHeight = py(totalHeightRep)
+		}
+		else {
+			headerHeight = 0.0
+		}
+	}
+	return headerHeight
+}
+
+func getFooterHeight as double
+{
+	if footerHeight < 0.0 {
+		var footer = report.getPageFooter()
+		if footer {
+			var totalHeightRep = 0
+			foreach section in footer.getSections():
+				totalHeightRep += section.getHeight()
+			footerHeight = py(totalHeightRep)
+		}
+		else {
+			footerHeight = 0.0
+		}
+	}
+	return footerHeight
+}
+
+func renderReportHeader private
+{
+	var header = assert report.getReportHeader()
+	currentY = renderSections(currentY, header.getSections())
+}
+
+func renderPageHeader private
+{
+	var header = assert report.getPageHeader()
+	renderSections(py(report.getTopMargin()), header.getSections(), true)
+}
+
+func renderPageFooter private
+{
+	var footer = assert report.getPageFooter()
+	var height = getFooterHeight()
+	var footerStartY = page.getHeight() - py(report.getBottomMargin()) - height
+	renderSections(footerStartY, footer.getSections(), true)
+}
+
+func finalizePages
+{
+	var opage = page
+	var onumber = currentPageNumber
+	for(var n = 0; n < SIZE pages ; n++) {
+		page = Vector.get(pages, n)
+		currentPageNumber = n + 1
+		renderPageHeader()
+		renderPageFooter()
+	}
+	page = opage
+	currentPageNumber = onumber
+}
+
+func renderSections(starty as double, sections as vector<ReportDefinition.Section>, ignoreLimit as bool = false) private as double
+{
+	var y = starty
+	foreach section in sections {
+		if section.getEnableSuppress():
+			continue
+		var sh = py(section.getHeight())
+		if ignoreLimit == false && y + sh > maxY {
+			addPage()
+			y = currentY
+		}
+		var bgcolor = section.getBackgroundColor()
+		if bgcolor {
+			// FIXME: Not yet
+		}
+		foreach object in section.getObjects() {
+			if object is ReportDefinition.FieldObject || object is ReportDefinition.TextObject:
+				continue
+			renderReportObject(y, object)
+		}
+		foreach object in section.getObjects() {
+			if object is ReportDefinition.FieldObject || object is ReportDefinition.TextObject:
+				renderReportObject(y, object)
+		}
+		y += sh
+	}
+	return y
+}
+
+func colorToString(object as ReportDefinition.ColorObject) private as string
+{
+	if not object:
+		return "#00000000"
+	return Color.forRGBA(object.getR(), object.getG(), object.getB(), object.getA()).toRgbaString()
+}
+
+func fontToDescription(object as ReportDefinition.FontObject) private as FontDescription
+{
+	if not object:
+		return FontDescription.forName("Arial", Length.forPoints(14))
+	var v = new FontDescription()
+	v.setName(object.getFontFamily())
+	v.setBold(object.getBold())
+	v.setItalic(object.getItalic())
+	v.setUnderline(object.getUnderline())
+	v.setSize(Length.forPoints(object.getSizeinPoints()))
+	return v
+}
+
+func substituteFormula(formula as string) as string
+{
+	foreach ffd in report.getFormulaFieldDefinitions() {
+		if String.equals(formula, ffd.getFormulaName()) {
+			var data = ffd.getData()
+			if not data:
+				data = ""
+			return substituteContentString(data)
+		}
+	}
+	return null
+}
+
+func substituteVariable(variable as string) as string
+{
+	if ReportDefinition.FormulaUtil.isFormula(variable) {
+		var formula = substituteFormula(variable)
+		if formula:
+			return formula
+		var varname = String.getSubString(variable, 1, String.getLength(variable)-2)
+		if currentRecord {
+			var v = currentRecord.getString(varname)
+			if v:
+				return v
+		}
+	}
+	return variable
+}
+
+func substituteContentString(text as string) as string
+{
+	var ob = String.getIndexOf(text, '{')
+	if ob < 0:
+		return text
+	var sb = new StringBuilder()
+	var ss = 0
+	loop {
+		if ob > ss:
+			sb.append(String.getSubString(text, ss, ob-ss))
+		var end = String.getIndexOf(text, '}', ob)
+		if end < 0:
+			break
+		var variable = String.getSubString(text, ob, end-ob + 1)
+		sb.append(substituteVariable(variable))
+		ss = end + 1
+		ob = String.getIndexOf(text, '{', ss)
+		if ob < 0 {
+			sb.append(String.getSubString(text, ss))
+			break
+		}
+	}
+	return sb.toString()
+}
+
+func renderReportObject(yoffset as double, object as ReportDefinition.ReportObject) private
+{
+	assert object
+	var xoffset = px(report.getLeftMargin())
+	var top = yoffset + py(object.getTop())
+	var left = xoffset + px(object.getLeft())
+	var width = px(object.getWidth())
+	if object.getRight() > 0 {
+		// FIXME: right
+		// width = px(object.getRight()) - left
+		// left = xoffset + px(object.getRight()) - width
+	}
+	var height = py(object.getHeight())
+	var border = object.getBorder()
+	if border {
+		var backgroundColor = border.getBackgroundColor()
+		if backgroundColor && backgroundColor.isVisible() {
+			page.setFillStyle(colorToString(backgroundColor))
+			page.fillRect(left, top, width, height)
+		}
+		var borderColor = border.getBorderColor()
+		if borderColor && borderColor.isVisible() && border.hasLine() {
+			page.setStrokeStyle(colorToString(borderColor))
+			page.strokeRect(left, top, width, height)
+		}
+	}
+	if object is ReportDefinition.BoxObject {
+		// FIXME
+	}
+	else if object is ReportDefinition.FieldObject {
+		var field = object as! ReportDefinition.FieldObject
+		var data = substituteContentString(getFieldContent(field))
+		drawText(data, left, top, width, height, field.getFont(), field.getColor(), field.getHorizontalAlignment())
+	}
+	else if object is ReportDefinition.TextObject {
+		var text = object as! ReportDefinition.TextObject
+		drawText(substituteContentString(text.getText()), left, top, width, height, text.getFont(), text.getColor(), text.getHorizontalAlignment())
+	}
+	else {
+		Log.warning(ctx, "Unsupported report object type")
+	}
+}
+
+func drawText(text as string, left as double, top as double, width as double, height as double, font as ReportDefinition.FontObject, color as ReportDefinition.ColorObject, halign as string) private
+{
+	var yoffset = 0.0
+	if font {
+		var fh = font.getHeight()
+		var fs = font.getFontSize()
+		if fh != fs {
+			yoffset = (fh - fs) / 2
+		}
+	}
+	page.setFont(fontToDescription(font))
+	page.setStrokeStyle(colorToString(color))
+	var x = left
+	var y = top
+	if halign == "RightAlign" {
+		x = left + (width - page.measureTextWidth(text))
+	}
+	else if halign == "HorizontalCenterAlign" {
+		x = left + (width / 2) - (page.measureTextWidth(text) / 2)
+	}
+	page.strokeText(text, x, y + yoffset, 0.0)
+}
+
+func isNewGroup(record as DynamicMap, previous as DynamicMap) as int
+{
+	if not previous:
+		return 0
+	if not record:
+		return -1
+	var n = 0
+	foreach group in report.getDataGroups() {
+		var cf = group.getConditionField()
+		var fn = ReportDefinition.FormulaUtil.formulaToFieldQualifier(cf)
+		if not fn {
+			Log.warning(ctx, "Failed to represent condition field `" .. cf .. "' as a field qualifier. Ignoring field.")
+			continue
+		}
+		var previousValue = previous.getString(fn)
+		var currentValue = record.getString(fn)
+		if not String.equals(previousValue, currentValue):
+			return n
+		n ++
+	}
+	return -1
+}
+
+func countGroupRecords(allRecords as vector<DynamicMap>, startIndex as int, groupNumber as int) as int
+{
+	var v = 0
+	var n = startIndex + 1
+	var previous = Vector.get(allRecords, startIndex)
+	loop {
+		var current = Vector.get(allRecords, n)
+		if not current {
+			v ++
+			break
+		}
+		var gg = isNewGroup(current, previous)
+		if gg >= 0 && gg <= groupNumber {
+			v ++
+			break
+		}
+		v ++
+		previous = current
+		n ++
+	}
+	groupCounts[groupNumber] = v
+	return v
+}
+
+func doProcessToPdfFile(file as File) private
+{
+	if not report:
+		ON_ERROR("No report")
+	var query = getSqlQuery()
+	if not query:
+		ON_ERROR("Failed to construct SQL query")
+	Log.debug(ctx, "SQL query: `" .. query .. "'")
+	var maker = PdfMaker.instance(ctx)
+	if not maker:
+		ON_ERROR("No PDF maker available")
+	document = maker.createDocument()
+	if not document:
+		ON_ERROR("Failed to create document")
+	if not dataSource:
+		ON_ERROR("Report has no data source")
+	var title = report.getReportTitle()
+	if String.isEmpty(title):
+		title = "Report"
+	var records = dataSource.getDataRecords(query)
+	if not records:
+		ON_ERROR("Failed to retrieve report data from data source")
+	var allRecords = new vector<DynamicMap>
+	loop {
+		var record = records.next()
+		if not record:
+			break
+		allRecords += record
+	}
+	document.setTitle(title)
+	addPage()
+	renderReportHeader()
+	var detail = report.getDetailArea()
+	var groups = report.getDataGroupCount()
+	var hasGroup = -1
+	for(var n=0; n<Vector.getSize(allRecords); n++) {
+		var record = allRecords[n]
+		var ng = isNewGroup(record, currentRecord)
+		if ng >= 0 && hasGroup >= 0 {
+			while hasGroup >= ng {
+				var groupFooter = report.getGroupFooter(hasGroup)
+				currentGroupCount = groupCounts[hasGroup]
+				if groupFooter:
+					currentY = renderSections(currentY, groupFooter.getSections())
+				hasGroup --
+			}
+		}
+		previousRecord = currentRecord
+		currentRecord = record
+		while hasGroup < groups {
+			var groupHeader = report.getGroupHeader(hasGroup + 1)
+			currentGroupCount = countGroupRecords(allRecords, n, hasGroup + 1)
+			if groupHeader:
+				currentY = renderSections(currentY, groupHeader.getSections())
+			hasGroup ++
+		}
+		if detail:
+			currentY = renderSections(currentY, detail.getSections())
+	}
+	finalizePages()
+	if not document.saveToFile(file):
+		ON_ERROR("Failed to save PDF to file: `" .. file.getPath() .. "'")
+}
+
+func processToPdfFile(file as File) as bool
+{
+	try {
+		doProcessToPdfFile(file)
+		return true
+	}
+	catch {
+		Log.error(ctx, String.asString(e))
+	}
+	return false
+}
+
+func processToPdfBuffer as buffer
+{
+	var tf = assert TemporaryFile.create("pdf"):
+		Log.error(ctx, "Failed to create a temporary file")
+	assert processToPdfFile(tf)
+	var v = tf.getContentsBuffer()
+	tf.remove()
+	return v
+}

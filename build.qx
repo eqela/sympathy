@@ -21,7 +21,7 @@
 # SOFTWARE.
 #
 
-use eqela:sling:r304
+use eqela:sling:r306
 use igelle:tools:r3
 use eqela:jkop:20180421
 set version 4.0.${date}
@@ -42,6 +42,8 @@ release {
 	eqela:sling/slingc src/smsgwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/smsgwy
 	eqela:sling/slingc src/sqlc -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/sqlc
 	eqela:sling/slingc src/sqlfwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/sqlfwy
+	eqela:sling/slingc src/reporttool -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/reporttool
+	eqela:sling/slingc src/reporty -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/reporty
     igelle:tools/cpto build/sympathy-${version} \
         build/app/*/*.dll \
         build/app/*/*.exe

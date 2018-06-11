@@ -1,0 +1,611 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+class FormulaUtil public
+{
+	func isFormula(string as string) static as bool
+	{
+		if String.startsWith(string, "{") && String.endsWith(string, "}"):
+			return true
+		return false
+	}
+
+	func formulaToFieldQualifier(formula as string) static as string
+	{
+		assert isFormula(formula)
+		return String.getSubString(formula, 1, String.getLength(formula) - 2)
+	}
+
+	func formulaToTableName(formula as string) static as string
+	{
+		var fq = assert formulaToFieldQualifier(formula)
+		var idx = String.getIndexOf(fq, '.')
+		if idx > 0:
+			return String.getSubString(fq, 0, idx)
+		return fq
+	}
+
+	func formulaToFieldName(formula as string) static as string
+	{
+		var fq = assert formulaToFieldQualifier(formula)
+		var idx = String.getLastIndexOf(fq, '.')
+		if idx > 0:
+			return String.getSubString(fq, idx+1)
+		return fq
+	}
+}
+
+class DatabaseTableField public
+{
+	prop description as string
+	prop formulaForm as string
+	prop headingText as string
+	prop isRecurring as bool
+	prop kind as string
+	prop length as int
+	prop longName as string
+	prop name as string
+	prop shortName as string
+	prop type as string
+	prop useCount as int
+}
+
+class DatabaseTable public
+{
+	prop alias as string
+	prop className as string
+	prop name as string
+	prop databaseDll as string
+	prop qeDatabaseName as string
+	prop qeDatabaseType as string
+	prop qeLogonProperties as string
+	prop qeServerDescription as string
+	prop qeSqldb as bool
+	prop ssoEnabled as bool
+	prop userName as string
+	prop password as string
+	prop fields as vector<DatabaseTableField>
+
+	func getNameToUse as string
+	{
+		if String.isNotEmpty(alias):
+			return alias
+		return name
+	}
+
+	func addField(field as DatabaseTableField)
+	{
+		assert field
+		if not fields:
+			fields = new vector<DatabaseTableField>
+		fields += field
+	}
+}
+
+class ReportObject public
+{
+	prop name as string
+	prop kind as string
+	prop top as int
+	prop left as int
+	prop width as int
+	prop height as int
+	prop bottom as int
+	prop right as int
+	prop border as BorderObject
+	prop cssClass as string
+	prop enableCanGrow as bool
+	prop enableCloseAtPageBreak as bool
+	prop enableKeepTogether as bool
+	prop enableSuppress as bool
+	prop horizontalAlignment as string
+}
+
+class ColorObject public
+{
+	prop name as string
+	prop a as int
+	prop r as int
+	prop g as int
+	prop b as int
+
+	func isVisible as bool
+	{
+		if a == 255 && r == 255 && g == 255 && b == 255:
+			return false
+		return true
+	}
+}
+
+class BorderObject public
+{
+	prop bottomLineStyle as string
+	prop leftLineStyle as string
+	prop rightLineStyle as string
+	prop topLineStyle as string
+	prop hasDropShadow as bool
+	prop leftLineStyleFormula as string
+	prop rightLineStyleFormula as string
+	prop topLineStyleFormula as string
+	prop bottomLineStyleFormula as string
+	prop hasDropShadowFormula as string
+	prop backgroundColorFormula as string
+	prop borderColorFormula as string
+	prop tightHorizontalFormula as string
+	prop tightVerticalFormula as string
+	prop backgroundColor as ColorObject
+	prop borderColor as ColorObject
+
+	func hasLine as bool
+	{
+		if bottomLineStyle == "NoLine":
+			return false
+		if leftLineStyle == "NoLine":
+			return false
+		if rightLineStyle == "NoLine":
+			return false
+		if topLineStyle == "NoLine":
+			return false
+		return true
+	}
+}
+
+class FontObject public
+{
+	prop bold as bool
+	prop fontFamily as string
+	prop gdiCharSet as int
+	prop gdiVerticalFont as bool
+	prop height as int
+	prop isSystemFont as bool
+	prop italic as bool
+	prop name as string
+	prop originalFontName as string
+	prop size as int
+	prop sizeinPoints as int
+	prop strikeout as bool
+	prop style as string
+	prop systemFontName as string
+	prop underline as bool
+	prop unit as string
+
+	func getFontSize as int
+	{
+		if sizeinPoints > 0:
+			return sizeinPoints
+		return size
+	}
+}
+
+class TextObject is ReportObject public
+{
+	prop text as string
+	prop color as ColorObject
+	prop font as FontObject
+}
+
+class BoxObject is ReportObject public
+{
+	prop enableExtendToBottomOfSection as bool
+	prop endSectionName as string
+	prop lineStyle as string
+	prop lineThickness as int
+	prop lineColor as ColorObject
+}
+
+class LineObject is ReportObject public
+{
+	prop enableExtendToBottomOfSection as bool
+	prop endSectionName as string
+	prop lineStyle as string
+	prop lineThickness as int
+	prop lineColor as ColorObject
+}
+
+class FieldObject is ReportObject public
+{
+	prop dataSource as string
+	prop color as ColorObject
+	prop font as FontObject
+}
+
+class PictureObject is ReportObject public
+{
+}
+
+class CrossTabObject is ReportObject public
+{
+}
+
+class ChartObject is ReportObject public
+{
+}
+
+class SubreportObject is ReportObject public
+{
+}
+
+class FieldHeadingObject is ReportObject public
+{
+	prop text as string
+}
+
+class Section public
+{
+	prop height as int
+	prop kind as string
+	prop name as string
+	prop cssClass as string
+	prop enableKeepTogether as bool
+	prop enableNewPageAfter as bool
+	prop enableNewPageBefore as bool
+	prop enablePrintAtBottomOfPage as bool
+	prop enableResetPageNumberAfter as bool
+	prop enableSuppress as bool
+	prop enableSuppressIfBlank as bool
+	prop enableUnderlaySection as bool
+	prop enableSuppressFormula as string
+	prop enablePrintAtBottomOfPageFormula as string
+	prop enableNewPageAfterFormula as string
+	prop enableNewPageBeforeFormula as string
+	prop enableKeepTogetherFormula as string
+	prop enableSuppressIfBlankFormula as string
+	prop enableResetPageNumberAfterFormula as string
+	prop enableUnderlaySectionFormula as string
+	prop backgroundFormula as string
+	prop enableHideForDrillDownFormula as string
+	prop groupNumberPerPageFormula as string
+	prop recordNumberPerPageFormula as string
+	prop enableClampPageFooterFormula as string
+	prop backgroundColor as ColorObject
+	prop objects as vector<ReportObject>
+
+	func addObject(object as ReportObject)
+	{
+		assert object
+		if not objects:
+			objects = new vector<ReportObject>
+		objects += object
+	}
+}
+
+class Area public
+{
+	prop kind as string
+	prop name as string
+	prop enableHideForDrillDown as bool
+	prop enableKeepTogether as bool
+	prop enableNewPageAfter as bool
+	prop enableNewPageBefore as bool
+	prop enablePrintAtBottomOfPage as bool
+	prop enableResetPageNumberAfter as bool
+	prop enableSuppress as bool
+	prop sections as vector<Section>
+
+	func addSection(section as Section)
+	{
+		assert section
+		if not sections:
+			sections = new vector<Section>
+		sections += section
+	}
+}
+
+class EmbedInfo public
+{
+	prop name as string
+	prop size as int
+	prop md5Hash as string
+}
+
+class TableLinkField public
+{
+	prop formulaName as string
+	prop kind as string
+	prop name as string
+	prop numberOfBytes as int
+	prop valueType as string
+}
+
+class TableLink public
+{
+	prop joinType as string
+	prop sourceFields as vector<TableLinkField>
+	prop destinationFields as vector<TableLinkField>
+
+	func addSourceField(field as TableLinkField)
+	{
+		assert field
+		if not sourceFields:
+			sourceFields = new vector<TableLinkField>
+		sourceFields += field
+	}
+
+	func addDestinationField(field as TableLinkField)
+	{
+		assert field
+		if not destinationFields:
+			destinationFields = new vector<TableLinkField>
+		destinationFields += field
+	}
+
+	func getDestinationTableName as string
+	{
+		foreach field in destinationFields {
+			var v = FormulaUtil.formulaToTableName(field.getFormulaName())
+			if v:
+				return v
+		}
+		return null
+	}
+}
+
+class DataGroup public
+{
+	prop conditionField as string
+}
+
+class SortField public
+{
+	prop field as string
+	prop sortDirection as string
+	prop sortType as string
+}
+
+class FormulaFieldDefinition public
+{
+	prop formulaName as string
+	prop kind as string
+	prop name as string
+	prop numberOfBytes as int
+	prop valueType as string
+	prop data as string
+}
+
+class GroupNameFieldDefinition public
+{
+	prop formulaName as string
+	prop group as string
+	prop groupNameFieldName as string
+	prop kind as string
+	prop name as string
+	prop numberOfBytes as int
+	prop valueType as string
+}
+
+class ParameterFieldDefinition public
+{
+	prop allowCustomCurrentValues as bool
+	prop editMask as string
+	prop enableAllowEditingDefaultValue as bool
+	prop enableAllowMultipleValue as bool
+	prop enableNullValue as bool
+	prop formulaName as string
+	prop hasCurrentValue as bool
+	prop isOptionalPrompt as bool
+	prop kind as string
+	prop name as string
+	prop numberOfBytes as int
+	prop parameterFieldName as string
+	prop parameterFieldUsage as string
+	prop parameterType as string
+	prop parameterValueKind as string
+	prop promptText as string
+	prop reportName as string
+	prop valueType as string
+}
+
+class SummaryFieldDefinition public
+{
+	prop formulaName as string
+	prop group as string
+	prop kind as string
+	prop name as string
+	prop numberOfBytes as int
+	prop operation as string
+	prop operationParameter as string
+	prop summarizedField as string
+	prop valueType as string
+}
+
+prop name as string
+prop fileName as string
+prop hasSavedData as bool
+prop keywordsInReport as string
+prop reportAuthor as string
+prop reportComments as string
+prop reportSubject as string
+prop reportTitle as string
+prop enableSaveDataWithReport as bool
+prop enableSavePreviewPicture as bool
+prop enableSaveSummariesWithReport as bool
+prop enableUseDummyData as bool
+prop initialDataContext as string
+prop initialReportPartName as string
+prop pageContentHeight as int
+prop pageContentWidth as int
+prop paperOrientation as string
+prop paperSize as string
+prop paperSource as string
+prop printerDuplex as string
+prop printerName as string
+prop bottomMargin as int
+prop leftMargin as int
+prop rightMargin as int
+prop topMargin as int
+prop pageMarginConditionFormulaTop as string
+prop pageMarginConditionFormulaBottom as string
+prop pageMarginConditionFormulaLeft as string
+prop pageMarginConditionFormulaRight as string
+prop recordSelectionFormula as string
+prop dataGroups as vector<DataGroup>
+prop sortFields as vector<SortField>
+prop formulaFieldDefinitions as vector<FormulaFieldDefinition>
+prop groupNameFieldDefinitions as vector<GroupNameFieldDefinition>
+prop parameterFieldDefinitions as vector<ParameterFieldDefinition>
+prop summaryFieldDefinitions as vector<SummaryFieldDefinition>
+prop subReports as vector<this>
+prop tableLinks as vector<TableLink>
+prop databaseTables as vector<DatabaseTable>
+prop areas as vector<Area>
+
+func getDataGroupCount as int
+{
+	assert dataGroups
+	return Vector.getSize(dataGroups)
+}
+
+func setFormulaValue(formulaName as string, value as string) as bool
+{
+	foreach def in formulaFieldDefinitions {
+		if def.getFormulaName() == formulaName {
+			def.setData(value)
+			return true
+		}
+	}
+	return false
+}
+
+func getMainTable as DatabaseTable
+{
+	assert databaseTables
+	return Vector.get(databaseTables, 0)
+}
+
+func addSummaryFieldDefinition(definition as SummaryFieldDefinition)
+{
+	assert definition
+	if not summaryFieldDefinitions:
+		summaryFieldDefinitions = new vector<SummaryFieldDefinition>
+	summaryFieldDefinitions += definition
+}
+
+func addParameterFieldDefinition(definition as ParameterFieldDefinition)
+{
+	assert definition
+	if not parameterFieldDefinitions:
+		parameterFieldDefinitions = new vector<ParameterFieldDefinition>
+	parameterFieldDefinitions += definition
+}
+
+func addGroupNameFieldDefinition(definition as GroupNameFieldDefinition)
+{
+	assert definition
+	if not groupNameFieldDefinitions:
+		groupNameFieldDefinitions = new vector<GroupNameFieldDefinition>
+	groupNameFieldDefinitions += definition
+}
+
+func addFormulaFieldDefinition(definition as FormulaFieldDefinition)
+{
+	assert definition
+	if not formulaFieldDefinitions:
+		formulaFieldDefinitions = new vector<FormulaFieldDefinition>
+	formulaFieldDefinitions += definition
+}
+
+func addSortField(field as SortField)
+{
+	assert field
+	if not sortFields:
+		sortFields = new vector<SortField>
+	sortFields += field
+}
+
+func addDataGroup(group as DataGroup)
+{
+	assert group
+	if not dataGroups:
+		dataGroups = new vector<DataGroup>
+	dataGroups += group
+}
+
+func addSubReport(report as this)
+{
+	assert report
+	if not subReports:
+		subReports = new vector<this>
+	subReports += report
+}
+
+func addDatabaseTable(table as DatabaseTable)
+{
+	assert table
+	if not databaseTables:
+		databaseTables = new vector<DatabaseTable>
+	databaseTables += table
+}
+
+func addTableLink(link as TableLink)
+{
+	assert link
+	if not tableLinks:
+		tableLinks = new vector<TableLink>
+	tableLinks += link
+}
+
+func addArea(area as Area)
+{
+	assert area
+	if not areas:
+		areas = new vector<Area>
+	areas += area
+}
+
+func getAreaByKind(kind as string, n as int) as Area
+{
+	assert kind
+	var c = 0
+	foreach area in areas {
+		if String.equals(kind, area.getKind()) {
+			if c >= n:
+				return area
+			c++
+		}
+	}
+	return null
+}
+
+func getPageHeader as Area:
+	return getAreaByKind("PageHeader", 0)
+
+func getPageFooter as Area:
+	return getAreaByKind("PageFooter", 0)
+
+func getReportHeader as Area:
+	return getAreaByKind("ReportHeader", 0)
+
+func getReportFooter as Area:
+	return getAreaByKind("ReportFooter", 0)
+
+func getGroupHeader(n as int) as Area:
+	return getAreaByKind("GroupHeader", n)
+
+func getGroupFooter(n as int) as Area:
+	return getAreaByKind("GroupFooter", n)
+
+func getDetailArea as Area:
+	return getAreaByKind("Detail", 0)
