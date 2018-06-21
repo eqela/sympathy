@@ -74,48 +74,9 @@ func getFullURL(api as string) override as string
 	return url .. "/" .. api
 }
 
-func get(url as string, headers as KeyValueList<string,string>, callback as function<void, DynamicMap, Error>) private
-{
-	doSendRequest("GET", getFullURL(url), headers, null, func(responseHeaders as KeyValueList<string,string>, body as buffer) {
-		assert body:
-			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
-		var json = assert JSONParser.parse(body) as DynamicMap:
-			callback(null, Error.forMessage("Invalid JSON Format from notification forward server: '" .. String.asString(body) .. "'"))
-		callback(json, null)
-	}, func(error as Error) {
-		callback(null, error)
-	})
-}
-
 func post(url as string, headers as KeyValueList<string,string>, data as DynamicMap, callback as function<void, DynamicMap, Error>) private
 {
 	doSendRequest("POST", getFullURL(url), headers, String.toUTF8Buffer(JSONEncoder.encode(data)), func(responseHeaders as KeyValueList<string,string>, body as buffer) {
-		assert body:
-			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
-		var json = assert JSONParser.parse(body) as DynamicMap:
-			callback(null, Error.forMessage("Invalid JSON Format from notification forward server: '" .. String.asString(body) .. "'"))
-		callback(json, null)
-	}, func(error as Error) {
-		callback(null, error)
-	})
-}
-
-func put(url as string, headers as KeyValueList<string,string>, data as DynamicMap, callback as function<void, DynamicMap, Error>) private
-{
-	doSendRequest("PUT", getFullURL(url), headers, String.toUTF8Buffer(JSONEncoder.encode(data)), func(responseHeaders as KeyValueList<string,string>, body as buffer) {
-		assert body:
-			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
-		var json = assert JSONParser.parse(body) as DynamicMap:
-			callback(null, Error.forMessage("Invalid JSON Format from notification forward server: '" .. String.asString(body) .. "'"))
-		callback(json, null)
-	}, func(error as Error) {
-		callback(null, error)
-	})
-}
-
-func delete(url as string, headers as KeyValueList<string,string>, callback as function<void, DynamicMap, Error>) private
-{
-	doSendRequest("DELETE", getFullURL(url), headers, null, func(responseHeaders as KeyValueList<string,string>, body as buffer) {
 		assert body:
 			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
 		var json = assert JSONParser.parse(body) as DynamicMap:
