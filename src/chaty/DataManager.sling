@@ -82,6 +82,55 @@ func generateCode(prefix as string = null, length as int = 8, allCaps as bool = 
 	return sb.toString()
 }
 
+func updateReadStatus(channelId as string, userId as string) static
+{
+	assert String.isNotEmpty(channelId) && String.isNotEmpty(userId)
+	db.execute(db.prepare("UPDATE " .. CHAT_RECIPIENTS .. " SET readIndex = COALESCE((SELECT MAX(messageIndex) AS topIndex FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?), 0) WHERE channelId = ? AND userId = ?;").addParamString(channelId).addParamString(channelId).addParamString(userId))
+}
+
+func getReadStatusAsMap(userId as string) static as DynamicMap
+{
+	var itr = assert db.query(db.prepare("SELECT * FROM " .. CHAT_RECIPIENTS .. " WHERE userId = ?;").addParamString(userId))
+	var m = new DynamicMap()
+	loop {
+		var c = itr.next()
+		if not c:
+			break
+		var channelId = c.getString("channelId")
+		var v = db.querySingleRow(db.prepare("SELECT COALESCE((SELECT MAX(messageIndex) FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?), 0) - COALESCE(readIndex, 0) AS unreadCount FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ? AND userId = ?;").addParamString(channelId).addParamString(channelId).addParamString(userId))
+		if v {
+			var uc = v.getLongInteger("unreadCount")
+			if uc < 0:
+				uc = 0
+			m.set(channelId, uc)
+		}
+	}
+	return m
+}
+
+func getReadStatusAsMapForChannelId(channelId as string) static as DynamicMap
+{
+	var itr = assert db.query(db.prepare("SELECT * FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ?;").addParamString(channelId))
+	var m = new DynamicMap()
+	loop {
+		var c = itr.next()
+		if not c:
+			break
+		var userId = c.getString("userId")
+		var v = db.querySingleRow(db.prepare("SELECT COALESCE((SELECT MAX(messageIndex) FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?), 0) - COALESCE(readIndex, 0) AS unreadCount FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ? AND userId = ?;").addParamString(channelId).addParamString(channelId).addParamString(userId))
+		if v {
+			var uc = v.getLongInteger("unreadCount")
+			if uc < 0:
+				uc = 0
+			m.set(userId, uc)
+		}
+	}
+	return m
+}
+
+func getChannel(channelId as string) static as Channel:
+	return Channel.forDynamicMap(db.querySingleRow(db.prepare("SELECT * FROM " .. CHAT_CHANNELS .. " WHERE channelId = ?;").addParamString(channelId)))
+
 func getChannel(channelId as string, callback as function<void, Channel>) static:
 	Channel.SQL.queryByChannelId(db, CHAT_CHANNELS, channelId, callback)
 
@@ -178,10 +227,12 @@ func deleteChannel(channelId as string, userId as string, callback as function<v
 
 func updateRecipients(channelId as string, creatorUserId as string, newRecipients as DynamicVector, callback as function<void, Error>) static
 {
-	var recipients = getRecipients(channelId)
-	assert recipients && recipients.getSize() > 1:
+	var channel = assert getChannel(channelId):
 		callback(Error.instance("invalid_channel_id", "Invalid channel id"))
-	assert newRecipients && newRecipients.getSize() > 0:
+	var recipients = getRecipients(channelId)
+	assert recipients && recipients.getSize() > 0:
+		callback(Error.instance("invalid_channel_id", "Invalid channel id"))
+	assert newRecipients && newRecipients.getSize() >= 0:
 		callback(Error.instance("empty_recipient_list", "Empty recipient list"))
 	var userIdMap = new DynamicMap()
 	if String.isNotEmpty(creatorUserId):
@@ -192,8 +243,8 @@ func updateRecipients(channelId as string, creatorUserId as string, newRecipient
 		userIdMap.set(userId, userId)
 	}
 	var userIds = userIdMap.getKeys()
-	assert userIds && SIZE(userIds) > 1:
-		callback(Error.instance("invalid_recipient_count", "Cannot have recipient size less than two"))
+	assert userIds && SIZE(userIds) > 0:
+		callback(Error.instance("invalid_recipient_count", "Cannot have recipient size less than one"))
 	db.execute(db.prepare("DELETE FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ?;").addParamString(channelId), func(deleted as bool) {
 		assert deleted:
 			callback(Error.instance("internal_error", "Internal error"))
@@ -208,17 +259,19 @@ func insertMessage(message as ChatMessage, newChannelId as string, creatorUserId
 	assert message:
 		callback(null, Error.instance("no_message", "No message"))
 	var messageText = message.getMessage()
-	assert String.isNotEmpty(messageText):
-		callback(null, Error.instance("no_message", "No message"))
+	var attachmentFileName = message.getAttachmentFileName()
+	assert String.isNotEmpty(messageText) || String.isNotEmpty(attachmentFileName):
+		callback(null, Error.instance("no_message_or_attachment_file_name", "No message or attachment file name"))
 	assert String.isNotEmpty(creatorUserId):
 		callback(null, Error.instance("no_creator_user_id", "No creator user id"))
 	var v = new Message()
 	v.setCreatorUserId(creatorUserId)
 	v.setChannelId(newChannelId)
 	v.setMessage(messageText)
-	Message.SQL.insert(db, CHAT_MESSAGES, v, func(success as bool) {
-		assert success:
-			callback(null, Error.instance("internal_error", "Internal error"))
+	v.setAttachmentFileName(attachmentFileName)
+	Message.insert(v, func(error as Error) {
+		assert not error:
+			callback(null, error)
 		callback(v, null)
 	})
 }
@@ -234,6 +287,7 @@ func insertChannelForExternalId(externalId as string, channelCreatorUserId as st
 		callback(null, Error.instance("no_channel_creator_user_id", "No channel creator user id"))
 	var channel = new Channel()
 	channel.setExternalId(externalId)
+	channel.setTitle(title)
 	channel.setChannelCreatorUserId(channelCreatorUserId)
 	Channel.SQL.insert(db, CHAT_CHANNELS, channel, func(success as bool) {
 		assert success:
@@ -274,20 +328,23 @@ func updateChannel(channel as Channel, callback as function<void, Channel, Error
 
 func insertRecipients(channelId as string, channelCreatorUserId as string, recipients as DynamicVector, callback as function<void, Error>) static
 {
-	// FIXME: Make sure to use map to get rid of duplicate user ids.
-
 	assert String.isNotEmpty(channelId):
 		callback(Error.instance("no_channel_id", "No channel id"))
-	assert recipients && recipients.getSize() > 0:
-		callback(Error.instance("no_recipient", "No recipient"))
+	var newRecipients = assert recipients:
+		callback(Error.instance("internal_error", "Internal error"))
+	var userIdMap = new DynamicMap()
+	if String.isNotEmpty(channelCreatorUserId):
+		newRecipients.append(channelCreatorUserId)
+	foreach userId in newRecipients.toVectorOfStrings() {
+		assert String.isNotEmpty(userId):
+			callback(Error.instance("empty_user_id_found", "Empty user id found in the list of recipients"))
+		userIdMap.set(userId, userId)
+	}
+	var userIds = userIdMap.getKeys()
+	assert userIds && SIZE(userIds) > 0:
+		callback(Error.instance("invalid_recipient_count", "Cannot have recipient size less than one"))
 	var sb = new StringBuilder()
 	sb.append("INSERT INTO " .. CHAT_RECIPIENTS .. " (channelId, userId, timeStampCreated, timeStampLastUpdated) VALUES ")
-	var userIds = assert recipients.toVectorOfStrings():
-		callback(Error.instance("internal_error", "Internal error"))
-	if String.isNotEmpty(channelCreatorUserId):
-		userIds += channelCreatorUserId
-	assert SIZE(userIds) > 1:
-		callback(Error.instance("internal_error", "Internal error"))
 	var first = true
 	foreach userId in userIds {
 		if not first:
@@ -314,7 +371,7 @@ func insertRecipients(channelId as string, channelCreatorUserId as string, recip
 
 func getUserIdsAssociatedWithUserId(userId as string, callback as function<void, DynamicVector, Error>) static
 {
-	db.query(db.prepare("SELECT DISTINCT(userId) FROM " .. CHAT_RECIPIENTS .. " WHERE NOT userId = ? AND channelId IN (SELECT channelId FROM " .. CHAT_RECIPIENTS .. " WHERE userId = ?);"), func(itr as SQLResultSetIterator) {
+	db.query(db.prepare("SELECT DISTINCT(userId) FROM " .. CHAT_RECIPIENTS .. " WHERE NOT userId = ? AND channelId IN (SELECT channelId FROM " .. CHAT_RECIPIENTS .. " WHERE userId = ?);").addParamString(userId).addParamString(userId), func(itr as SQLResultSetIterator) {
 		assert itr:
 			callback(null, Error.instance("internal_error", "Internal error"))
 		var list = new DynamicVector()

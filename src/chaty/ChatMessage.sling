@@ -36,8 +36,10 @@ func forMessageSavedCommand(message as this, channel as ChatChannel) static as t
 	v.setMessageType(COMMAND_TYPE)
 	var data = new DynamicMap()
 	data.set("command", "message_saved")
+	data.set("status", "ok")
 	data.set("sendId", message.getSendId())
 	data.set("messageId", message.getMessageId())
+	data.set("attachmentFileName", message.getAttachmentFileName())
 	data.set("creatorUserId", message.getCreatorUserId())
 	data.set("channelCreatorUserId", channel.getChannelCreatorUserId())
 	data.set("title", channel.getTitle())
@@ -63,9 +65,11 @@ func forBuffer(data as buffer) static as this
 	if t == DATA_TYPE:
 		v.setMessageId(dmap.getString("messageId"))
 	v.setChannelId(dmap.getString("channelId"))
+	v.setAttachmentFileName(dmap.getString("attachmentFileName"))
 	v.setChannelCreatorUserId(dmap.getString("channelCreatorUserId"))
 	v.setExternalId(dmap.getString("externalId"))
 	v.setTitle(dmap.getString("title"))
+	v.setUnreadCount(dmap.getLongInteger("unreadCount"))
 	v.setRecipients(dmap.getDynamicVector("recipients"))
 	return v
 }
@@ -76,9 +80,11 @@ prop channelCreatorUserId as string
 prop channelId as string
 prop externalId as string
 prop messageId as string
+prop attachmentFileName as string
 prop creatorUserId as string
 prop timeStampCreated as long
 prop timeStampLastUpdated as long
+prop unreadCount as long
 var recipientMap private as DynamicMap
 var messageType private as int
 var json private as JSONEncoder
@@ -165,11 +171,14 @@ func toBuffer as buffer
 		d.set("channelId", channelId)
 	if String.isNotEmpty(externalId):
 		d.set("externalId", externalId)
+	if String.isNotEmpty(attachmentFileName):
+		d.set("attachmentFileName", attachmentFileName)
 	var recipients = getRecipients()
 	if recipients:
 		d.set("recipients", recipients)
 	d.set("timeStampCreated", timeStampCreated)
 	d.set("timeStampLastUpdated", timeStampLastUpdated)
+	d.set("unreadCount", unreadCount)
 	v.set("data", JSONEncoder.encode(d))
 	return String.toUTF8Buffer(json.execute(v))
 }

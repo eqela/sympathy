@@ -33,6 +33,8 @@ prop title as string #dataField #index
 prop externalId as string #dataField #index
 prop timeStampCreated as long #dataField #index
 prop timeStampLastUpdated as long #dataField #index
+prop channelPhotoFileName as string #dataField #index
+prop channelPhoto as buffer #dataField
 
 func onInsert #onInsert
 {

@@ -50,7 +50,7 @@ func forConfiguration(authConfig as DynamicMap) static as this
 	var verifyExternalIdURL = authConfig.getString("verifyExternalIdURL")
 	assert String.isNotEmpty(verifyExternalIdURL)
 	var v = new this()
-	v.setApiUrl(authBaseURL)
+	v.setAuthBaseURL(authBaseURL)
 	v.setAuthParameterKey(authParameterKey)
 	v.setAuthenticateURL(authenticateURL)
 	v.setVerifyUserIdsURL(verifyUserIdsURL)
@@ -66,6 +66,26 @@ prop authParameterKey as string
 prop authenticateURL as string
 prop verifyUserIdsURL as string
 prop verifyExternalIdURL as string
+
+func getFullURL(api as string) override as string
+{
+	var url = authBaseURL
+	if String.isEmpty(url):
+		url = "/"
+	if url == "/" {
+		if String.startsWith(api, "/"):
+			return api
+		return url .. api
+	}
+	if String.endsWith(url, "/") {
+		if String.startsWith(api, "/"):
+			return url .. String.getSubString(api, 1)
+		return url .. api
+	}
+	if String.startsWith(api, "/"):
+		return url .. api
+	return url .. "/" .. api
+}
 
 func get(url as string, headers as KeyValueList<string,string>, callback as function<void, DynamicMap, Error>) private
 {
@@ -145,7 +165,7 @@ func verifyUserIds(sessionId as string, userIds as DynamicVector, callback as fu
 	})
 }
 
-func verifyExternalId(sessionId as string, externalId as string, callback as function<void, DynamicVector, Error>)
+func verifyExternalId(sessionId as string, externalId as string, callback as function<void, DynamicMap, Error>)
 {
 	CHECK_SESSION(sessionId, callback)
 	var data = new DynamicMap()
@@ -153,8 +173,8 @@ func verifyExternalId(sessionId as string, externalId as string, callback as fun
 	post(verifyExternalIdURL, headers, data, func(response as DynamicMap, e as Error) {
 		assert not e:
 			callback(null, e)
-		var list = assert response.getDynamicVector("data"):
+		var data = assert response.getDynamicMap("data"):
 			callback(null, Error.instance("invalid_server_response", "Invalid response from authentication server"))
-		callback(list, null)
+		callback(data, null)
 	})
 }
