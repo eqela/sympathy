@@ -93,3 +93,14 @@ PUT "updateRecipientsForExternalId/*"
 		req.sendJSONObject(JSONResponse.forOk())
 	})
 }
+
+POST "sendDataMessage"
+{
+	var data = assert req.getBodyJSONMap():
+		req.sendJSONObject(JSONResponse.forInvalidRequest())
+	engine.onDataMessageFromHTTPControl(data, func(error as Error) {
+		assert not error:
+			req.sendJSONObject(JSONResponse.forError(error))
+		req.sendJSONObject(JSONResponse.forOk())
+	})
+}

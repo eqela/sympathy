@@ -31,11 +31,13 @@ prop channelId as string #dataField #index
 prop userId as string #dataField #index
 prop timeStampCreated as long #dataField #index
 prop timeStampLastUpdated as long #dataField #index
+prop readIndex as long #dataField #index
 
 func onInsert #onInsert
 {
 	timeStampCreated = SystemClock.asUTCSeconds()
 	timeStampLastUpdated = timeStampCreated
+	readIndex = 0
 }
 
 func getRecipients(channelId as string) static as DynamicVector
@@ -69,9 +71,12 @@ func getChannelIdForRecipients(recipients as DynamicVector, creatorUserId as str
 	foreach userId in userIds:
 		userMap.set(userId, userId)
 	userIds = userMap.getKeys()
-	assert userIds && SIZE(userIds) > 1
+
+	// To make it simple, let's just retrieve channels for individual chat for now.
+
+	assert userIds && SIZE(userIds) == 2
 	var sb = new StringBuilder()
-	sb.append("SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId IN (")
+	sb.append("SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE channelId IN (SELECT channelId FROM " .. DataManager.CHAT_CHANNELS .. " WHERE (TRIM(title) IS NULL OR TRIM(title) = '') AND (TRIM(externalId) IS NULL OR TRIM(externalId) = '')) AND userId IN (")
 	var first = true
 	foreach userId in userIds {
 		if not first:

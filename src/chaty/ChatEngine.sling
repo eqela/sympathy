@@ -98,6 +98,7 @@ prop authenticator as Authenticator
 prop db as SQLDatabase
 prop server as WSServer
 prop port = 9090
+prop forwarder as NotificationForwarder
 prop ctx as LoggingContext
 var userMap private as DynamicMap
 var json as JSONEncoder
@@ -107,12 +108,13 @@ var connectionSize private as int
 var authTimeoutDelay private as long = 5
 var random private as Random
 
-func create(port as int, db as SQLDatabase, authenticator as Authenticator, ctx as LoggingContext, server as WSServer = null) static as this
+func create(port as int, db as SQLDatabase, authenticator as Authenticator, forwarder as NotificationForwarder, ctx as LoggingContext, server as WSServer = null) static as this
 {
 	var v = new this()
 	v.setPort(port)
 	v.setDb(db)
 	v.setAuthenticator(authenticator)
+	v.setForwarder(forwarder)
 	v.setCtx(ctx)
 	v.setServer(server)
 	return v
@@ -151,6 +153,8 @@ func initializeEngine(mgr as IOManager) as bool
 {
 	assert mgr:
 		logError("No IOManager instance specified.")
+	assert forwarder:
+		logError("No notification forwarder specified.")
 	if not server {
 		logWarning("No WebSocket server instance specified. Creating a new instance to listen on port: " .. String.forInteger(port) .. ".")
 		server = new WSServer()
@@ -342,65 +346,98 @@ func onNewDataMessage(message as ChatMessage, connection as ChatConnectionHandle
 	assert String.isNotEmpty(creatorUserId):
 		connection.close()
 	var channelId = message.getChannelId()
-	if String.isEmpty(channelId) {
-		var externalId = message.getExternalId()
-		if String.isNotEmpty(externalId) {
-			authenticator.verifyExternalId(user.getSessionId(), externalId, func(users as DynamicVector, error as Error) {
-				assert not error {
-					logError("Verify external id error: '" .. error.toString() .. "'. Closing the connection instead.")
-					connection.close()
-				}
-				assert users && users.getSize() > 1 {
-					logError("Invalid external id. Closing the connection instead.")
-					connection.close()
-				}
-				DataManager.getChannelForExternalId(externalId, func(c as Channel) {
-					var newRecipients = new DynamicVector()
-					var isExternalMember = false
-					foreach user in users.toVectorOfDynamicMaps() {
-						var userId = user.getString("userId")
-						assert String.isNotEmpty(userId) {
-							logError("Empty user id found in the list of user ids returned by the authentication server. Closing the connection instead.")
-							connection.close()
-						}
-						if String.equals(userId, creatorUserId):
-							isExternalMember = true
-						newRecipients.append(userId)
-					}
-					assert isExternalMember {
-						logError("Current user is not part of the list of user ids returned by the authentication server. Closing the connection instead.")
+	var externalId = message.getExternalId()
+	if String.isNotEmpty(externalId) {
+		authenticator.verifyExternalId(user.getSessionId(), externalId, func(responseData as DynamicMap, error as Error) {
+			assert not error {
+				logError("Verify external id error: '" .. error.toString() .. "'. Closing the connection instead.")
+				connection.close()
+			}
+			assert responseData {
+				logError("Invalid external id. Closing the connection instead.")
+				connection.close()
+			}
+			var users = responseData.getDynamicVector("users")
+			assert users && users.getSize() > 0 {
+				logError("Invalid external id. Closing the connection instead.")
+				connection.close()
+			}
+			var title = responseData.getString("title")
+			DataManager.getChannelForExternalId(externalId, func(c as Channel) {
+				var newRecipients = new DynamicVector()
+				var isExternalMember = false
+				foreach user in users.toVectorOfDynamicMaps() {
+					var userId = user.getString("userId")
+					assert String.isNotEmpty(userId) {
+						logError("Empty user id found in the list of user ids returned by the authentication server. Closing the connection instead.")
 						connection.close()
 					}
-					message.setRecipients(newRecipients)
-					if c && String.isNotEmpty(c.getChannelId()) {
-						DataManager.updateRecipients(c.getChannelId(), creatorUserId, newRecipients, func(error2 as Error) {
+					if String.equals(userId, creatorUserId):
+						isExternalMember = true
+					newRecipients.append(userId)
+				}
+				assert isExternalMember {
+					logError("Current user is not part of the list of user ids returned by the authentication server. Closing the connection instead.")
+					connection.close()
+				}
+				message.setRecipients(newRecipients)
+				if c && String.isNotEmpty(c.getChannelId()) {
+					if String.isNotEmpty(title) && not String.equals(c.getTitle(), title) {
+						c.setTitle(title)
+						DataManager.updateChannel(c, func(updatedChannel as Channel, error2 as Error) {
 							assert not error2 {
-								logError("Update recipients error: '" .. error2.toString() .. "'. Closing the connection instead.")
+								logError("Update channel error: '" .. error2.toString() .. "'. Closing the connection instead.")
 								connection.close()
 							}
-							getChannel(c.getChannelId(), func(channel as ChatChannel) {
-								assert channel && String.equals(channel.getChannelId(), c.getChannelId()) {
-									logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
+							assert updatedChannel && String.equals(updatedChannel.getChannelId(), c.getChannelId()) {
+								logError("Update channel internal error. Closing the connection instead.")
+								connection.close()
+							}
+							DataManager.updateRecipients(updatedChannel.getChannelId(), creatorUserId, newRecipients, func(error3 as Error) {
+								assert not error3 {
+									logError("Update recipients error: '" .. error3.toString() .. "'. Closing the connection instead.")
 									connection.close()
 								}
-								onSaveMessage(message, channel, connection)
+								getChannel(updatedChannel.getChannelId(), func(channel as ChatChannel) {
+									assert channel && String.equals(channel.getChannelId(), updatedChannel.getChannelId()) {
+										logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
+										connection.close()
+									}
+									onSaveMessage(message, channel, connection)
+								})
 							})
 						})
 						return
 					}
-					createChannelAndGetIdForExternalId(externalId, newRecipients, creatorUserId, null, func(newChannelId as string) {
-						getChannel(newChannelId, func(channel as ChatChannel) {
-							assert channel && String.equals(channel.getChannelId(), newChannelId) {
+					DataManager.updateRecipients(c.getChannelId(), creatorUserId, newRecipients, func(error2 as Error) {
+						assert not error2 {
+							logError("Update recipients error: '" .. error2.toString() .. "'. Closing the connection instead.")
+							connection.close()
+						}
+						getChannel(c.getChannelId(), func(channel as ChatChannel) {
+							assert channel && String.equals(channel.getChannelId(), c.getChannelId()) {
 								logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
 								connection.close()
 							}
 							onSaveMessage(message, channel, connection)
 						})
 					})
+					return
+				}
+				createChannelAndGetIdForExternalId(externalId, newRecipients, creatorUserId, title, func(newChannelId as string) {
+					getChannel(newChannelId, func(channel as ChatChannel) {
+						assert channel && String.equals(channel.getChannelId(), newChannelId) {
+							logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
+							connection.close()
+						}
+						onSaveMessage(message, channel, connection)
+					})
 				})
 			})
-			return
-		}
+		})
+		return
+	}
+	if String.isEmpty(channelId) {
 		var recipients = message.getRecipients()
 		assert recipients && recipients.getSize() > 0 {
 			logError("Message with no channel id or external id has no recipients. Closing the connection instead.")
@@ -607,17 +644,18 @@ func broadcastMessage(message as ChatMessage)
 	assert message
 	var recipients = message.getRecipients()
 	assert recipients && recipients.getSize() > 0
+	var rsm = DataManager.getReadStatusAsMapForChannelId(message.getChannelId())
 	var creatorUserId = message.getCreatorUserId()
 	if String.isNotEmpty(creatorUserId) && recipients.contains(creatorUserId):
 		recipients.removeValue(creatorUserId)
-	var offlineRecipients = new DynamicVector()
 	foreach userId in recipients.toVectorOfStrings() {
 		if not isUserOnline(userId) {
-			logDebug("User: '" .. userId .. "' is offline with last active on: " .. String.forLongInteger(getUserLastActive(userId)) .. ". Would send a notification instead.")
-			offlineRecipients.append(userId)
+			logDebug("User: '" .. userId .. "' is offline with last active on: " .. String.forLongInteger(getUserLastActive(userId)) .. ".")
 			continue
 		}
 		var brokenConnections = new vector<string>
+		if rsm:
+			message.setUnreadCount(rsm.getLongInteger(userId))
 		foreach connectionId in getUserConnectionIds(userId) {
 			var connection = getUserConnection(userId, connectionId)
 			if not connection || not connection.isOpen() {
@@ -630,13 +668,42 @@ func broadcastMessage(message as ChatMessage)
 		}
 		foreach connectionId in brokenConnections:
 			removeUserConnection(userId, connectionId)
-		if not isUserOnline(userId) {
-			logDebug("User: '" .. userId .. "' is offline with last active on: " .. String.forLongInteger(getUserLastActive(userId)) .. ". Would send a notification instead.")
-			offlineRecipients.append(userId)
-		}
 	}
-	if offlineRecipients.getSize() > 0:
-		handleOfflineRecipients(recipients, message)
+	var data = new DynamicMap()
+	data.set("message", message.getMessage())
+	data.set("creatorUserId", creatorUserId)
+	data.set("recipients", recipients)
+	data.set("channelId", message.getChannelId())
+	data.set("externalId", message.getExternalId())
+	data.set("messageId", message.getMessageId())
+	forwardNotification(data)
+}
+
+func forwardNotification(data as DynamicMap)
+{
+	assert data
+	var task = new NotificationForwarderTask()
+	task.setForwarder(forwarder)
+	task.setData(data)
+	assert Thread.start(task):
+		Log.error(ctx, "Failed to start notification forwarder background task")
+}
+
+class NotificationForwarderTask is Runnable
+{
+	prop ctx as LoggingContext
+	prop data as DynamicMap
+	prop forwarder as NotificationForwarder
+
+	func run
+	{
+		assert forwarder && data
+		forwarder.forward(data, func(response as DynamicMap, error as Error) {
+			assert not error:
+				Log.error(ctx, "Forward Notification Error: " .. error.toString())
+			Log.info(ctx, "Forward Notification: " .. JSONEncoder.encode(response))
+		})
+	}
 }
 
 func initialize as bool
@@ -759,6 +826,7 @@ func saveMessage(message as ChatMessage, channel as ChatChannel, creatorUserId a
 		var messageId = v.getMessageId()
 		assert String.isNotEmpty(messageId):
 			callback(Error.instance("internal_error", "Internal error"))
+		DataManager.updateReadStatus(channel.getChannelId(), creatorUserId)
 		message.setMessageId(messageId)
 		message.setChannelId(channel.getChannelId())
 		message.setCreatorUserId(creatorUserId)
@@ -807,11 +875,14 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 	var command = commandMap.getString("command")
 	if "get_channels" == command {
 		DataManager.getChannels(creatorUserId, func(channels as DynamicVector) {
+			var rsm = DataManager.getReadStatusAsMap(creatorUserId)
 			foreach channel in channels.toVectorOfDynamicMaps() {
 				var channelId = channel.getString("channelId")
 				assert String.isNotEmpty(channelId)
 				channel.set("recipients", DataManager.getRecipients(channelId))
 				channel.set("message", DataManager.getRecentMessage(channelId))
+				if rsm:
+					channel.set("unreadCount", rsm.getLongInteger(channelId))
 			}
 			var data = new DynamicMap()
 			data.set("command", "get_channels")
@@ -829,32 +900,81 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 	}
 	else if "get_messages" == command {
 		var channelId = commandMap.getString("channelId")
-		if String.isEmpty(channelId) {
-			var externalId = commandMap.getString("externalId")
-			if String.isNotEmpty(externalId) {
-				authenticator.verifyExternalId(user.getSessionId(), externalId, func(users as DynamicVector, error as Error) {
-					assert not error {
-						logError("Verify external id error: '" .. error.toString() .. "'. Closing the connection instead.")
+		var externalId = commandMap.getString("externalId")
+		if String.isNotEmpty(externalId) {
+			authenticator.verifyExternalId(user.getSessionId(), externalId, func(responseData as DynamicMap, error as Error) {
+				assert not error {
+					logError("Verify external id error: '" .. error.toString() .. "'. Closing the connection instead.")
+					connection.close()
+				}
+				assert responseData {
+					logError("Invalid external id. Closing the connection instead.")
+					connection.close()
+				}
+				var users = responseData.getDynamicVector("users")
+				assert users && users.getSize() > 0 {
+					logError("Invalid external id. Closing the connection instead.")
+					connection.close()
+				}
+				var newRecipients = new DynamicVector()
+				var isExternalMember = false
+				foreach user in users.toVectorOfDynamicMaps() {
+					var userId = user.getString("userId")
+					assert String.isNotEmpty(userId) {
+						logError("Empty user id found in the list of user ids returned by the authentication server. Closing the connection instead.")
 						connection.close()
 					}
-					DataManager.getChannelForExternalId(externalId, func(channel as Channel) {
-						assert channel && String.isNotEmpty(channel.getChannelId())
+					if String.equals(userId, creatorUserId):
+						isExternalMember = true
+					newRecipients.append(userId)
+				}
+				assert isExternalMember {
+					logError("Current user is not part of the list of user ids returned by the authentication server. Closing the connection instead.")
+					connection.close()
+				}
+				var title = responseData.getString("title")
+				DataManager.getChannelForExternalId(externalId, func(channel as Channel) {
+					if channel && String.isNotEmpty(channel.getChannelId()) {
 						channelId = channel.getChannelId()
-						var newRecipients = new DynamicVector()
-						var isExternalMember = false
-						foreach user in users.toVectorOfDynamicMaps() {
-							var userId = user.getString("userId")
-							assert String.isNotEmpty(userId) {
-								logError("Empty user id found in the list of user ids returned by the authentication server. Closing the connection instead.")
-								connection.close()
-							}
-							if String.equals(userId, creatorUserId):
-								isExternalMember = true
-							newRecipients.append(userId)
-						}
-						assert isExternalMember {
-							logError("Current user is not part of the list of user ids returned by the authentication server. Closing the connection instead.")
-							connection.close()
+						if String.isNotEmpty(title) && not String.equals(channel.getTitle(), title) {
+							channel.setTitle(title)
+							DataManager.updateChannel(channel, func(updatedChannel as Channel, error2 as Error) {
+								assert not error2 {
+									logError("Update channel error: '" .. error2.toString() .. "'. Closing the connection instead.")
+									connection.close()
+								}
+								assert updatedChannel && String.equals(updatedChannel.getChannelId(), channelId) {
+									logError("Update channel internal error. Closing the connection instead.")
+									connection.close()
+								}
+								DataManager.updateRecipients(channelId, creatorUserId, newRecipients, func(error3 as Error) {
+									assert not error3 {
+										logError("Update recipients error: '" .. error3.toString() .. "'. Closing the connection instead.")
+										connection.close()
+									}
+									DataManager.getMessages(channelId, func(messages as DynamicVector) {
+										DataManager.updateReadStatus(channelId, creatorUserId)
+										var data = new DynamicMap()
+										data.set("command", "get_messages")
+										data.set("channelCreatorUserId", updatedChannel.getChannelCreatorUserId())
+										data.set("title", updatedChannel.getTitle())
+										data.set("channelId", channelId)
+										data.set("recipients", DataManager.getRecipients(channelId))
+										data.set("externalId", externalId)
+										data.set("messages", messages)
+										var v = new DynamicMap()
+										v.set("messageType", ChatMessage.COMMAND_TYPE)
+										v.set("data", data)
+										var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+										var r = connection.sendMessage(reply)
+										assert r > 0 {
+											logError("Failed to send message. Closing the connection instead.")
+											connection.close()
+										}
+									})
+								})
+							})
+							return
 						}
 						DataManager.updateRecipients(channelId, creatorUserId, newRecipients, func(error2 as Error) {
 							assert not error2 {
@@ -862,6 +982,7 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 								connection.close()
 							}
 							DataManager.getMessages(channelId, func(messages as DynamicVector) {
+								DataManager.updateReadStatus(channelId, creatorUserId)
 								var data = new DynamicMap()
 								data.set("command", "get_messages")
 								data.set("channelCreatorUserId", channel.getChannelCreatorUserId())
@@ -881,10 +1002,41 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 								}
 							})
 						})
+						return
+					}
+					createChannelAndGetIdForExternalId(externalId, newRecipients, creatorUserId, title, func(newChannelId as string) {
+						getChannel(newChannelId, func(channel as ChatChannel) {
+							assert channel && String.equals(channel.getChannelId(), newChannelId) {
+								logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
+								connection.close()
+							}
+							DataManager.getMessages(newChannelId, func(messages as DynamicVector) {
+								DataManager.updateReadStatus(newChannelId, creatorUserId)
+								var data = new DynamicMap()
+								data.set("command", "get_messages")
+								data.set("channelCreatorUserId", creatorUserId)
+								data.set("title", title)
+								data.set("channelId", newChannelId)
+								data.set("recipients", DataManager.getRecipients(newChannelId))
+								data.set("externalId", externalId)
+								data.set("messages", messages)
+								var v = new DynamicMap()
+								v.set("messageType", ChatMessage.COMMAND_TYPE)
+								v.set("data", data)
+								var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+								var r = connection.sendMessage(reply)
+								assert r > 0 {
+									logError("Failed to send message. Closing the connection instead.")
+									connection.close()
+								}
+							})
+						})
 					})
 				})
-				return
-			}
+			})
+			return
+		}
+		if String.isEmpty(channelId) {
 			var recipients = commandMap.getDynamicVector("recipients")
 			if recipients && recipients.getSize() > 0:
 				channelId = DataManager.getChannelIdForRecipients(recipients, creatorUserId)
@@ -893,10 +1045,12 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 		DataManager.getChannel(channelId, func(channel as Channel) {
 			assert channel && String.equals(channelId, channel.getChannelId())
 			DataManager.getMessages(channelId, func(messages as DynamicVector) {
+				DataManager.updateReadStatus(channelId, creatorUserId)
 				var data = new DynamicMap()
 				data.set("command", "get_messages")
 				data.set("channelCreatorUserId", channel.getChannelCreatorUserId())
 				data.set("title", channel.getTitle())
+				data.set("externalId", channel.getExternalId())
 				data.set("channelId", channelId)
 				data.set("recipients", DataManager.getRecipients(channelId))
 				data.set("messages", messages)
@@ -1041,15 +1195,41 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 	}
 	else if "delete_channel" == command {
 		var channelId = commandMap.getString("channelId")
-		DataManager.deleteChannel(channelId, creatorUserId, func(error as Error) {
-			assert not error {
-				logError("Update recipients error: '" .. error.toString() .. "'.")
+		DataManager.getChannel(channelId, func(channel as Channel) {
+			assert channel {
+				logError("The specified channel id: '" .. channelId .. "' is invalid.")
+			}
+			assert String.isEmpty(channel.getExternalId()) {
+				logError("Current user cannot leave specified channel which is part of an external entity.")
+			}
+			var oldRecipientMap = new DynamicMap()
+			var oldRecipients = assert DataManager.getRecipients(channelId)
+			foreach or in oldRecipients.toVectorOfStrings():
+				oldRecipientMap.set(or, or)
+			oldRecipientMap.remove(creatorUserId)
+			DataManager.deleteChannel(channelId, creatorUserId, func(error as Error) {
+				assert not error {
+					logError("Update recipients error: '" .. error.toString() .. "'.")
+					var data = new DynamicMap()
+					data.set("command", "delete_channel")
+					data.set("channelId", channelId)
+					data.set("status", "error")
+					data.set("code", error.getCode())
+					data.set("message", error.getMessage())
+					var v = new DynamicMap()
+					v.set("messageType", ChatMessage.COMMAND_TYPE)
+					v.set("data", data)
+					var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+					var r = connection.sendMessage(reply)
+					assert r > 0 {
+						logError("Failed to send message. Closing the connection instead.")
+						connection.close()
+					}
+				}
 				var data = new DynamicMap()
 				data.set("command", "delete_channel")
 				data.set("channelId", channelId)
-				data.set("status", "error")
-				data.set("code", error.getCode())
-				data.set("message", error.getMessage())
+				data.set("status", "ok")
 				var v = new DynamicMap()
 				v.set("messageType", ChatMessage.COMMAND_TYPE)
 				v.set("data", data)
@@ -1059,20 +1239,18 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 					logError("Failed to send message. Closing the connection instead.")
 					connection.close()
 				}
-			}
-			var data = new DynamicMap()
-			data.set("command", "delete_channel")
-			data.set("channelId", channelId)
-			data.set("status", "ok")
-			var v = new DynamicMap()
-			v.set("messageType", ChatMessage.COMMAND_TYPE)
-			v.set("data", data)
-			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
-			var r = connection.sendMessage(reply)
-			assert r > 0 {
-				logError("Failed to send message. Closing the connection instead.")
-				connection.close()
-			}
+				assert oldRecipientMap.getCount() > 0
+				data = new DynamicMap()
+				data.set("command", "delete_channel")
+				data.set("channelId", channelId)
+				data.set("status", "warning")
+				data.set("recipients", DynamicVector.forStringVector(oldRecipientMap.getKeys()))
+				v = new DynamicMap()
+				v.set("messageType", ChatMessage.COMMAND_TYPE)
+				v.set("data", data)
+				var warning = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+				broadcastMessage(warning)
+			})
 		})
 	}
 	else if "update_recipients" == command {
@@ -1118,9 +1296,10 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 						break
 					}
 				}
-				DataManager.updateChannel(channel, func(updatedChannel as Channel, error as Error) {
+				newRecipients = DynamicVector.forStringVector(newRecipientMap.getKeys())
+				DataManager.updateRecipients(channelId, creatorUserId, newRecipients, func(error as Error) {
 					assert not error {
-						logError("Update channel creator user id error: '" .. error.toString() .. "'.")
+						logError("Update recipients error: '" .. error.toString() .. "'.")
 						var data = new DynamicMap()
 						data.set("command", "update_recipients")
 						data.set("channelId", channelId)
@@ -1137,46 +1316,30 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 							connection.close()
 						}
 					}
-					assert updatedChannel {
-						logError("Internal error.")
+					var data = new DynamicMap()
+					data.set("command", "update_recipients")
+					data.set("channelId", channelId)
+					data.set("status", "ok")
+					var v = new DynamicMap()
+					v.set("messageType", ChatMessage.COMMAND_TYPE)
+					v.set("data", data)
+					var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+					var r = connection.sendMessage(reply)
+					assert r > 0 {
+						logError("Failed to send message. Closing the connection instead.")
+						connection.close()
 					}
-					newRecipients = DynamicVector.forStringVector(newRecipientMap.getKeys())
-					DataManager.updateRecipients(channelId, creatorUserId, newRecipients, func(error as Error) {
-						assert not error {
-							logError("Update recipients error: '" .. error.toString() .. "'.")
-							var data = new DynamicMap()
-							data.set("command", "update_recipients")
-							data.set("channelId", channelId)
-							data.set("status", "error")
-							data.set("code", error.getCode())
-							data.set("message", error.getMessage())
-							var v = new DynamicMap()
-							v.set("messageType", ChatMessage.COMMAND_TYPE)
-							v.set("data", data)
-							var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
-							var r = connection.sendMessage(reply)
-							assert r > 0 {
-								logError("Failed to send message. Closing the connection instead.")
-								connection.close()
-							}
-						}
-						var data = new DynamicMap()
-						data.set("command", "update_recipients")
-						data.set("channelId", channelId)
-						data.set("status", "ok")
-						var v = new DynamicMap()
-						v.set("messageType", ChatMessage.COMMAND_TYPE)
-						v.set("data", data)
-						var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
-						var r = connection.sendMessage(reply)
-						assert r > 0 {
-							logError("Failed to send message. Closing the connection instead.")
-							connection.close()
-						}
-
-						// FIXME: Use oldRecipientMap to update old recipients that they were removed from this channel.
-
-					})
+					assert oldRecipientMap.getCount() > 0
+					data = new DynamicMap()
+					data.set("command", "update_recipients")
+					data.set("channelId", channelId)
+					data.set("status", "warning")
+					data.set("recipients", DynamicVector.forStringVector(oldRecipientMap.getKeys()))
+					v = new DynamicMap()
+					v.set("messageType", ChatMessage.COMMAND_TYPE)
+					v.set("data", data)
+					var warning = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+					broadcastMessage(warning)
 				})
 				return
 			}
@@ -1213,9 +1376,17 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 					logError("Failed to send message. Closing the connection instead.")
 					connection.close()
 				}
-
-				// FIXME: Use oldRecipientMap to update old recipients that they were removed from this channel.
-
+				assert oldRecipientMap.getCount() > 0
+				data = new DynamicMap()
+				data.set("command", "update_recipients")
+				data.set("channelId", channelId)
+				data.set("status", "warning")
+				data.set("recipients", DynamicVector.forStringVector(oldRecipientMap.getKeys()))
+				v = new DynamicMap()
+				v.set("messageType", ChatMessage.COMMAND_TYPE)
+				v.set("data", data)
+				var warning = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+				broadcastMessage(warning)
 			})
 		})
 	}
@@ -1413,5 +1584,77 @@ func createChannelForExternalIdAndGetChannelId(externalId as string, creatorUser
 				callback(null, Error.instance("internal_error", "Internal error"))
 			callback(newChannelId, null)
 		})
+	})
+}
+
+func onDataMessageFromHTTPControl(data as DynamicMap, callback as function<void, Error>)
+{
+	var message = createMessage(String.toUTF8Buffer(json.execute(data)))
+	assert message && message.getMessageType() == ChatMessage.DATA_TYPE:
+		callback(Error.instance("invalid_request", "Invalid request"))
+	var creatorUserId = message.getCreatorUserId()
+	assert String.isNotEmpty(creatorUserId):
+		callback(Error.instance("no_message_creator_user_id", "No message creator user id"))
+	var recipients = message.getRecipients()
+	assert recipients && recipients.getSize() > 0 {
+		logError("Message with no channel id or external id has no recipients.")
+		callback(Error.instance("no_recipient", "No recipient"))
+	}
+	var channelId = DataManager.getChannelIdForRecipients(recipients, creatorUserId)
+	if String.isEmpty(channelId) {
+		createChannelAndGetId(recipients, creatorUserId, null, func(newChannelId as string) {
+			getChannel(newChannelId, func(channel as ChatChannel) {
+				assert channel && String.equals(channel.getChannelId(), newChannelId) {
+					logError("Internal error: fetched channel has different channel id.")
+					callback(Error.instance("internal_error", "Internal error"))
+				}
+				onSaveMessageFromHTTPControl(message, channel, callback)
+			})
+		})
+		return
+	}
+	getChannel(channelId, func(channel as ChatChannel) {
+		assert channel && String.equals(channel.getChannelId(), channelId) {
+			logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
+			callback(Error.instance("internal_error", "Internal error"))
+		}
+		var recipients = DataManager.getRecipients(channelId)
+		assert recipients && recipients.getSize() > 1 {
+			logError("Internal error: fetched channel has no recipients.")
+			callback(Error.instance("internal_error", "Internal error"))
+		}
+		var recipientMap = new DynamicMap()
+		foreach userId in recipients.toVectorOfStrings():
+			recipientMap.set(userId, userId)
+		assert recipientMap.getCount() > 1 {
+			logError("Internal error: fetched channel has no recipients.")
+			callback(Error.instance("internal_error", "Internal error"))
+		}
+		assert recipientMap.containsKey(creatorUserId) {
+			logError("Internal error: fetched channel recipients do not include creator user id.")
+			callback(Error.instance("internal_error", "Internal error"))
+		}
+		onSaveMessageFromHTTPControl(message, channel, callback)
+	})
+}
+
+func onSaveMessageFromHTTPControl(message as ChatMessage, channel as ChatChannel, callback as function<void, Error>) private
+{
+	channel.setEngine(this)
+	saveMessage(message, channel, message.getCreatorUserId(), func(error as Error) {
+		assert not error {
+			logError("Internal error: '" .. error.toString() .. "'. Closing the connection instead.")
+			callback(Error.instance("internal_error", "Internal error: '" .. error.toString() .. "'"))
+		}
+		assert String.isNotEmpty(message.getMessageId()) {
+			logError("Internal error: Saved message has no message id generated. Closing the connection instead.")
+			callback(Error.instance("internal_error", "Internal error"))
+		}
+		assert String.equals(message.getChannelId(), channel.getChannelId()) {
+			logError("Internal error: Saved message has different channel id. Closing the connection instead.")
+			callback(Error.instance("internal_error", "Internal error"))
+		}
+		callback(null)
+		channel.onNewDataMessage(message)
 	})
 }

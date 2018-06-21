@@ -45,20 +45,22 @@ func create(channel as Channel) static as this
 	return v
 }
 
-func onNewDataMessage(message as ChatMessage, connection as ChatConnectionHandler)
+func onNewDataMessage(message as ChatMessage, connection as ChatConnectionHandler = null)
 {
 	if String.isEmpty(channelId) {
-		assert String.isNotEmpty(channelId)
 		channelId = message.getChannelId()
+		assert String.isNotEmpty(channelId)
 	}
-	message.setTitle(title)
-	message.setChannelCreatorUserId(channelCreatorUserId)
-	message.setChannelId(channelId)
-	message.setExternalId(externalId)
-	var command = assert ChatMessage.forMessageSavedCommand(message, this)
-	assert connection.sendMessage(command) > 0
-	assert engine
-	message.removeSendId()
+	if connection {
+		message.setTitle(title)
+		message.setChannelCreatorUserId(channelCreatorUserId)
+		message.setChannelId(channelId)
+		message.setExternalId(externalId)
+		var command = assert ChatMessage.forMessageSavedCommand(message, this)
+		assert connection.sendMessage(command) > 0
+		assert engine
+		message.removeSendId()
+	}
 	engine.broadcastMessage(message)
 }
 

@@ -22,54 +22,41 @@
  * SOFTWARE.
  */
 
-class is JSONAPIClient is Authenticator:
+class is JSONAPIClient is NotificationForwarder:
 
 import capex.http
 import capex.web
 
-macro CHECK_SESSION(sessionId, callback)
+func forConfiguration(notificationForwarderConfig as DynamicMap) static as this
 {
-	assert String.isNotEmpty(sessionId):
-		callback(null, Error.instance("no_session_id", "No session id"))
-	var headers = new KeyValueList<string,string>()
-	headers.add(authParameterKey, sessionId)
-	headers.add("Content-Type", "application/json")
-}
-
-func forConfiguration(authConfig as DynamicMap) static as this
-{
-	assert authConfig
-	var authBaseURL = authConfig.getString("authBaseURL")
-	assert String.isNotEmpty(authBaseURL)
-	var authParameterKey = authConfig.getString("authParameterKey")
-	assert String.isNotEmpty(authParameterKey)
-	var authenticateURL = authConfig.getString("authenticateURL")
-	assert String.isNotEmpty(authenticateURL)
-	var verifyUserIdsURL = authConfig.getString("verifyUserIdsURL")
-	assert String.isNotEmpty(verifyUserIdsURL)
-	var verifyExternalIdURL = authConfig.getString("verifyExternalIdURL")
-	assert String.isNotEmpty(verifyExternalIdURL)
+	assert notificationForwarderConfig
+	var notificationForwarderBaseURL = notificationForwarderConfig.getString("notificationForwarderBaseURL")
+	assert String.isNotEmpty(notificationForwarderBaseURL)
+	var forwardURL = notificationForwarderConfig.getString("forwardURL")
+	assert String.isNotEmpty(forwardURL)
+	var accessTokenKey = notificationForwarderConfig.getString("accessTokenKey")
+	assert String.isNotEmpty(accessTokenKey)
+	var accessToken = notificationForwarderConfig.getString("accessToken")
+	assert String.isNotEmpty(accessToken)
 	var v = new this()
-	v.setAuthBaseURL(authBaseURL)
-	v.setAuthParameterKey(authParameterKey)
-	v.setAuthenticateURL(authenticateURL)
-	v.setVerifyUserIdsURL(verifyUserIdsURL)
-	v.setVerifyExternalIdURL(verifyExternalIdURL)
+	v.setNotificationForwarderBaseURL(notificationForwarderBaseURL)
+	v.setForwardURL(forwardURL)
+	v.setAccessTokenKey(accessTokenKey)
+	v.setAccessToken(accessToken)
 	return v
 }
 
 ctor:
 	setWebClient(new CustomWebClient())
 
-prop authBaseURL as string
-prop authParameterKey as string
-prop authenticateURL as string
-prop verifyUserIdsURL as string
-prop verifyExternalIdURL as string
+prop notificationForwarderBaseURL as string
+prop accessTokenKey as string
+prop accessToken as string
+prop forwardURL as string
 
 func getFullURL(api as string) override as string
 {
-	var url = authBaseURL
+	var url = notificationForwarderBaseURL
 	if String.isEmpty(url):
 		url = "/"
 	if url == "/" {
@@ -93,7 +80,7 @@ func get(url as string, headers as KeyValueList<string,string>, callback as func
 		assert body:
 			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
 		var json = assert JSONParser.parse(body) as DynamicMap:
-			callback(null, Error.forMessage("Invalid JSON Format from auth server: '" .. String.asString(body) .. "'"))
+			callback(null, Error.forMessage("Invalid JSON Format from notification forward server: '" .. String.asString(body) .. "'"))
 		callback(json, null)
 	}, func(error as Error) {
 		callback(null, error)
@@ -106,7 +93,7 @@ func post(url as string, headers as KeyValueList<string,string>, data as Dynamic
 		assert body:
 			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
 		var json = assert JSONParser.parse(body) as DynamicMap:
-			callback(null, Error.forMessage("Invalid JSON Format from auth server: '" .. String.asString(body) .. "'"))
+			callback(null, Error.forMessage("Invalid JSON Format from notification forward server: '" .. String.asString(body) .. "'"))
 		callback(json, null)
 	}, func(error as Error) {
 		callback(null, error)
@@ -119,7 +106,7 @@ func put(url as string, headers as KeyValueList<string,string>, data as DynamicM
 		assert body:
 			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
 		var json = assert JSONParser.parse(body) as DynamicMap:
-			callback(null, Error.forMessage("Invalid JSON Format from auth server: '" .. String.asString(body) .. "'"))
+			callback(null, Error.forMessage("Invalid JSON Format from notification forward server: '" .. String.asString(body) .. "'"))
 		callback(json, null)
 	}, func(error as Error) {
 		callback(null, error)
@@ -132,49 +119,24 @@ func delete(url as string, headers as KeyValueList<string,string>, callback as f
 		assert body:
 			callback(null, Error.instance("failed_to_connect", "Failed to connect to server"))
 		var json = assert JSONParser.parse(body) as DynamicMap:
-			callback(null, Error.forMessage("Invalid JSON Format from auth server: '" .. String.asString(body) .. "'"))
+			callback(null, Error.forMessage("Invalid JSON Format from notification forward server: '" .. String.asString(body) .. "'"))
 		callback(json, null)
 	}, func(error as Error) {
 		callback(null, error)
 	})
 }
 
-func authenticate(sessionId as string, callback as function<void, DynamicMap, Error>)
+func forward(data as DynamicMap, callback as function<void, DynamicMap, Error>)
 {
-	CHECK_SESSION(sessionId, callback)
-	get(authenticateURL, headers, func(response as DynamicMap, e as Error) {
+	assert data:
+		callback(null, Error.instance("no_notification_data", "No notification data"))
+	var headers = new KeyValueList<string,string>()
+	if String.isNotEmpty(accessTokenKey) && String.isNotEmpty(accessToken):
+		headers.add(accessTokenKey, accessToken)
+	headers.add("Content-Type", "application/json")
+	post(forwardURL, headers, data, func(response as DynamicMap, e as Error) {
 		assert not e:
 			callback(null, e)
-		var data = assert response.getDynamicMap("data"):
-			callback(null, Error.instance("invalid_server_response", "Invalid response from authentication server"))
-		callback(data, null)
-	})
-}
-
-func verifyUserIds(sessionId as string, userIds as DynamicVector, callback as function<void, DynamicVector, Error>)
-{
-	CHECK_SESSION(sessionId, callback)
-	var data = new DynamicMap()
-	data.set("userIds", userIds)
-	post(verifyUserIdsURL, headers, data, func(response as DynamicMap, e as Error) {
-		assert not e:
-			callback(null, e)
-		var list = assert response.getDynamicVector("data"):
-			callback(null, Error.instance("invalid_server_response", "Invalid response from authentication server"))
-		callback(list, null)
-	})
-}
-
-func verifyExternalId(sessionId as string, externalId as string, callback as function<void, DynamicMap, Error>)
-{
-	CHECK_SESSION(sessionId, callback)
-	var data = new DynamicMap()
-	data.set("externalId", externalId)
-	post(verifyExternalIdURL, headers, data, func(response as DynamicMap, e as Error) {
-		assert not e:
-			callback(null, e)
-		var data = assert response.getDynamicMap("data"):
-			callback(null, Error.instance("invalid_server_response", "Invalid response from authentication server"))
-		callback(data, null)
+		callback(response, null)
 	})
 }
