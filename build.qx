@@ -21,30 +21,32 @@
 # SOFTWARE.
 #
 
-tool eqela:sling:r300
-tool igelle:tools:r3
-lib eqela:jkop:r2
-set version 4.0.20180324
+use eqela:sling:r306
+use igelle:tools:r3
+use eqela:jkop:20180421
+set version 4.0.${date}
 
-build {
+release {
 	igelle:tools/delete build
+	eqela:sling/slingc src/apigwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/apigwy
 	eqela:sling/slingc src/artsc -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/artsc
 	eqela:sling/slingc src/artsy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/artsy
-	eqela:sling/slingc src/authdbusry -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/authdbusry
-	eqela:sling/slingc src/authdbsysy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/authdbsysy
+	eqela:sling/slingc src/authdby -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/authdby
 	eqela:sling/slingc src/chaty -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/chaty
 	eqela:sling/slingc src/dby -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/dby
 	eqela:sling/slingc src/filesy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/filesy
 	eqela:sling/slingc src/html2pdfy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/html2pdfy
 	eqela:sling/slingc src/keepalive -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/keepalive
 	eqela:sling/slingc src/pnfwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/pnfwy
-	eqela:sling/slingc src/profileusry -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/profileusry
+	eqela:sling/slingc src/profiley -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/profiley
 	eqela:sling/slingc src/smsgwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/smsgwy
 	eqela:sling/slingc src/sqlc -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/sqlc
 	eqela:sling/slingc src/sqlfwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/sqlfwy
-    igelle:tools/cpto build/sympathy-web-services-${version} \
+	eqela:sling/slingc src/reporttool -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/reporttool
+	eqela:sling/slingc src/reporty -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/reporty
+    igelle:tools/cpto build/sympathy-${version} \
         build/app/*/*.dll \
         build/app/*/*.exe
-	igelle:tools/delete build/sympathy-web-services-${version}.zip
-    igelle:tools/zipdir build/sympathy-web-services-${version}
+	igelle:tools/delete build/sympathy-${version}.zip
+    igelle:tools/zipdir build/sympathy-${version}
 }

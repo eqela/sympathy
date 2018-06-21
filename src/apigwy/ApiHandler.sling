@@ -1,0 +1,99 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is HTTPServerRequestHandler:
+
+import sympathy
+import capex.web
+
+prop ctx as LoggingContext
+prop auth as AuthApi
+prop endpoints = new map<string,Endpoint>
+prop webClient as WebClient
+
+func executeForwardedRequest(req as HTTPServerRequest, endpoint as Endpoint, userid as string, sessionid as string)
+{
+	var method = req.getMethod()
+	var url = endpoint.getTarget()
+	var headers = new KeyValueList<string,string>()
+	if userid:
+		headers.add("x-sympathy-apigwy-userid", userid)
+	if sessionid:
+		headers.add("x-sympathy-apigwy-sessionid", sessionid)
+	var body = req.getBodyBuffer()
+	if not body {
+		if method == "POST" || method == "PUT" || method == "PATCH" {
+			Log.debug(ctx, "Invalid POST/PUT/PATCH request without body received.")
+			req.sendJSONError(ServerError.invalidRequest())
+			return
+		}
+	}
+	Log.debug(ctx, "Forwarding API request for `" .. endpoint.getMethod() .. "' to target `" .. endpoint.getTarget() .. "'")
+	webClient.query(method, url, headers, body, func(status as string, headers as KeyValueList<string,string>, data as buffer) {
+		Log.debug(ctx, "Forwarded API request to `" .. endpoint.getTarget() .. "' completed, status `" .. status .. "'")
+		var resp = new HTTPServerResponse()
+		resp.setStatus(status)
+		if headers {
+			var hdrsv = headers.asVector() as vector<KeyValuePair<string,string>>
+			foreach header in hdrsv {
+				var key = header.key
+				if String.equalsIgnoreCase(key, "content-type") {
+					var val = header.value as string
+					resp.addHeader("Content-Type", val)
+				}
+			}
+		}
+		resp.setBody(BufferReader.forBuffer(data))
+		req.sendResponse(resp)
+	})
+}
+
+func handleRequest(req as HTTPServerRequest, next as function)
+{
+	var rsc = assert req.popResource() {
+		Log.debug(ctx, "Request with no first resource: Ignoring.")
+		next()
+	}
+	assert req.hasMoreResources() == false {
+		Log.debug(ctx, "Request with too many resources: Ignoring.")
+		req.unpopResource()
+		next()
+	}
+	var endpoint = assert Map.get(endpoints, rsc) {
+		Log.debug(ctx, "Request for unknown resource: `" .. rsc .. "'. Ignoring.")
+		req.unpopResource()
+		next()
+	}
+	if endpoint.getAuth() {
+		Log.debug(ctx, "Received a request (authentication required) for API endpoint: `" .. endpoint.getMethod() .. "'")
+		auth.handleAuthenticatedRequest(req, func(userid as string, sessionid as string, req as HTTPServerRequest) {
+			Log.debug(ctx, "Authentication valid for sessionid `" .. sessionid .. "', user=`" .. userid .. "'")
+			executeForwardedRequest(req, endpoint, userid, sessionid)
+		})
+	}
+	else {
+		Log.debug(ctx, "Received a request (no authentication required) for API endpoint: `" .. endpoint.getMethod() .. "'")
+		executeForwardedRequest(req, endpoint, null, null)
+	}
+}

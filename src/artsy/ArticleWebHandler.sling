@@ -295,6 +295,9 @@ func sendResponse(req as HTTPServerRequest, type as string, content as object)
 	var rdata = new DynamicMap()
 	rdata.set("type", type)
 	rdata.set("content", content)
+	var rq = new DynamicMap()
+	rq.set("path", req.getURLPath())
+	rdata.set("request", rq)
 	if(templateData != null) {
 		rdata.mergeFrom(templateData)
 	}

@@ -1,0 +1,852 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is XMLParserAdapter:
+
+import capex.text
+
+func parseFile(ctx as LoggingContext, file as File) static as ReportDefinition
+{
+	var v = new this()
+	assert v.executeForFile(ctx, file)
+	return v.getReport()
+}
+
+prop report as ReportDefinition
+var currentReport as ReportDefinition
+
+func acceptEmbedInfo as bool
+{
+	var start = assert acceptStartElement("Embedinfo")
+	loop {
+		if acceptEndElement(start):
+			break
+		var embed = acceptSingleElement("Embed")
+		if embed:
+			continue
+		unsupported(start)
+	}
+	return true
+}
+
+func acceptSummaryInfo as bool
+{
+	var element = assert acceptSingleElement("Summaryinfo")
+	currentReport.setKeywordsInReport(element.getParam("KeywordsinReport"))
+	currentReport.setReportAuthor(element.getParam("ReportAuthor"))
+	currentReport.setReportComments(element.getParam("ReportComments"))
+	currentReport.setReportSubject(element.getParam("ReportSubject"))
+	currentReport.setReportTitle(element.getParam("ReportTitle"))
+	return true
+}
+
+func acceptReportOptions as bool
+{
+	var element = assert acceptSingleElement("ReportOptions")
+	currentReport.setEnableSaveDataWithReport(Boolean.asBoolean(element.getParam("EnableSaveDataWithReport")))
+	currentReport.setEnableSavePreviewPicture(Boolean.asBoolean(element.getParam("EnableSavePreviewPicture")))
+	currentReport.setEnableSaveSummariesWithReport(Boolean.asBoolean(element.getParam("EnableSaveSummariesWithReport")))
+	currentReport.setEnableUseDummyData(Boolean.asBoolean(element.getParam("EnableUseDummyData")))
+	currentReport.setInitialDataContext(element.getParam("initialDataContext"))
+	currentReport.setInitialReportPartName(element.getParam("initialReportPartName"))
+	return true
+}
+
+func acceptPrintOptions as bool
+{
+	var element = assert acceptStartElement("PrintOptions")
+	currentReport.setPageContentHeight(Integer.asInteger(element.getParam("PageContentHeight")))
+	currentReport.setPageContentWidth(Integer.asInteger(element.getParam("PageContentWidth")))
+	currentReport.setPaperOrientation(element.getParam("PaperOrientation"))
+	currentReport.setPaperSize(element.getParam("PaperSize"))
+	currentReport.setPaperSource(element.getParam("PaperSource"))
+	currentReport.setPrinterDuplex(element.getParam("PrinterDuplex"))
+	currentReport.setPrinterName(element.getParam("PrinterName"))
+	loop {
+		var pms = acceptSingleElement("PageMargins")
+		if pms {
+			currentReport.setBottomMargin(Integer.asInteger(pms.getParam("bottomMargin")))
+			currentReport.setLeftMargin(Integer.asInteger(pms.getParam("leftMargin")))
+			currentReport.setRightMargin(Integer.asInteger(pms.getParam("rightMargin")))
+			currentReport.setTopMargin(Integer.asInteger(pms.getParam("topMargin")))
+			continue
+		}
+		var frms = acceptSingleElement("PageMarginConditionFormulas")
+		if frms {
+			currentReport.setPageMarginConditionFormulaBottom(frms.getParam("Bottom"))
+			currentReport.setPageMarginConditionFormulaLeft(frms.getParam("Left"))
+			currentReport.setPageMarginConditionFormulaRight(frms.getParam("Right"))
+			currentReport.setPageMarginConditionFormulaTop(frms.getParam("Top"))
+			continue
+		}
+		if acceptEndElement(element):
+			break
+	}
+	return true
+}
+
+func acceptSubReports as bool
+{
+	return acceptElementTree("SubReports", null, func as bool {
+		var report = acceptReport()
+		if report {
+			currentReport.addSubReport(report)
+			return true
+		}
+		return false
+	})
+}
+
+func acceptTableLinkField as ReportDefinition.TableLinkField
+{
+	var element = assert acceptSingleElement("Field")
+	var v = new ReportDefinition.TableLinkField()
+	v.setFormulaName(element.getParam("FormulaName"))
+	v.setKind(element.getParam("Kind"))
+	v.setName(element.getParam("Name"))
+	v.setNumberOfBytes(Integer.asInteger(element.getParam("NumberOfBytes")))
+	v.setValueType(element.getParam("ValueType"))
+	return v
+}
+
+func acceptTableLink as ReportDefinition.TableLink
+{
+	var v as ReportDefinition.TableLink
+	assert acceptElementTree("TableLink", func(element as XMLParser.StartElement) {
+		v = new ReportDefinition.TableLink()
+		v.setJoinType(element.getParam("JoinType"))
+	}, func as bool {
+		TRY_ACCEPT(acceptElementTree("SourceFields", null, func as bool {
+			var field = acceptTableLinkField()
+			if field {
+				v.addSourceField(field)
+				return true
+			}
+			return false
+		}))
+		TRY_ACCEPT(acceptElementTree("DestinationFields", null, func as bool {
+			var field = acceptTableLinkField()
+			if field {
+				v.addDestinationField(field)
+				return true
+			}
+			return false
+		}))
+		return false
+	})
+	return v
+}
+
+func acceptTableLinks as bool
+{
+	return acceptElementTree("TableLinks", null, func as bool {
+		var link = acceptTableLink()
+		if link {
+			currentReport.addTableLink(link)
+			return true
+		}
+		return false
+	})
+}
+
+func acceptTable as ReportDefinition.DatabaseTable
+{
+	var start = assert acceptStartElement("Table")
+	var v = new ReportDefinition.DatabaseTable()
+	v.setAlias(start.getParam("Alias"))
+	v.setClassName(start.getParam("ClassName"))
+	v.setName(start.getParam("Name"))
+	loop {
+		var ci = acceptSingleElement("ConnectionInfo")
+		if ci {
+			v.setDatabaseDll(ci.getParam("Database_DLL"))
+			v.setQeDatabaseName(ci.getParam("QE_DatabaseName"))
+			v.setQeDatabaseType(ci.getParam("QE_DatabaseType"))
+			v.setQeLogonProperties(ci.getParam("QE_LogonProperties"))
+			v.setQeServerDescription(ci.getParam("QE_ServerDescription"))
+			v.setQeSqldb(Boolean.asBoolean(ci.getParam("QE_SQLDB")))
+			v.setSsoEnabled(Boolean.asBoolean(ci.getParam("SSO_Enabled")))
+			v.setUserName(ci.getParam("UserName"))
+			v.setPassword(ci.getParam("Password"))
+			continue
+		}
+		var fields = acceptStartElement("Fields")
+		if fields {
+			loop {
+				var field = acceptSingleElement("Field")
+				if field {
+					var fo = new ReportDefinition.DatabaseTableField()
+					fo.setDescription(field.getParam("Description"))
+					fo.setFormulaForm(field.getParam("FormulaForm"))
+					fo.setHeadingText(field.getParam("HeadingText"))
+					fo.setIsRecurring(Boolean.asBoolean(field.getParam("IsRecurring")))
+					fo.setKind(field.getParam("Kind"))
+					fo.setLength(Integer.asInteger(field.getParam("Length")))
+					fo.setLongName(field.getParam("LongName"))
+					fo.setName(field.getParam("Name"))
+					fo.setShortName(field.getParam("ShortName"))
+					fo.setType(field.getParam("Type"))
+					fo.setUseCount(Integer.asInteger(field.getParam("UseCount")))
+					v.addField(fo)
+					continue
+				}
+				if acceptEndElement(fields):
+					break
+				unsupported(fields)
+			}
+			continue
+		}
+		if acceptEndElement(start):
+			break
+		unsupported(start)
+	}
+	return v
+}
+
+func acceptTables as bool
+{
+	return acceptElementTree("Tables", null, func as bool {
+		var table = acceptTable()
+		if table {
+			currentReport.addDatabaseTable(table)
+			return true
+		}
+		return false
+	})
+}
+
+func acceptDatabase as bool
+{
+	return acceptElementTree("Database", null, func as bool {
+		TRY_ACCEPT(acceptTableLinks())
+		TRY_ACCEPT(acceptTables())
+		return false
+	})
+}
+
+func acceptDataDefinition as bool
+{
+	return acceptElementTree("DataDefinition", null, func as bool {
+		// FIXME: No samples of this so far in the reports. we have no idea what could be in there
+		IGNORE_SINGLE_ELEMENT("GroupSelectionFormula")
+		var str = acceptStringElementData("RecordSelectionFormula")
+		if str {
+			currentReport.setRecordSelectionFormula(str)
+			return true
+		}
+		TRY_ACCEPT(acceptElementTree("Groups", null, func as bool {
+			var group = acceptSingleElement("Group")
+			if group {
+				var dg = new ReportDefinition.DataGroup()
+				dg.setConditionField(group.getParam("ConditionField"))
+				currentReport.addDataGroup(dg)
+				return true
+			}
+			return false
+		}))
+		TRY_ACCEPT(acceptElementTree("SortFields", null, func as bool {
+			var element = acceptSingleElement("SortField")
+			if element {
+				var sf = new ReportDefinition.SortField()
+				sf.setField(element.getParam("Field"))
+				sf.setSortDirection(element.getParam("SortDirection"))
+				sf.setSortType(element.getParam("SortType"))
+				currentReport.addSortField(sf)
+				return true
+			}
+			return false
+		}))
+		TRY_ACCEPT(acceptElementTree("FormulaFieldDefinitions", null, func as bool {
+			var element = acceptStartElement("FormulaFieldDefinition")
+			if element {
+				var fd = new ReportDefinition.FormulaFieldDefinition()
+				fd.setFormulaName(element.getParam("FormulaName"))
+				fd.setKind(element.getParam("Kind"))
+				fd.setName(element.getParam("Name"))
+				fd.setNumberOfBytes(Integer.asInteger(element.getParam("NumberOfBytes")))
+				fd.setValueType(element.getParam("ValueType"))
+				fd.setData(acceptText())
+				parseEndElement(element)
+				currentReport.addFormulaFieldDefinition(fd)
+				return true
+			}
+			return false
+		}))
+		TRY_ACCEPT(acceptElementTree("GroupNameFieldDefinitions", null, func as bool {
+			var element = acceptSingleElement("GroupNameFieldDefinition")
+			if element {
+				var gd = new ReportDefinition.GroupNameFieldDefinition()
+				gd.setFormulaName(element.getParam("FormulaName"))
+				gd.setGroup(element.getParam("Group"))
+				gd.setGroupNameFieldName(element.getParam("GroupNameFieldName"))
+				gd.setKind(element.getParam("Kind"))
+				gd.setName(element.getParam("Name"))
+				gd.setNumberOfBytes(Integer.asInteger(element.getParam("NumberOfBytes")))
+				gd.setValueType(element.getParam("ValueType"))
+				currentReport.addGroupNameFieldDefinition(gd)
+				return true
+			}
+			return false
+		}))
+		TRY_ACCEPT(acceptElementTree("ParameterFieldDefinitions", null, func as bool {
+			var parameter as ReportDefinition.ParameterFieldDefinition
+			var r = acceptElementTree("ParameterFieldDefinition", func(element as XMLParser.StartElement) {
+				parameter = new ReportDefinition.ParameterFieldDefinition()
+				parameter.setAllowCustomCurrentValues(Boolean.asBoolean(element.getParam("AllowCustomCurrentValues")))
+				parameter.setEditMask(element.getParam("EditMask"))
+				parameter.setEnableAllowEditingDefaultValue(Boolean.asBoolean(element.getParam("EnableAllowEditingDefaultValue")))
+				parameter.setEnableAllowMultipleValue(Boolean.asBoolean(element.getParam("EnableAllowMultipleValue")))
+				parameter.setEnableNullValue(Boolean.asBoolean(element.getParam("EnableNullValue")))
+				parameter.setFormulaName(element.getParam("FormulaName"))
+				parameter.setHasCurrentValue(Boolean.asBoolean(element.getParam("HasCurrentValue")))
+				parameter.setIsOptionalPrompt(Boolean.asBoolean(element.getParam("IsOptionalPrompt")))
+				parameter.setKind(element.getParam("Kind"))
+				parameter.setName(element.getParam("Name"))
+				parameter.setNumberOfBytes(Integer.asInteger(element.getParam("NumberOfBytes")))
+				parameter.setParameterFieldName(element.getParam("ParameterFieldName"))
+				parameter.setParameterFieldUsage(element.getParam("ParameterFieldUsage"))
+				parameter.setParameterType(element.getParam("ParameterType"))
+				parameter.setParameterValueKind(element.getParam("ParameterValueKind"))
+				parameter.setPromptText(element.getParam("PromptText"))
+				parameter.setReportName(element.getParam("ReportName"))
+				parameter.setValueType(element.getParam("ValueType"))
+			}, func as bool {
+				// FIXME: All of the below have no samples in existing reports.
+				// So we have no idea what the contents would look like. Fix this
+				// when we see them.
+				IGNORE_SINGLE_ELEMENT("ParameterDefaultValues")
+				IGNORE_SINGLE_ELEMENT("ParameterInitialValues")
+				IGNORE_SINGLE_ELEMENT("ParameterCurrentValues")
+				return false
+			})
+			if r && parameter {
+				currentReport.addParameterFieldDefinition(parameter)
+				return true
+			}
+			return false
+		}))
+		// FIXME: No sample data for this one either
+		IGNORE_SINGLE_ELEMENT("RunningTotalFieldDefinitions")
+		// FIXME: No sample data for this one either
+		IGNORE_SINGLE_ELEMENT("SQLExpressionFields")
+		TRY_ACCEPT(acceptElementTree("SummaryFields", null, func as bool {
+			var element = acceptSingleElement("SummaryFieldDefinition")
+			if element {
+				var sfd = new ReportDefinition.SummaryFieldDefinition()
+				sfd.setFormulaName(element.getParam("FormulaName"))
+				sfd.setGroup(element.getParam("Group"))
+				sfd.setKind(element.getParam("Kind"))
+				sfd.setName(element.getParam("Name"))
+				sfd.setNumberOfBytes(Integer.asInteger(element.getParam("NumberOfBytes")))
+				sfd.setOperation(element.getParam("Operation"))
+				sfd.setOperationParameter(element.getParam("OperationParameter"))
+				sfd.setSummarizedField(element.getParam("SummarizedField"))
+				sfd.setValueType(element.getParam("ValueType"))
+				currentReport.addSummaryFieldDefinition(sfd)
+				return true
+			}
+			return false
+		}))
+		return false
+	})
+}
+
+func acceptColor(tagName as string) as ReportDefinition.ColorObject
+{
+	var element = assert acceptSingleElement(tagName)
+	var v = new ReportDefinition.ColorObject()
+	v.setName(element.getParam("Name"))
+	v.setA(Integer.asInteger(element.getParam("A")))
+	v.setR(Integer.asInteger(element.getParam("R")))
+	v.setG(Integer.asInteger(element.getParam("G")))
+	v.setB(Integer.asInteger(element.getParam("B")))
+	return v
+}
+
+func acceptFont(tagName as string) as ReportDefinition.FontObject
+{
+	var element = assert acceptSingleElement(tagName)
+	var v = new ReportDefinition.FontObject()
+	v.setBold(Boolean.asBoolean(element.getParam("Bold")))
+	v.setFontFamily(element.getParam("FontFamily"))
+	v.setGdiCharSet(Integer.asInteger(element.getParam("GdiCharSet")))
+	v.setGdiVerticalFont(Boolean.asBoolean(element.getParam("GdiVerticalFont")))
+	v.setHeight(Integer.asInteger(element.getParam("Height")))
+	v.setIsSystemFont(Boolean.asBoolean(element.getParam("IsSystemFont")))
+	v.setItalic(Boolean.asBoolean(element.getParam("Italic")))
+	v.setName(element.getParam("Name"))
+	v.setOriginalFontName(element.getParam("OriginalFontName"))
+	v.setSize(Integer.asInteger(element.getParam("Size")))
+	v.setSizeinPoints(Integer.asInteger(element.getParam("SizeinPoints")))
+	v.setStrikeout(Boolean.asBoolean(element.getParam("StrikeOut")))
+	v.setStyle(element.getParam("Style"))
+	v.setSystemFontName(element.getParam("SystemFontName"))
+	v.setUnderline(Boolean.asBoolean(element.getParam("Underline")))
+	v.setUnit(element.getParam("Unit"))
+	return v
+}
+
+func acceptBorder(tagName as string) as ReportDefinition.BorderObject
+{
+	var v as ReportDefinition.BorderObject
+	assert acceptElementTree(tagName, func(element as XMLParser.StartElement) {
+		v = new ReportDefinition.BorderObject()
+		v.setBottomLineStyle(element.getParam("BottomLineStyle"))
+		v.setLeftLineStyle(element.getParam("LeftLineStyle"))
+		v.setRightLineStyle(element.getParam("RightLineStyle"))
+		v.setTopLineStyle(element.getParam("TopLineStyle"))
+		v.setHasDropShadow(Boolean.asBoolean(element.getParam("HasDropShadow")))
+	}, func as bool {
+		var formula = acceptSingleElement("BorderConditionFormulas")
+		if formula {
+			v.setLeftLineStyleFormula(formula.getParam("LeftLineStyle"))
+			v.setRightLineStyleFormula(formula.getParam("RightLineStyle"))
+			v.setTopLineStyleFormula(formula.getParam("TopLineStyle"))
+			v.setBottomLineStyleFormula(formula.getParam("BottomLineStyle"))
+			v.setHasDropShadowFormula(formula.getParam("HasDropShadow"))
+			v.setBackgroundColorFormula(formula.getParam("BackgroundColor"))
+			v.setBorderColorFormula(formula.getParam("BorderColor"))
+			v.setTightHorizontalFormula(formula.getParam("TightHorizontal"))
+			v.setTightVerticalFormula(formula.getParam("TightVertical"))
+			return true
+		}
+		var bgc = acceptColor("BackgroundColor")
+		if bgc {
+			v.setBackgroundColor(bgc)
+			return true
+		}
+		var bc = acceptColor("BorderColor")
+		if bc {
+			v.setBorderColor(bc)
+			return true
+		}
+		return false
+	})
+	return v
+}
+
+func acceptObjectFormat(object as ReportDefinition.ReportObject) as bool
+{
+	var of = assert acceptSingleElement("ObjectFormat")
+	object.setCssClass(of.getParam("CssClass"))
+	object.setEnableCanGrow(Boolean.asBoolean(of.getParam("EnableCanGrow")))
+	object.setEnableCloseAtPageBreak(Boolean.asBoolean(of.getParam("EnableCloseAtPageBreak")))
+	object.setEnableKeepTogether(Boolean.asBoolean(of.getParam("EnableKeepTogether")))
+	object.setEnableSuppress(Boolean.asBoolean(of.getParam("EnableSuppress")))
+	object.setHorizontalAlignment(of.getParam("HorizontalAlignment"))
+	return true
+}
+
+func updateObjectParameters(object as ReportDefinition.ReportObject, element as XMLParser.StartElement)
+{
+	object.setName(element.getParam("Name"))
+	object.setKind(element.getParam("Kind"))
+	object.setTop(Integer.asInteger(element.getParam("Top")))
+	object.setLeft(Integer.asInteger(element.getParam("Left")))
+	object.setWidth(Integer.asInteger(element.getParam("Width")))
+	object.setHeight(Integer.asInteger(element.getParam("Height")))
+	object.setRight(Integer.asInteger(element.getParam("Right")))
+}
+
+func acceptTextObject as ReportDefinition.TextObject
+{
+	var object as ReportDefinition.TextObject
+	assert acceptElementTree("TextObject", func(element as XMLParser.StartElement) {
+		object = new ReportDefinition.TextObject()
+		updateObjectParameters(object, element)
+	}, func as bool {
+		var text = acceptStringElementData("Text")
+		if text {
+			object.setText(text)
+			return true
+		}
+		var color = acceptColor("Color")
+		if color {
+			object.setColor(color)
+			return true
+		}
+		var font = acceptFont("Font")
+		if font {
+			object.setFont(font)
+			return true
+		}
+		var border = acceptBorder("Border")
+		if border {
+			object.setBorder(border)
+			return true
+		}
+		TRY_ACCEPT(acceptObjectFormat(object))
+		return false
+	})
+	return object
+}
+
+func acceptBoxObject as ReportDefinition.BoxObject
+{
+	var object as ReportDefinition.BoxObject
+	assert acceptElementTree("BoxObject", func(element as XMLParser.StartElement) {
+		object = new ReportDefinition.BoxObject()
+		updateObjectParameters(object, element)
+		object.setEnableExtendToBottomOfSection(Boolean.asBoolean(element.getParam("EnableExtendToBottomOfSection")))
+		object.setEndSectionName(element.getParam("EndSectionName"))
+		object.setLineStyle(element.getParam("LineStyle"))
+		object.setLineThickness(Integer.asInteger(element.getParam("LineThickness")))
+	}, func as bool {
+		var lc = acceptColor("LineColor")
+		if lc {
+			object.setLineColor(lc)
+			return true
+		}
+		var border = acceptBorder("Border")
+		if border {
+			object.setBorder(border)
+			return true
+		}
+		TRY_ACCEPT(acceptObjectFormat(object))
+		return false
+	})
+	return object
+}
+
+func acceptLineObject as ReportDefinition.LineObject
+{
+	var object as ReportDefinition.LineObject
+	assert acceptElementTree("LineObject", func(element as XMLParser.StartElement) {
+		object = new ReportDefinition.LineObject()
+		updateObjectParameters(object, element)
+		object.setEnableExtendToBottomOfSection(Boolean.asBoolean(element.getParam("EnableExtendToBottomOfSection")))
+		object.setEndSectionName(element.getParam("EndSectionName"))
+		object.setLineStyle(element.getParam("LineStyle"))
+		object.setLineThickness(Integer.asInteger(element.getParam("LineThickness")))
+	}, func as bool {
+		var lc = acceptColor("LineColor")
+		if lc {
+			object.setLineColor(lc)
+			return true
+		}
+		var border = acceptBorder("Border")
+		if border {
+			object.setBorder(border)
+			return true
+		}
+		TRY_ACCEPT(acceptObjectFormat(object))
+		return false
+	})
+	return object
+}
+
+func acceptFieldObject as ReportDefinition.FieldObject
+{
+	var object as ReportDefinition.FieldObject
+	assert acceptElementTree("FieldObject", func(element as XMLParser.StartElement) {
+		object = new ReportDefinition.FieldObject()
+		updateObjectParameters(object, element)
+		object.setDataSource(element.getParam("DataSource"))
+	}, func as bool {
+		var color = acceptColor("Color")
+		if color {
+			object.setColor(color)
+			return true
+		}
+		var font = acceptFont("Font")
+		if font {
+			object.setFont(font)
+			return true
+		}
+		var border = acceptBorder("Border")
+		if border {
+			object.setBorder(border)
+			return true
+		}
+		TRY_ACCEPT(acceptObjectFormat(object))
+		return false
+	})
+	return object
+}
+
+func acceptPictureObject as ReportDefinition.PictureObject
+{
+	var object as ReportDefinition.PictureObject
+	assert acceptElementTree("PictureObject", func(element as XMLParser.StartElement) {
+		object = new ReportDefinition.PictureObject()
+		updateObjectParameters(object, element)
+	}, func as bool {
+		var border = acceptBorder("Border")
+		if border {
+			object.setBorder(border)
+			return true
+		}
+		TRY_ACCEPT(acceptObjectFormat(object))
+		return false
+	})
+	return object
+}
+
+func acceptCrossTabObject as ReportDefinition.CrossTabObject
+{
+	var object as ReportDefinition.CrossTabObject
+	assert acceptElementTree("CrossTabObject", func(element as XMLParser.StartElement) {
+		object = new ReportDefinition.CrossTabObject()
+		updateObjectParameters(object, element)
+	}, func as bool {
+		var border = acceptBorder("Border")
+		if border {
+			object.setBorder(border)
+			return true
+		}
+		TRY_ACCEPT(acceptObjectFormat(object))
+		return false
+	})
+	return object
+}
+
+func acceptChartObject as ReportDefinition.ChartObject
+{
+	var object as ReportDefinition.ChartObject
+	assert acceptElementTree("ChartObject", func(element as XMLParser.StartElement) {
+		object = new ReportDefinition.ChartObject()
+		updateObjectParameters(object, element)
+	}, func as bool {
+		var border = acceptBorder("Border")
+		if border {
+			object.setBorder(border)
+			return true
+		}
+		TRY_ACCEPT(acceptObjectFormat(object))
+		return false
+	})
+	return object
+}
+
+func acceptSubreportObject as ReportDefinition.SubreportObject
+{
+	var object as ReportDefinition.SubreportObject
+	assert acceptElementTree("SubreportObject", func(element as XMLParser.StartElement) {
+		object = new ReportDefinition.SubreportObject()
+		updateObjectParameters(object, element)
+	}, func as bool {
+		var border = acceptBorder("Border")
+		if border {
+			object.setBorder(border)
+			return true
+		}
+		TRY_ACCEPT(acceptObjectFormat(object))
+		return false
+	})
+	return object
+}
+
+func acceptFieldHeadingObject as ReportDefinition.FieldHeadingObject
+{
+	var object as ReportDefinition.FieldHeadingObject
+	assert acceptElementTree("FieldHeadingObject", func(element as XMLParser.StartElement) {
+		object = new ReportDefinition.FieldHeadingObject()
+		updateObjectParameters(object, element)
+	}, func as bool {
+		var text = acceptStringElementData("Text")
+		if text {
+			object.setText(text)
+			return true
+		}
+		var border = acceptBorder("Border")
+		if border {
+			object.setBorder(border)
+			return true
+		}
+		TRY_ACCEPT(acceptObjectFormat(object))
+		return false
+	})
+	return object
+}
+
+func acceptSection as ReportDefinition.Section
+{
+	var section as ReportDefinition.Section
+	assert acceptElementTree("Section", func(element as XMLParser.StartElement) {
+		section = new ReportDefinition.Section()
+		section.setHeight(Integer.asInteger(element.getParam("Height")))
+		section.setKind(element.getParam("Kind"))
+		section.setName(element.getParam("Name"))
+	}, func as bool {
+		TRY_ACCEPT(acceptElementTree("SectionFormat", func(element as XMLParser.StartElement) {
+			section.setCssClass(element.getParam("CssClass"))
+			section.setEnableKeepTogether(Boolean.asBoolean(element.getParam("EnableKeepTogether")))
+			section.setEnableNewPageAfter(Boolean.asBoolean(element.getParam("EnableNewPageAfter")))
+			section.setEnableNewPageBefore(Boolean.asBoolean(element.getParam("EnableNewPageBefore")))
+			section.setEnablePrintAtBottomOfPage(Boolean.asBoolean(element.getParam("EnablePrintAtBottomOfPage")))
+			section.setEnableResetPageNumberAfter(Boolean.asBoolean(element.getParam("EnableResetPageNumberAfter")))
+			section.setEnableSuppress(Boolean.asBoolean(element.getParam("EnableSuppress")))
+			section.setEnableSuppressIfBlank(Boolean.asBoolean(element.getParam("EnableSuppressIfBlank")))
+			section.setEnableUnderlaySection(Boolean.asBoolean(element.getParam("EnableUnderlaySection")))
+		}, func as bool {
+			var ff = acceptSingleElement("SectionAreaConditionFormulas")
+			if ff {
+				section.setEnableSuppressFormula(ff.getParam("EnableSuppress"))
+				section.setEnablePrintAtBottomOfPageFormula(ff.getParam("EnablePrintAtBottomOfPage"))
+				section.setEnableNewPageAfterFormula(ff.getParam("EnableNewPageAfter"))
+				section.setEnableNewPageBeforeFormula(ff.getParam("EnableNewPageBefore"))
+				section.setEnableKeepTogetherFormula(ff.getParam("EnableKeepTogether"))
+				section.setEnableSuppressIfBlankFormula(ff.getParam("EnableSuppressIfBlank"))
+				section.setEnableResetPageNumberAfterFormula(ff.getParam("EnableResetPageNumberAfter"))
+				section.setEnableUnderlaySectionFormula(ff.getParam("EnableUnderlaySection"))
+				section.setBackgroundFormula(ff.getParam("BackgroundColor"))
+				section.setEnableHideForDrillDownFormula(ff.getParam("EnableHideForDrillDown"))
+				section.setGroupNumberPerPageFormula(ff.getParam("GroupNumberPerPage"))
+				section.setRecordNumberPerPageFormula(ff.getParam("RecordNumberPerPage"))
+				section.setEnableClampPageFooterFormula(ff.getParam("EnableClampPageFooter"))
+				return true
+			}
+			var cc = acceptColor("BackgroundColor")
+			if cc {
+				section.setBackgroundColor(cc)
+				return true
+			}
+			return false
+		}))
+		TRY_ACCEPT(acceptElementTree("ReportObjects", null, func as bool {
+			var to = acceptTextObject()
+			if to {
+				section.addObject(to)
+				return true
+			}
+			var bo = acceptBoxObject()
+			if bo {
+				section.addObject(bo)
+				return true
+			}
+			var lo = acceptLineObject()
+			if lo {
+				section.addObject(lo)
+				return true
+			}
+			var fo = acceptFieldObject()
+			if fo {
+				section.addObject(fo)
+				return true
+			}
+			var po = acceptPictureObject()
+			if po {
+				section.addObject(fo)
+				return true
+			}
+			var cto = acceptCrossTabObject()
+			if cto {
+				section.addObject(cto)
+				return true
+			}
+			var co = acceptChartObject()
+			if co {
+				section.addObject(co)
+				return true
+			}
+			var sro = acceptSubreportObject()
+			if sro {
+				section.addObject(sro)
+				return true
+			}
+			var fho = acceptFieldHeadingObject()
+			if fho {
+				section.addObject(fho)
+				return true
+			}
+			return false
+		}))
+		return false
+	})
+	return section
+}
+
+func acceptArea as bool
+{
+	var area as ReportDefinition.Area
+	assert acceptElementTree("Area", func(element as XMLParser.StartElement) {
+		area = new ReportDefinition.Area()
+		area.setKind(element.getParam("Kind"))
+		area.setName(element.getParam("Name"))
+	}, func as bool {
+		var fmt = acceptSingleElement("AreaFormat")
+		if fmt {
+			area.setEnableHideForDrillDown(Boolean.asBoolean(fmt.getParam("EnableHideForDrillDown")))
+			area.setEnableKeepTogether(Boolean.asBoolean(fmt.getParam("EnableKeepTogether")))
+			area.setEnableNewPageAfter(Boolean.asBoolean(fmt.getParam("EnableNewPageAfter")))
+			area.setEnableNewPageBefore(Boolean.asBoolean(fmt.getParam("EnableNewPageBefore")))
+			area.setEnablePrintAtBottomOfPage(Boolean.asBoolean(fmt.getParam("EnablePrintAtBottomOfPage")))
+			area.setEnableResetPageNumberAfter(Boolean.asBoolean(fmt.getParam("EnableResetPageNumberAfter")))
+			area.setEnableSuppress(Boolean.asBoolean(fmt.getParam("EnableSuppress")))
+			return true
+		}
+		TRY_ACCEPT(acceptElementTree("Sections", null, func as bool {
+			var section = acceptSection()
+			if section {
+				area.addSection(section)
+				return true
+			}
+			return false
+		}))
+		return false
+	})
+	currentReport.addArea(area)
+	return true
+}
+
+func acceptReportDefinition as bool
+{
+	return acceptElementTree("ReportDefinition", null, func as bool {
+		return acceptElementTree("Areas", null, func as bool {
+			TRY_ACCEPT(acceptArea())
+			return false
+		})
+	})
+}
+
+func acceptReport as ReportDefinition
+{
+	var v as ReportDefinition
+	var or = currentReport
+	var r = acceptElementTree("Report", func(element as XMLParser.StartElement) {
+		v = new ReportDefinition()
+		v.setName(element.getParam("Name"))
+		v.setFileName(element.getParam("FileName"))
+		v.setHasSavedData(Boolean.asBoolean(element.getParam("HasSavedData")))
+		currentReport = v
+	}, func as bool {
+		TRY_ACCEPT(acceptEmbedInfo())
+		TRY_ACCEPT(acceptSummaryInfo())
+		TRY_ACCEPT(acceptReportOptions())
+		TRY_ACCEPT(acceptPrintOptions())
+		TRY_ACCEPT(acceptSubReports())
+		TRY_ACCEPT(acceptDatabase())
+		TRY_ACCEPT(acceptDataDefinition())
+		TRY_ACCEPT(acceptReportDefinition())
+		return false
+	})
+	currentReport = or
+	assert r
+	return v
+}
+
+func execute override
+{
+	report = acceptReport()
+}

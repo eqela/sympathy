@@ -1,0 +1,93 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is ConsoleApplicationMain:
+
+import capex.console
+import sympathy.report
+
+main:
+	return executeMain(new this(), args)
+
+func execute override as bool
+{
+	var reportFile as File
+	var pdfFile as File
+	var recordFile as File
+	var formulas = new vector<string>
+	foreach arg in args {
+		if arg.isFlag("debug") {
+			ctx.setEnableDebugMessages(true)
+		}
+		else if arg.isOption("records") {
+			recordFile = File.forPath(arg.value)
+		}
+		else if arg.isOption("formula") {
+			formulas += arg.value
+		}
+		else if arg.isParameter() {
+			if reportFile == null {
+				reportFile = File.forPath(arg.parameter)
+			}
+			else if pdfFile == null {
+				pdfFile = File.forPath(arg.parameter)
+			}
+			else {
+				Log.error(ctx, "Too many files specified.")
+				return false
+			}
+		}
+		else {
+			arg.reportAsUnsupported(ctx)
+			return false
+		}
+	}
+	assert reportFile:
+		Log.error(ctx, "No report file specified.")
+	var ds as ReportDataSource
+	if recordFile {
+		assert ds = StaticFileDataSource.forFile(recordFile):
+			Log.error(ctx, "Failed to read data file: `" .. recordFile.getPath() .. "'")
+	}
+	Log.status(ctx, "Reading report file ..")
+	var report = assert XMLReportParser.parseFile(ctx, reportFile):
+		Log.error(ctx, "Failed to read report: `" .. reportFile.getPath() .. "'")
+	Log.info(ctx, "Report file successfully read: `" .. reportFile.getPath() .. "'")
+	foreach formula in formulas {
+		var cc = String.split(formula, ':', 2)
+		assert report.setFormulaValue(cc[0], cc[1]):
+			Log.error(ctx, "Failed to set formula value `" .. cc[0] .. "' to `" .. cc[1] .. "'")
+	}
+	if pdfFile {
+		Log.status(ctx, "Generating PDF ..")
+		var pr = new ReportProcessor()
+		pr.setCtx(ctx)
+		pr.setReport(report)
+		pr.setDataSource(ds)
+		assert pr.processToPdfFile(pdfFile):
+			Log.error(ctx, "Failed to generate PDF: `" .. pdfFile.getPath() .. "'")
+		Log.info(ctx, "PDF report successfully generated: `" .. pdfFile.getPath() .. "'")
+	}
+	return true
+}

@@ -22,19 +22,6 @@
  * SOFTWARE.
  */
 
-class is WebServerWithDatabase:
+interface:
 
-import sympathy
-import sympathy.dbapp
-
-func initializeServer(server as HTTPServer) override as bool
-{
-	assert base.initializeServer(server)
-	var handler = new ApiHandler()
-	handler.setDb(getDb())
-	server.pushRequestHandler(handler)
-	return true
-}
-
-main:
-	return new this().executeMain(args)
+func getDataRecords(query as string) as Iterator<DynamicMap>

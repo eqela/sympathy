@@ -22,42 +22,47 @@
  * SOFTWARE.
  */
 
-class is WebServerWithDatabase:
+class #webapi:
 
-import sympathy
-import sympathy.dbapp
-import sympathy.service
 import capex.data
+import sympathy.report
 
-func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
+prop db as SQLDatabase
+prop reportDir as File
+prop ctx as LoggingContext
+
+func validateReportName(name as string) as bool
 {
-	if key == "authServerUrl" {
-		AuthServerApi.setAuthServerUrl(value)
-		return true
+	assert name
+	assert String.indexOf(name, '/') < 0
+	assert String.indexOf(name, '\\') < 0
+	return true
+}
+
+func getDataSource as ReportDataSource
+{
+	return SQLDataSource.forDatabase(db)
+}
+
+GET "pdf"
+{
+	var areport = assert req.getParameterAsString("report"):
+		req.sendInvalidRequest()
+	assert validateReportName(areport):
+		req.sendInvalidRequest()
+	var file = reportDir.entry(areport .. ".xml")
+	var report = assert XMLReportParser.parseFile(ctx, file) {
+		Log.error(ctx, "Failed to read report: `" .. file.getPath() .. "'")
+		req.sendNotFound()
 	}
-	return base.configure(key, value, relativeTo, error)
+	// FIXME: Set the formula values from request parameters
+	var pr = new ReportProcessor()
+	pr.setCtx(ctx)
+	pr.setReport(report)
+	pr.setDataSource(getDataSource())
+	var data = assert pr.processToPdfBuffer() {
+		Log.error(ctx, "Failed to generate PDF")
+		req.sendInternalError()
+	}
+	req.sendBuffer(data, "application/pdf")
 }
-
-func initializeDatabase as bool
-{
-	var profile = SQLTableInfo.forName("profile")
-	profile.addStringKeyColumn("userid")
-	profile.addStringColumn("firstname")
-	profile.addStringColumn("lastname")
-	profile.addStringColumn("organization")
-	assert ensureTableExists(profile)
-	return true
-}
-
-func initializeServer(server as HTTPServer) override as bool
-{
-	assert base.initializeServer(server)
-	assert initializeDatabase()
-	var handler = new ApiHandler()
-	handler.setDb(getDb())
-	server.pushRequestHandler(handler)
-	return true
-}
-
-main:
-	return new this().executeMain(args)
