@@ -874,7 +874,7 @@ func onNewCommandMessage(message as ChatMessage, connection as ChatConnectionHan
 	var commandMap = assert JSONParser.parse(message.getData()) as DynamicMap
 	var command = commandMap.getString("command")
 	if "get_channels" == command {
-		DataManager.getChannels(creatorUserId, func(channels as DynamicVector) {
+		DataManager.getChannels(creatorUserId, commandMap.getInteger("page"), func(channels as DynamicVector) {
 			var rsm = DataManager.getReadStatusAsMap(creatorUserId)
 			foreach channel in channels.toVectorOfDynamicMaps() {
 				var channelId = channel.getString("channelId")
