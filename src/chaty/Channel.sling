@@ -54,13 +54,17 @@ func getChannelForExternalId(externalId as string, callback as function<void, th
 	})
 }
 
-func getChannels(userId as string, callback as function<void, DynamicVector>) static
+func getChannels(userId as string, page as int, callback as function<void, DynamicVector>) static
 {
+	var limit = 20
+	var offset = page - 1
+	if offset < 0:
+		offset = 0
 	var db = assert DataManager.getDb():
 		callback(new DynamicVector())
 	assert String.isNotEmpty(userId):
 		callback(new DynamicVector())
-	db.query(db.prepare("SELECT * FROM " .. DataManager.CHAT_CHANNELS .. " WHERE channelCreatorUserId = ? OR channelId IN (SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId = ?) ORDER BY timeStampLastUpdated DESC, timeStampCreated DESC;").addParamString(userId).addParamString(userId), func(itr as SQLResultSetIterator) {
+	db.query(db.prepare("SELECT * FROM " .. DataManager.CHAT_CHANNELS .. " WHERE channelCreatorUserId = ? OR channelId IN (SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId = ?) ORDER BY timeStampLastUpdated DESC, timeStampCreated DESC LIMIT ? OFFSET ?;").addParamString(userId).addParamString(userId).addParamInteger(limit).addParamInteger(offset * limit), func(itr as SQLResultSetIterator) {
 		assert itr:
 			callback(new DynamicVector())
 		callback(itr.toVectorOfMaps())
