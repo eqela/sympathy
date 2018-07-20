@@ -23,5 +23,4 @@
  */
 
 title = "Sympathy Keepalive"
-defaultTarget = "dotnet"
 preFilters += "@cape"

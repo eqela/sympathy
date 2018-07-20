@@ -23,4 +23,3 @@
  */
 
 title = "Sympathy File Server"
-defaultTarget = "dotnet"

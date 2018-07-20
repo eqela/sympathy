@@ -23,5 +23,3 @@
  */
 
 title = "Sympathy Database Server"
-defaultTarget = "dotnet"
-type = "library"

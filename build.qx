@@ -21,32 +21,24 @@
 # SOFTWARE.
 #
 
-use eqela:sling:r306
-use igelle:tools:r3
-use eqela:jkop:20180421
-set version 4.0.${date}
+use eqela:slingbuild:r3
 
-release {
-	igelle:tools/delete build
-	eqela:sling/slingc src/apigwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/apigwy
-	eqela:sling/slingc src/artsc -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/artsc
-	eqela:sling/slingc src/artsy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/artsy
-	eqela:sling/slingc src/authdby -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/authdby
-	eqela:sling/slingc src/chaty -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/chaty
-	eqela:sling/slingc src/dby -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/dby
-	eqela:sling/slingc src/filesy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/filesy
-	eqela:sling/slingc src/html2pdfy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/html2pdfy
-	eqela:sling/slingc src/keepalive -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/keepalive
-	eqela:sling/slingc src/pnfwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/pnfwy
-	eqela:sling/slingc src/profiley -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/profiley
-	eqela:sling/slingc src/smsgwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/smsgwy
-	eqela:sling/slingc src/sqlc -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/sqlc
-	eqela:sling/slingc src/sqlfwy -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/sqlfwy
-	eqela:sling/slingc src/reporttool -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/reporttool
-	eqela:sling/slingc src/reporty -target=mono -Dsling_project_version=${version} -libdir=${eqela:jkop}/src -output=build/app/reporty
-    igelle:tools/cpto build/sympathy-${version} \
-        build/app/*/*.dll \
-        build/app/*/*.exe
-	igelle:tools/delete build/sympathy-${version}.zip
-    igelle:tools/zipdir build/sympathy-${version}
+buildnew {
+	eqela:slingbuild buildEqelaPackageDll src=src/apigwy output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/artsc output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/artsy output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/authdby output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/chaty output=build/output
+	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/dby output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/filesy output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/html2pdfy output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/keepalive output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/pnfwy output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/profiley output=build/output
+	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/reporttool output=build/output
+	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/reporty output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/smsgwy output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/sqlc output=build/output
+	eqela:slingbuild buildEqelaPackageDll src=src/sqlfwy output=build/output
+	eqela:slingbuild buildEqelaPackageFile files=build/output name=sympathy vendor=eqela
 }

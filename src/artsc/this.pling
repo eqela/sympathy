@@ -23,4 +23,3 @@
  */
 
 title = "Sympathy Article Compiler"
-defaultTarget = "dotnet"
