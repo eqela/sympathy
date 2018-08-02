@@ -1,0 +1,94 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is WSServerConnectionHandler:
+
+import capex.console
+import capex.net
+import sympathy
+
+prop connectionId as string
+prop engine as ChatEngine
+prop user as ChatUser
+var isConnectionOpen private = false
+var authTimeoutTimer private as IOManagerTimer
+
+func onOpened override
+{
+	isConnectionOpen = true
+	assert engine
+	var authTimeoutDelay = engine.getAuthTimeoutDelay()
+	if authTimeoutDelay < 1:
+		return
+	authTimeoutTimer = engine.startTimer(authTimeoutDelay * 1000000, onAuthTimeout)
+	assert authTimeoutTimer:
+		close()
+}
+
+func onAuthTimeout private as bool
+{
+	assert user:
+		close()
+	return false
+}
+
+func isOpen as bool:
+	return isConnectionOpen
+
+func onClosed override
+{
+	isConnectionOpen = false
+	if authTimeoutTimer {
+		authTimeoutTimer.stop()
+		authTimeoutTimer = null
+	}
+	assert engine && user
+	engine.onUserDisconnect(user, this)
+}
+
+func onDataMessage(message as WSServerMessage) override
+{
+	assert message:
+		close()
+	var data = assert message.getPayloadBuffer():
+		close()
+	onData(data)
+}
+
+func onData(data as buffer) private
+{
+	assert engine:
+		close()
+	engine.onDataReceived(data, this)
+}
+
+func sendMessage(message as ChatMessage) as int
+{
+	assert message:
+		close()
+	var r = sendResponse(WSServerMessage.create(1, 0, 0, 0, 1, null, message.toBuffer()))
+	if r < 1:
+		close()
+	return r
+}
