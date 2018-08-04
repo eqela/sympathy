@@ -22,9 +22,5 @@
  * SOFTWARE.
  */
 
-title = "Sympathy"
-description = "A web service and application platform"
-copyright = "Copyright (c) 2017-2018 Job and Esther Technologies Oy"
-license = "All rights reserved"
-vendorId = "ws.sympathy"
-url = "http://sympathy.ws"
+title = "Sympathy Svcy"
+preFilters += "@cape"

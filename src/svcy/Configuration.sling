@@ -22,5 +22,24 @@
  * SOFTWARE.
  */
 
-title = "Sympathy Keepalive"
-preFilters += "@cape"
+class:
+
+prop timeStamp as long
+prop repositories as vector<string>
+prop services as vector<Service>
+
+func addToRepositories(rep as string)
+{
+	assert rep
+	if not repositories:
+		repositories = new vector<string>
+	repositories += rep
+}
+
+func addToServices(service as Service)
+{
+	assert service
+	if not services:
+		services = new vector<Service>
+	services += service
+}

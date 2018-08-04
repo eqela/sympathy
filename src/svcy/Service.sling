@@ -1,0 +1,83 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+prop name as string
+prop command as string
+prop parameters as vector<string>
+prop process as Process
+prop ctx as LoggingContext
+prop eqelaContext as EqelaContext
+
+func getDisplayName as string
+{
+	if not name:
+		return "<unknown>"
+	return name
+}
+
+func terminate
+{
+	if process {
+		if process.isRunning() {
+			Log.debug(ctx, "Terminating service process `" .. getDisplayName() .. "' ..")
+			process.kill(1000)
+			process.waitForExit()
+			Log.debug(ctx, "Service process `" .. getDisplayName() .. " terminated.")
+		}
+		process = null
+	}
+}
+
+func restart as bool
+{
+	terminate()
+	assert String.isNotEmpty(command):
+		Log.error(ctx, "restart: No command")
+	assert eqelaContext:
+		Log.error(ctx, "restart: No Eqela context")
+	Log.debug(ctx, "Executing Eqela command: `" .. command .. "'")
+	assert process = eqelaContext.startCommand(command, parameters)
+	return true
+}
+
+func hasDied as bool
+{
+	if not process:
+		return true
+	if process.isRunning() == false:
+		return true
+	return false
+}
+
+func isSame(other as this) as bool
+{
+	assert other
+	assert String.equals(command, other.getCommand())
+	assert Vector.getSize(parameters) == Vector.getSize(other.getParameters())
+	for(var n=0; n<Vector.getSize(parameters); n++):
+		assert String.equals(Vector.get(parameters, n), Vector.get(other.getParameters(), n))
+	return true
+}

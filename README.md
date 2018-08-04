@@ -25,7 +25,7 @@ articles that are served by the article server.
 *filesy* - A common web server that can serve any static files of any type from
 a directory specified by the user.
 
-*keepalive* - A service watchdog that can execute a server program, restarting the
+*svcy* - A service watchdog that can execute a server program, restarting the
 program if ever it dies (making sure servers will stay running).
 
 As per the Sympathy naming convention, all server program names end with the
@@ -59,10 +59,10 @@ overridden with the listenPort directive:
 filesy -OcontentDirectory=directoryToShare -OlistenPort=8081
 ```
 
-Use keepalive to keep the server running in the background:
+Use svcy to keep the server running:
 
 ```
-keepalive -bg filesy -OcontentDirectory=directoryToShare -OlistenPort=8081
+svcy filesy -OcontentDirectory=directoryToShare -OlistenPort=8081
 ```
 
 For further information and deeper explanations, please see the complete

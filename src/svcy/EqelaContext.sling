@@ -1,0 +1,94 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+func forDefault static as this
+{
+	var v = new this()
+	v.initializeDefault()
+	return v
+}
+
+prop eqelaCommand as string
+prop repositories as vector<string>
+prop ctx as LoggingContext
+
+func initializeDefault
+{
+	eqelaCommand = Environment.getVariable("EQELA_COMMAND")
+	if String.isEmpty(eqelaCommand) {
+		var eqf = Environment.findCommand("eqela")
+		if eqf:
+			eqelaCommand = eqf.getPath()
+	}
+}
+
+func toProcessLauncher(command as string, args as vector<string>) private as ProcessLauncher
+{
+	assert String.isNotEmpty(command):
+		Log.error(ctx, "Empty command given to EqelaContext")
+	assert String.isNotEmpty(eqelaCommand):
+		Log.error(ctx, "No eqela command found or specified.")
+	var pl = assert ProcessLauncher.forString(eqelaCommand):
+		Log.error(ctx, "Failed to create process launcher for command: `" .. eqelaCommand .. "'")
+	foreach repository in repositories:
+		pl.addToParams("-repository=" .. repository)
+	pl.addToParams(command)
+	foreach arg in args:
+		pl.addToParams(arg)
+	Log.debug(ctx, "Executing command: `" .. String.asString(pl) .. "'")
+	return pl
+}
+
+func executeCommand(command as string, args as vector<string> = null) as bool
+{
+	var pl = assert toProcessLauncher(command, args)
+	var v = pl.execute()
+	if v != 0 {
+		Log.debug(ctx, "Command `" .. command .. "' returned with errors status `" .. String.forInteger(v) .. "'")
+		return false
+	}
+	return true
+}
+
+func executeFile(file as File, args as vector<string> = null) as bool
+{
+	assert file
+	return executeCommand(file.getPath())
+}
+
+func startCommand(command as string, args as vector<string> = null) as Process
+{
+	var pl = assert toProcessLauncher(command, args)
+	var v = assert pl.start():
+		Log.debug(ctx, "Failed to start execution of command: `" .. command .. "'")
+	return v
+}
+
+func startFile(file as File, args as vector<string> = null) as Process
+{
+	assert file
+	return startCommand(file.getPath(), args)
+}

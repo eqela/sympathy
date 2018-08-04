@@ -1,0 +1,317 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2017-2018 Job and Esther Technologies Oy
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+import capex.console
+
+prop process as Process
+prop configurationFile as File
+var ctx as ConsoleApplicationContext
+var configuration as Configuration
+var ectx as EqelaContext
+
+func getEqelaContext as EqelaContext
+{
+	if not ectx {
+		ectx = EqelaContext.forDefault()
+		ectx.setCtx(ctx)
+		if configuration {
+			ectx.setRepositories(configuration.getRepositories())
+		}
+		else {
+			ectx.setRepositories(null)
+		}
+	}
+	return ectx
+}
+
+func printUsage(stdout as PrintWriter)
+{
+	var parameters = [
+		[ "<servicefile>", "Path to a .services file to use as configuration" ],
+		[ "command", "A command to execute, along with any arguments" ]
+	]
+	var flags = [
+		[ "quiet", "Suppress all output messages from this process" ],
+		[ "debug", "Display debug information" ],
+		[ "h|help", "Usage information" ]
+	]
+	ConsoleApplication.printUsage(stdout, null, parameters, flags, null)
+}
+
+func captureSignals private
+{
+	IFDEF "target_netcore" {
+		lang "cs" {{{
+			System.Runtime.Loader.AssemblyLoadContext.Default.Unloading += ctx => {
+				onTerminate();
+			};
+			System.Console.CancelKeyPress += (sender, args) => {
+				onTerminate();
+			};
+		}}}
+	}
+}
+
+func onConfigurationChanged
+{
+	var ectx = getEqelaContext()
+	if ectx {
+		if configuration {
+			ectx.setRepositories(configuration.getRepositories())
+		}
+		else {
+			ectx.setRepositories(null)
+		}
+	}
+}
+
+func onTerminate private
+{
+	Log.info(ctx, "Exit request signal was received.")
+	foreach service in configuration.getServices():
+		service.terminate()
+	Log.debug(ctx, "Service terminated.")
+}
+
+func hasConfigurationFileChanged private as bool
+{
+	assert configurationFile
+	if configuration == null:
+		return true
+	var ts = configurationFile.getLastModifiedTimeStamp()
+	if ts == configuration.getTimeStamp():
+		return false
+	return true
+}
+
+func readConfigurationFile(file as File) private as Configuration
+{
+	assert configurationFile
+	Log.info(ctx, "Reading configuration file: `" .. configurationFile.getPath() .. "' .. ")
+	var reader = assert PrintReader.forReader(configurationFile.read()):
+		Log.error(ctx, "Failed to read file: `" .. configurationFile.getPath() .. "'")
+	var v = new Configuration()
+	v.setTimeStamp(configurationFile.getLastModifiedTimeStamp())
+	loop {
+		var line = reader.readLine()
+		if not line:
+			break
+		line = String.strip(line)
+		if String.isEmpty(line):
+			continue
+		if String.startsWith(line, "#"):
+			continue
+		if String.startsWith(line, "repository ") {
+			var rep = String.getSubString(line, 11)
+			if String.isNotEmpty(rep):
+				v.addToRepositories(rep)
+			continue
+		}
+		if String.startsWith(line, "service ") {
+			var comps = String.split(line, ' ', 3)
+			var name = Vector.get(comps, 1)
+			var command = Vector.get(comps, 2)
+			if String.isEmpty(name) || String.isEmpty(command) {
+				Log.error(ctx, "Invalid service definition: `" .. line .. "'")
+				return null
+			}
+			var args = String.quotedStringToVector(command, ' ')
+			var cmd = Vector.get(args, 0)
+			assert String.isNotEmpty(cmd):
+				Log.error(ctx, "Invalid command: `" .. command .. "'")
+			Vector.remove(args, 0)
+			var service = new Service()
+			service.setCtx(ctx)
+			service.setEqelaContext(getEqelaContext())
+			service.setName(name)
+			service.setCommand(cmd)
+			service.setParameters(args)
+			v.addToServices(service)
+			continue
+		}
+		Log.error(ctx, "Unsupported configuration line: `" .. line .. "'")
+		return null
+	}
+	return v
+}
+
+func onConfigurationFileChanged private
+{
+	var current = readConfigurationFile(configurationFile)
+	if not current:
+		current = new Configuration()
+	var deleted = new vector<Service>
+	var added = new vector<Service>
+	var changed = new vector<Service>
+	var services = new vector<Service>
+	if configuration == null {
+		added = current.getServices()
+		services = current.getServices()
+	}
+	else {
+		Log.debug(ctx, "Updating services..")
+		foreach service in configuration.getServices():
+			Log.debug(ctx, "Existing service: `" .. service.getName() .. "'")
+		foreach service in current.getServices():
+			Log.debug(ctx, "Incoming service: `" .. service.getName() .. "'")
+		foreach service in current.getServices() {
+			var found = false
+			foreach oserv in configuration.getServices() {
+				if String.equals(oserv.getName(), service.getName()) {
+					found = true
+					break
+				}
+			}
+			if not found {
+				added += service
+				services += service
+			}
+		}
+		foreach oserv in configuration.getServices() {
+			var found = false
+			foreach service in current.getServices() {
+				if String.equals(oserv.getName(), service.getName()) {
+					found =  true
+					if oserv.isSame(service) == false {
+						oserv.setCommand(service.getCommand())
+						oserv.setParameters(service.getParameters())
+						changed += oserv
+					}
+					services += oserv
+					break
+				}
+			}
+			if not found:
+				deleted += oserv
+		}
+	}
+	current.setServices(services)
+	configuration = current
+	onConfigurationChanged()
+	foreach service in deleted {
+		Log.info(ctx, "Terminating a removed service: `" .. service.getDisplayName() .. "'")
+		service.terminate()
+	}
+	foreach service in added {
+		Log.info(ctx, "Adding and starting a new service: `" .. service.getDisplayName() .. "'")
+		service.restart()
+	}
+	foreach service in changed {
+		Log.info(ctx, "Restarting a changed service: `" .. service.getDisplayName() .. "'")
+		service.restart()
+	}
+}
+
+func execute(args as array<string>) as bool
+{
+	var stdout = Stdout.instance()
+	var cctx = new ConsoleApplicationContext()
+	cctx.setCurrentPrefix("svcy")
+	ctx = cctx
+	var acceptFlags = true
+	var showHelp = false
+	var command as string
+	var commandArgs as vector<string>
+	foreach arg in ConsoleApplication.parseCommandLineArguments(args) {
+		if acceptFlags {
+			if arg.isFlag("help") || arg.isFlag("h") {
+				showHelp = true
+				continue
+			}
+			if arg.isFlag("debug") {
+				if ctx:
+					ctx.setEnableDebugMessages(true)
+				continue
+			}
+			if arg.isFlag("quiet") {
+				ctx = null
+				continue
+			}
+			if arg.isFlag("-") {
+				acceptFlags = false
+				continue
+			}
+		}
+		var str = arg.getComplete()
+		if String.isEmpty(str):
+			continue
+		if not command {
+			command = str
+			commandArgs = new vector<string>
+		}
+		else {
+			commandArgs += str
+		}
+	}
+	if command == null || showHelp {
+		ConsoleApplication.PRINT_HEADER(stdout, null)
+		printUsage(stdout)
+		return true
+	}
+	var ff = File.forPath(command)
+	if ff.isFile() && ff.hasExtension("services") {
+		configurationFile = ff
+		onConfigurationFileChanged()
+	}
+	else {
+		configuration = new Configuration()
+		onConfigurationChanged()
+		var service = new Service()
+		service.setCtx(ctx)
+		service.setEqelaContext(getEqelaContext())
+		service.setName("default")
+		service.setCommand(command)
+		service.setParameters(commandArgs)
+		configuration.addToServices(service)
+	}
+	Log.info(ctx, "Starting: `" .. VALUE "sling_project_title"  .. " " .. VALUE "sling_project_version" .. "'")
+	captureSignals()
+	Log.debug(ctx, "Starting services .. ")
+	foreach service in configuration.getServices():
+		service.restart()
+	Log.debug(ctx, "Entering the main loop.")
+	loop {
+		if hasConfigurationFileChanged() {
+			Log.debug(ctx, "Configuration file has been changed.")
+			onConfigurationFileChanged()
+		}
+		foreach service in configuration.getServices() {
+			if service.hasDied() {
+				Log.info(ctx, "Service `" .. service.getDisplayName() .. "' has died. Restarting..")
+				service.restart()
+			}
+		}
+		CurrentThread.sleepSeconds(5)
+	}
+	return true
+}
+
+main
+{
+	if new this().execute(args) == false:
+		return 1
+	return 0
+}
