@@ -34,8 +34,11 @@ func forMessageSavedCommand(message as this, channel as ChatChannel) static as t
 	data.set("status", "ok")
 	data.set("sendId", message.getSendId())
 	data.set("messageId", message.getMessageId())
+	data.set("message", message.getMessage())
 	data.set("attachmentFileName", message.getAttachmentFileName())
 	data.set("creatorUserId", message.getCreatorUserId())
+	data.set("timeStampCreated", message.getTimeStampCreated())
+	data.set("timeStampLastUpdated", message.getTimeStampLastUpdated())
 	data.set("channelCreatorUserId", channel.getChannelCreatorUserId())
 	data.set("title", channel.getTitle())
 	data.set("channelId", channel.getChannelId())
@@ -66,6 +69,8 @@ func forBuffer(data as buffer) static as this
 	v.setChannelCreatorUserId(dmap.getString("channelCreatorUserId"))
 	v.setTitle(dmap.getString("title"))
 	v.setUnreadCount(dmap.getLongInteger("unreadCount"))
+	v.setTimeStampCreated(dmap.getLongInteger("timeStampCreated"))
+	v.setTimeStampLastUpdated(dmap.getLongInteger("timeStampLastUpdated"))
 	v.setRecipients(dmap.getDynamicVector("recipients"))
 	return v
 }
@@ -169,9 +174,12 @@ func toBuffer as buffer
 	var recipients = getRecipients()
 	if recipients:
 		d.set("recipients", recipients)
-	d.set("timeStampCreated", timeStampCreated)
-	d.set("timeStampLastUpdated", timeStampLastUpdated)
-	d.set("unreadCount", unreadCount)
+	if timeStampCreated > 0:
+		d.set("timeStampCreated", timeStampCreated)
+	if timeStampLastUpdated > 0:
+		d.set("timeStampLastUpdated", timeStampLastUpdated)
+	if unreadCount > 0:
+		d.set("unreadCount", unreadCount)
 	v.set("data", JSONEncoder.encode(d))
 	return String.toUTF8Buffer(json.execute(v))
 }
