@@ -1,0 +1,75 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2016-2018 Job and Esther Technologies Oy
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+class:
+
+import capex.http
+
+class GoogleMapsHTTPClientListener is HTTPClientListener
+{
+	prop listener as function<void,DynamicMap,Error>
+	var body as buffer
+
+	func onError(message as string) override
+	{
+		if(listener != null) {
+			listener(null, Error.forMessage(message))
+		}
+	}
+
+	func onDataReceived(buffer as buffer) override as bool
+	{
+		body = buffer
+		return(true)
+	}
+
+	func onResponseCompleted override
+	{
+		base.onResponseCompleted()
+		if(listener != null) {
+			var json = JSONParser.parse(DataValidator.toValidJSONString(String.forUTF8Buffer(body))) as DynamicMap
+			if(json == null) {
+				listener(null, Error.forCode("invalidResponse"))
+				return
+			}
+			if(String.equals("INVALID_REQUEST", json.getString("status"))) {
+				listener(null, Error.forCode("invalidRequest"))
+				return
+			}
+			listener(json, null)
+		}
+	}
+}
+
+func getTravelDetails(apiKey as string, origin as string, destination as string, listener as function<void,DynamicMap,Error>) static
+{
+	if(String.isEmpty(apiKey)) {
+		if(listener != null) {
+			listener(null, Error.forCode("apiKeyMissing"))
+		}
+		return
+	}
+	var op = new HTTPClientOperation()
+	op.setAcceptInvalidCertificate(true)
+	var req as HTTPClientRequest
+	req = HTTPClientRequest.forGET("https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&origins=" ..
+		URLEncoder.encode(origin) .. "&destinations=" .. URLEncoder.encode(destination) .. "&key=" .. apiKey)
+	op.executeRequest(req, new GoogleMapsHTTPClientListener().setListener(listener))
+	op.closeConnection(null)
+}

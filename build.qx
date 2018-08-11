@@ -9,36 +9,54 @@
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU Affero General Public License for more details.
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-use eqela:slingbuild:r10
-set version 5.0.0
+use eqela:slingbuild:r15
+use eqela:jsh:r4
+set version 5.1.0
 
-buildRelease {
-	eqela:slingbuild buildEqelaPackageDll src=src/apigwy output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/artsc output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/artsy output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/authdby output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/chaty output=build/output version=${version}
-	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/dby output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/filesy output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/html2pdfy output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/svcy output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/pnfwy output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/profiley output=build/output version=${version}
-	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/reporttool output=build/output version=${version}
-	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/reporty output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/smsgwy output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/sqlc output=build/output version=${version}
-	eqela:slingbuild buildEqelaPackageDll src=src/sqlfwy output=build/output version=${version}
+buildAll {
+	call buildLib
+	call buildApps
+}
+
+buildLib {
+	call clean
+	eqela:jsh cpto build/symlib LICENSE
+	eqela:jsh cpto build/symlib/src src/symlib.*
+	eqela:jsh makepkq build/symlib -vendor=eqela -name=symlib -version=${version} -platform=all
+}
+
+buildApps {
+	eqela:slingbuild buildEqelaPackageDll src=src/apigwy output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/artsc output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/artsy output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/authdby output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/chaty output=build/output version=${version} $(*)
+	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/dby output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/filesy output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/html2pdfy output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/svcy output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/pnfwy output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/profiley output=build/output version=${version} $(*)
+	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/reporttool output=build/output version=${version} $(*)
+	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/reporty output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/smsgwy output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/sqlc output=build/output version=${version} $(*)
+	eqela:slingbuild buildEqelaPackageDll src=src/sqlfwy output=build/output version=${version} $(*)
 	eqela:slingbuild buildEqelaPackageFile files=build/output name=sympathy vendor=eqela version=${version}
 }
 
-buildOne {
-	eqela:slingbuild buildEqelaPackageDll src=src/${1} output=build/${1} version=${version}
+buildOneApp : name {
+	requireValue name
+	eqela:slingbuild buildEqelaPackageDll src=src/${name} output=build/${name} version=${version} $(*)
+}
+
+clean {
+	eqela:jsh delete build
 }

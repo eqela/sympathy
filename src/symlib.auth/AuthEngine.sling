@@ -1,0 +1,675 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2016-2018 Job and Esther Technologies Oy
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+class:
+
+import sympathy
+import capex.data
+import capex.crypto
+
+model RecoveryModel
+{
+	address as string
+	secret as string
+	userid as string
+	created as long
+}
+
+model SessionModel
+{
+	id as string
+	created as long
+	accessed as long
+	userid as string
+}
+
+model ValidationModel
+{
+	address as string
+	secret as string
+	userid as string
+	created as long
+}
+
+model UserAddressModel
+{
+	address as string
+	userid as string
+	created as long
+}
+
+model UserModel
+{
+	id as string
+	created as long
+	password as string
+}
+
+prop ctx as LoggingContext
+prop allowRegistration = true
+prop db as SQLDatabase
+prop validationEmailTemplate as string
+prop recoveryEmailTemplate as string
+prop smtpSender as SMTPSender
+var sha as SHAEncoder
+
+// TODO / FIXME: Maintenance routines to delete old/expired records from the tables
+
+func ensureTableExists(table as SQLTableInfo) as bool
+{
+	assert table:
+		Log.error(ctx, "null table object")
+	assert db.ensureTableExists(table):
+		Log.error(ctx, "Failed to create table: `" .. table.getName() .. "'")
+	return true
+}
+
+func initializeDatabase as bool
+{
+	var user = SQLTableInfo.forName("auth_user")
+	user.addStringKeyColumn("id")
+	user.addLongColumn("created")
+	user.addStringColumn("password")
+	user.addIndex("id")
+	assert ensureTableExists(user)
+	var userAddress = SQLTableInfo.forName("auth_user_address")
+	userAddress.addStringColumn("address")
+	userAddress.addStringColumn("userid")
+	userAddress.addLongColumn("created")
+	userAddress.addUniqueIndex("address")
+	userAddress.addIndex("userid")
+	assert ensureTableExists(userAddress)
+	var session = SQLTableInfo.forName("auth_session")
+	session.addStringColumn("id")
+	session.addLongColumn("created")
+	session.addLongColumn("accessed")
+	session.addStringColumn("userid")
+	session.addIndex("id")
+	session.addIndex("userid")
+	session.addIndex("accessed")
+	assert ensureTableExists(session)
+	var validation = SQLTableInfo.forName("auth_validation")
+	validation.addStringColumn("address")
+	validation.addStringColumn("secret")
+	validation.addStringColumn("userid")
+	validation.addLongColumn("created")
+	validation.addIndex("address")
+	validation.addIndex("secret")
+	validation.addIndex("created")
+	assert ensureTableExists(validation)
+	var recovery = SQLTableInfo.forName("auth_recovery")
+	recovery.addStringColumn("address")
+	recovery.addStringColumn("secret")
+	recovery.addStringColumn("userid")
+	recovery.addLongColumn("created")
+	recovery.addIndex("address")
+	recovery.addIndex("secret")
+	recovery.addIndex("created")
+	assert ensureTableExists(recovery)
+	return true
+}
+
+func shaEncode(str as string) private as string
+{
+	assert str
+	if not sha:
+		sha = SHAEncoder.create()
+	assert sha
+	return sha.encodeAsString(String.toUTF8Buffer(str), SHAEncoder.SHA1)
+}
+
+func hashPassword(password as string) as string:
+	return shaEncode(password)
+
+func getUserByAddress(address as string, cb as function<void,UserModel>) private
+{
+	assert String.isNotEmpty(address):
+		cb(null)
+	var stmt = assert db.prepare("SELECT auth_user.* FROM auth_user_address LEFT JOIN auth_user ON auth_user_address.userid=auth_user.id WHERE auth_user_address.address = ?"):
+		cb(null)
+	stmt.addParamString(address)
+	db.querySingleRow(stmt, func(v as DynamicMap) {
+		var user = assert UserModel.forJsonObject(v):
+			cb(null)
+		cb(user)
+	})
+}
+
+func getUserById(id as string, cb as function<void,UserModel>) private
+{
+	assert String.isNotEmpty(id):
+		cb(null)
+	var stmt = assert db.prepareSelectStatement("auth_user", new DynamicMap().set("id", id)):
+		cb(null)
+	db.querySingleRow(stmt, func(v as DynamicMap) {
+		var user = assert UserModel.forJsonObject(v):
+			cb(null)
+		cb(user)
+	})
+}
+
+func createSessionWithCredentials(address as string, password as string, cb as function<void,string>)
+{
+	checkCredentials(address, password, func(userid as string) {
+		assert String.isNotEmpty(userid):
+			cb(null)
+		createSession(userid, func(sessionid as string) {
+			assert String.isNotEmpty(sessionid):
+				cb(null)
+			cb(sessionid)
+		})
+	})
+}
+
+func checkCredentials(address as string, password as string, cb as function<void,string>) private
+{
+	assert String.isNotEmpty(password):
+		cb(null)
+	var pwhash = assert hashPassword(password):
+		cb(null)
+	getUserByAddress(address, func(user as UserModel) {
+		assert user:
+			cb(null)
+		if String.equals(pwhash, user.getPassword()) {
+			cb(user.getId())
+		}
+		else {
+			cb(null)
+		}
+	})
+}
+
+func generateSessionId(userid as string) private as string
+{
+	assert userid
+	var str = userid .. String.forLongInteger(SystemClock.asSeconds()) .. String.forInteger(Random.getSharedInstance().nextInt())
+	return shaEncode(str)
+}
+
+func createSession(userid as string, cb as function<void,string>) private
+{
+	var sid = assert generateSessionId(userid):
+		cb(null)
+	var session = new SessionModel()
+	session.setId(sid)
+	session.setCreatedValue(SystemClock.asUTCSeconds())
+	session.setAccessedValue(SystemClock.asUTCSeconds())
+	session.setUserid(userid)
+	var stmt = assert db.prepareInsertStatement("auth_session", session.toJsonObject() as DynamicMap):
+		cb(null)
+	db.execute(stmt, func(v as bool) {
+		if v == false {
+			cb(null)
+		}
+		else {
+			cb(sid)
+		}
+	})
+}
+
+func getSession(sessionid as string, cb as function<void,SessionModel>) private
+{
+	var stmt = assert db.prepareSelectStatement("auth_session", new DynamicMap().set("id", sessionid)):
+		cb(null)
+	db.querySingleRow(stmt, func(v as DynamicMap) {
+		var session = assert SessionModel.forJsonObject(v):
+			cb(null)
+		cb(session)
+	})
+}
+
+func getSessionUser(sessionid as string, cb as function<void,string>)
+{
+	getSession(sessionid, func(session as SessionModel) {
+		assert session:
+			cb(null)
+		cb(session.getUserid())
+	})
+}
+
+func deleteSession(sessionid as string, cb as function<void,bool>)
+{
+	var stmt = assert db.prepareDeleteStatement("auth_session", new DynamicMap().set("id", sessionid)):
+		cb(false)
+	db.execute(stmt, func(v as bool) {
+		cb(v)
+	})
+}
+
+func generateValidationSecret private as string
+{
+	var rnd = Random.getSharedInstance()
+	var sb = new StringBuilder()
+	for(var n=0; n<4; n++):
+		sb.append(String.forInteger(rnd.nextInt(10)))
+	return sb.toString()
+}
+
+func isAddressFormatValid(address as string) private as bool
+{
+	assert String.isNotEmpty(address)
+	var at = String.getIndexOf(address, '@')
+	assert at > 0
+	var rdot = String.getLastIndexOf(address, '.')
+	assert rdot > 0
+	assert rdot > at
+	return true
+}
+
+func sendValidationSecret(secret as string, address as string) private as bool
+{
+	assert smtpSender
+	assert validationEmailTemplate
+	assert secret
+	assert address
+	var data = new DynamicMap()
+	data.set("secret", secret)
+	var msg = SMTPMessage.forTemplate(validationEmailTemplate, data)
+	msg.addTo(address)
+	smtpSender.send(msg, null)
+	return true
+}
+
+func sendRecoverySecret(secret as string, address as string) private as bool
+{
+	assert smtpSender
+	assert recoveryEmailTemplate
+	assert secret
+	assert address
+	var data = new DynamicMap()
+	data.set("secret", secret)
+	var msg = SMTPMessage.forTemplate(recoveryEmailTemplate, data)
+	msg.addTo(address)
+	smtpSender.send(msg, null)
+	return true
+}
+
+func getValidationModel(address as string, secret as string, cb as function<void,ValidationModel>) private
+{
+	assert String.isNotEmpty(address) && String.isNotEmpty(secret):
+		cb(null)
+	var stmt = assert db.prepareSelectStatement("auth_validation", new DynamicMap().set("address", address).set("secret", secret)):
+		cb(null)
+	db.querySingleRow(stmt, func(v as DynamicMap) {
+		var validation = assert ValidationModel.forJsonObject(v):
+			cb(null)
+		cb(validation)
+	})
+}
+
+func checkAddressAvailability(address as string, cb as function<void,bool>) private
+{
+	var stmt = assert db.prepareSelectStatement("auth_user_address", new DynamicMap().set("address", address)):
+		cb(false)
+	db.querySingleRow(stmt, func(v as DynamicMap) {
+		if v {
+			cb(false)
+		}
+		else {
+			cb(true)
+		}
+	})
+}
+
+func generateUserId private as string
+{
+	var str = "user" .. String.forLongInteger(SystemClock.asSeconds()) .. String.forInteger(Random.getSharedInstance().nextInt())
+	return shaEncode(str)
+}
+
+func createNewUserRecordSync private as UserModel
+{
+	for(var n=0; n<16; n++) {
+		var user = new UserModel()
+		user.setId(generateUserId())
+		user.setCreatedValue(SystemClock.asUTCSeconds())
+		user.setPassword(null)
+		var stmt = assert db.prepareInsertStatement("auth_user", user.toJsonObject() as DynamicMap)
+		if db.execute(stmt):
+			return user
+	}
+	return null
+}
+
+func deleteUserRecordSync(userid as string) private as bool
+{
+	assert userid
+	var stmt = assert db.prepareDeleteStatement("auth_user", new DynamicMap().set("id", userid))
+	return db.execute(stmt)
+}
+
+func createNewUserRecordWithAddress(address as string, cb as function<void,string>) private
+{
+	// NOTE: There is a SLIGHT chance here, if all the stars align correctly, and many very unlikely
+	// events happen at the same time, in an exact sequence, that we end up with a stale user record
+	// that has no address. Even this could be resolved through the use of a transaction instead of
+	// trying to delete the record after (FIXME).
+	var record = assert createNewUserRecordSync():
+		cb(null)
+	var userid = record.getId()
+	addAddressToUser(userid, address, func(v as bool) {
+		if v {
+			cb(userid)
+		}
+		else {
+			deleteUserRecordSync(userid)
+			cb(null)
+		}
+	})
+}
+
+func addAddressToUser(userid as string, address as string, cb as function<void,bool>) private
+{
+	assert userid && address:
+		cb(false)
+	var uam = new UserAddressModel()
+	uam.setAddress(address)
+	uam.setUserid(userid)
+	uam.setCreatedValue(SystemClock.asUTCSeconds())
+	var stmt = assert db.prepareInsertStatement("auth_user_address", uam.toJsonObject() as DynamicMap):
+		cb(false)
+	db.execute(stmt, cb)
+}
+
+func getAllUserAddresses(userid as string, cb as function<void, vector<UserAddressModel>>) private
+{
+	var stmt = assert db.prepareSelectStatement("auth_user_address", new DynamicMap().set("userid", userid)):
+		cb(null)
+	db.query(stmt, func(rs as SQLResultSetIterator) {
+		var v = new vector<UserAddressModel>
+		loop {
+			var r = rs.next()
+			if not r:
+				break
+			var model = UserAddressModel.forJsonObject(r)
+			if not model:
+				continue
+			v += model
+		}
+		cb(v)
+	})
+}
+
+func canDeleteUserAddress(userid as string, address as string, cb as function<void, bool>) private
+{
+	getAllUserAddresses(userid, func(addresses as vector<UserAddressModel>) {
+		if addresses == null || Vector.getSize(addresses) < 2 {
+			cb(false)
+			return
+		}
+		foreach add in addresses {
+			if String.equals(add.getAddress(), address) {
+				cb(true)
+				return
+			}
+		}
+		cb(false)
+	})
+}
+
+func isValidPassword(password as string) private as bool
+{
+	assert String.isNotEmpty(password)
+	assert String.getLength(password) > 4
+	return true
+}
+
+func getRecoveryUserid(address as string, secret as string, cb as function<void,string>) private
+{
+	assert address && secret:
+		cb(null)
+	var criteria = new DynamicMap().set("address", address).set("secret", secret)
+	var stmt = assert db.prepareSelectStatement("auth_recovery", criteria):
+		cb(null)
+	db.querySingleRow(stmt, func(v as DynamicMap) {
+		assert v:
+			cb(null)
+		var recovery = assert RecoveryModel.forJsonObject(v):
+			cb(null)
+		cb(recovery.getUserid())
+	})
+}
+
+func registerNewUser(address as string, cb as function<void,Error>)
+{
+	assert address:
+		cb(ServerError.invalidRequest())
+	assert isAddressFormatValid(address):
+		cb(ServerError.invalidInputFormat())
+	checkAddressAvailability(address, func(available as bool) {
+		assert available:
+			cb(ServerError.alreadyInUse())
+		var secret = generateValidationSecret()
+		assert sendValidationSecret(secret, address):
+			cb(ServerError.internalError())
+		var validation = new ValidationModel()
+		validation.setAddress(address)
+		validation.setSecret(secret)
+		validation.setUserid(null)
+		validation.setCreatedValue(SystemClock.asUTCSeconds())
+		var stmt = assert db.prepareInsertStatement("auth_validation", validation.toJsonObject() as DynamicMap):
+			cb(ServerError.internalError())
+		db.execute(stmt, func(v as bool) {
+			assert v:
+				cb(ServerError.failedToSave())
+			cb(null)
+		})
+	})
+}
+
+func validateAddress(address as string, secret as string, cb as function<void,Error,string>)
+{
+	assert String.isNotEmpty(address) && String.isNotEmpty(secret):
+		cb(ServerError.invalidRequest(), null)
+	getValidationModel(address, secret, func(validation as ValidationModel) {
+		assert validation:
+			cb(ServerError.notFound(), null)
+		var stmt = assert db.prepareDeleteStatement("auth_validation", validation.toJsonObject() as DynamicMap):
+			cb(ServerError.internalError(), null)
+		db.executeUpdateDelete(stmt, func(records as int) {
+			if records < 1 {
+				// no records were deleted. that means that somebody deleted the record
+				// between here and when we just queried it. yes, it happens...
+				cb(ServerError.notFound(), null)
+			}
+			else {
+				checkAddressAvailability(address, func(available as bool) {
+					assert available:
+						cb(ServerError.alreadyInUse(), null)
+					var userid = validation.getUserid()
+					if String.isEmpty(userid) {
+						createNewUserRecordWithAddress(address, func(userid as string) {
+							assert userid:
+								cb(ServerError.failedToSave(), null)
+							createSession(userid, func(sessionid as string) {
+								assert sessionid:
+									cb(ServerError.internalError(), null)
+								cb(null, sessionid)
+							})
+						})
+					}
+					else {
+						addAddressToUser(userid, address, func(v as bool) {
+							assert v:
+								cb(ServerError.failedToSave(), null)
+							cb(null, null)
+						})
+					}
+				})
+			}
+		})
+	})
+}
+
+func addUserAddressForSession(sessionid as string, address as string, cb as function<void,Error>)
+{
+	assert address:
+		cb(ServerError.invalidRequest())
+	assert isAddressFormatValid(address):
+		cb(ServerError.invalidInputFormat())
+	getSession(sessionid, func(session as SessionModel) {
+		assert session:
+			cb(ServerError.invalidSession())
+		checkAddressAvailability(address, func(available as bool) {
+			assert available:
+				cb(ServerError.alreadyInUse())
+			var secret = generateValidationSecret()
+			assert sendValidationSecret(secret, address):
+				cb(ServerError.internalError())
+			var validation = new ValidationModel()
+			validation.setAddress(address)
+			validation.setSecret(secret)
+			validation.setUserid(session.getUserid())
+			validation.setCreatedValue(SystemClock.asUTCSeconds())
+			var stmt = assert db.prepareInsertStatement("auth_validation", validation.toJsonObject() as DynamicMap):
+				cb(ServerError.internalError())
+			db.execute(stmt, func(v as bool) {
+				assert v == false:
+					cb(ServerError.failedToSave())
+				cb(null)
+			})
+		})
+	})
+}
+
+func deleteUserAddressForSession(sessionid as string, address as string, cb as function<void,Error>)
+{
+	assert address:
+		cb(ServerError.invalidRequest())
+	assert isAddressFormatValid(address):
+		cb(ServerError.invalidInputFormat())
+	assert sessionid:
+		cb(ServerError.invalidSession())
+	getSession(sessionid, func(session as SessionModel) {
+		assert session:
+			cb(ServerError.invalidSession())
+		var userid = session.getUserid()
+		// NOTE: If the user has two addresses and they are both being deleted simultaneously,
+		// there is a chance that the user account ends up not having any address. (FIXME)
+		// Solve with a transaction and rollback.
+		canDeleteUserAddress(userid, address, func(canDelete as bool) {
+			assert canDelete:
+				cb(ServerError.notAllowed())
+			var stmt = assert db.prepareDeleteStatement("auth_user_address", new DynamicMap().set("userid", userid).set("address", address)):
+				cb(ServerError.internalError())
+			db.executeUpdateDelete(stmt, func(v as int) {
+				if v < 1 {
+					cb(ServerError.failedToSave())
+				}
+				else {
+					cb(null)
+				}
+			})
+		})
+	})
+}
+
+func changePasswordForSession(sessionid as string, oldPassword as string, newPassword as string, cb as function<void,Error>)
+{
+	assert sessionid:
+		cb(ServerError.invalidSession())
+	assert isValidPassword(newPassword):
+		cb(ServerError.invalidInputFormat())
+	getSession(sessionid, func(session as SessionModel) {
+		assert session:
+			cb(ServerError.invalidSession())
+		var userid = session.getUserid()
+		getUserById(userid, func(user as UserModel) {
+			assert user:
+				cb(ServerError.invalidSession())
+			var actualPassword = user.getPassword()
+			if String.isEmpty(oldPassword) && String.isEmpty(actualPassword) {
+				; // this is ok
+			}
+			else {
+				assert String.equals(hashPassword(oldPassword), actualPassword):
+					cb(ServerError.invalidCredentials())
+			}
+			var criteria = new DynamicMap().set("id", userid)
+			var data = new DynamicMap().set("password", hashPassword(newPassword))
+			var stmt = assert db.prepareUpdateStatement("auth_user", criteria, data):
+				cb(ServerError.internalError())
+			db.executeUpdateDelete(stmt, func(v as int) {
+				if v < 1 {
+					cb(ServerError.failedToSave())
+				}
+				else {
+					cb(null)
+				}
+			})
+		})
+	})
+}
+
+func startResetPassword(address as string, cb as function<void,Error>)
+{
+	assert address:
+		cb(ServerError.invalidRequest())
+	getUserByAddress(address, func(user as UserModel) {
+		assert user:
+			cb(ServerError.notFound())
+		var secret = generateValidationSecret()
+		assert sendRecoverySecret(secret, address):
+			cb(ServerError.internalError())
+		var recovery = new RecoveryModel()
+		recovery.setAddress(address)
+		recovery.setSecret(secret)
+		recovery.setUserid(user.getId())
+		recovery.setCreatedValue(SystemClock.asUTCSeconds())
+		var stmt = assert db.prepareInsertStatement("auth_recovery", recovery.toJsonObject() as DynamicMap):
+			cb(ServerError.internalError())
+		db.execute(stmt, func(v as bool) {
+			if v == false {
+				cb(ServerError.failedToSave())
+			}
+			else {
+				cb(null)
+			}
+		})
+	})
+}
+
+func resetPassword(address as string, secret as string, newPassword as string, cb as function<void,Error>)
+{
+	assert isValidPassword(newPassword):
+		cb(ServerError.invalidInputFormat())
+	getRecoveryUserid(address, secret, func(userid as string) {
+		assert userid:
+			cb(ServerError.invalidCredentials())
+		var todelete = new DynamicMap().set("address", address).set("secret", secret)
+		var stmt = assert db.prepareDeleteStatement("auth_recovery", todelete):
+			cb(ServerError.internalError())
+		db.executeUpdateDelete(stmt, func(records as int) {
+			assert records > 0:
+				cb(ServerError.invalidCredentials())
+			var criteria = new DynamicMap().set("id", userid)
+			var data = new DynamicMap().set("password", hashPassword(newPassword))
+			var stmt = assert db.prepareUpdateStatement("auth_user", criteria, data):
+				cb(ServerError.internalError())
+			db.executeUpdateDelete(stmt, func(v as int) {
+				if v < 1 {
+					cb(ServerError.failedToSave())
+				}
+				else {
+					cb(null)
+				}
+			})
+		})
+	})
+}

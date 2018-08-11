@@ -22,8 +22,8 @@ class is WebServer:
 import capex.console
 import capex.net
 import sympathy
-import sympathy.webapi
 import sympathy.app
+import symlib.webapi
 
 var fcmServerKey as string
 

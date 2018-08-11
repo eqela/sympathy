@@ -20,7 +20,7 @@
 class #webapi:
 
 import capex.data
-import sympathy.report
+import symlib.report
 
 prop db as SQLDatabase
 prop reportDir as File

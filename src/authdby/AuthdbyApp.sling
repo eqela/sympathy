@@ -21,7 +21,7 @@ class is WebServerWithDatabase:
 
 import sympathy
 import sympathy.dbapp
-import capex.data
+import symlib.auth
 
 var smtpServer as string
 var validationEmailTemplateFile as File
@@ -44,62 +44,18 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 	return base.configure(key, value, relativeTo, error)
 }
 
-func initializeDatabase as bool
-{
-	var user = SQLTableInfo.forName("auth_user")
-	user.addStringKeyColumn("id")
-	user.addLongColumn("created")
-	user.addStringColumn("password")
-	user.addIndex("id")
-	assert ensureTableExists(user)
-	var userAddress = SQLTableInfo.forName("auth_user_address")
-	userAddress.addStringColumn("address")
-	userAddress.addStringColumn("userid")
-	userAddress.addLongColumn("created")
-	userAddress.addUniqueIndex("address")
-	userAddress.addIndex("userid")
-	assert ensureTableExists(userAddress)
-	var session = SQLTableInfo.forName("auth_session")
-	session.addStringColumn("id")
-	session.addLongColumn("created")
-	session.addLongColumn("accessed")
-	session.addStringColumn("userid")
-	session.addIndex("id")
-	session.addIndex("userid")
-	session.addIndex("accessed")
-	assert ensureTableExists(session)
-	var validation = SQLTableInfo.forName("auth_validation")
-	validation.addStringColumn("address")
-	validation.addStringColumn("secret")
-	validation.addStringColumn("userid")
-	validation.addLongColumn("created")
-	validation.addIndex("address")
-	validation.addIndex("secret")
-	validation.addIndex("created")
-	assert ensureTableExists(validation)
-	var recovery = SQLTableInfo.forName("auth_recovery")
-	recovery.addStringColumn("address")
-	recovery.addStringColumn("secret")
-	recovery.addStringColumn("userid")
-	recovery.addLongColumn("created")
-	recovery.addIndex("address")
-	recovery.addIndex("secret")
-	recovery.addIndex("created")
-	assert ensureTableExists(recovery)
-	return true
-}
-
 func initializeServer(server as HTTPServer) override as bool
 {
 	assert base.initializeServer(server)
-	assert initializeDatabase()
-	var handler = new ApiHandler()
-	handler.setDb(getDb())
+	var engine = new AuthEngine()
+	engine.setCtx(ctx)
+	engine.setDb(getDb())
+	assert engine.initializeDatabase()
 	if String.isNotEmpty(smtpServer) {
 		var sender = SMTPSender.forRemoteServerUrl(smtpServer)
 		sender.setAcceptInvalidCertificate(true)
 		sender.setCtx(ctx)
-		handler.setSmtpSender(sender)
+		engine.setSmtpSender(sender)
 	}
 	else {
 		Log.warning(ctx, "No smtpServer defined. No emails will be sent.")
@@ -107,7 +63,7 @@ func initializeServer(server as HTTPServer) override as bool
 	if validationEmailTemplateFile {
 		var cc = assert validationEmailTemplateFile.getContentsUTF8():
 			Log.error(ctx, "Failed to read email template file: `" .. validationEmailTemplateFile.getPath() .. "'")
-		handler.setValidationEmailTemplate(cc)
+		engine.setValidationEmailTemplate(cc)
 	}
 	else {
 		Log.warning(ctx, "No validationEmailTemplate set. No validation emails will be sent.")
@@ -115,11 +71,13 @@ func initializeServer(server as HTTPServer) override as bool
 	if recoveryEmailTemplateFile {
 		var cc = assert recoveryEmailTemplateFile.getContentsUTF8():
 			Log.error(ctx, "Failed to read email template file: `" .. recoveryEmailTemplateFile.getPath() .. "'")
-		handler.setRecoveryEmailTemplate(cc)
+		engine.setRecoveryEmailTemplate(cc)
 	}
 	else {
 		Log.warning(ctx, "No recoveryEmailTemplate set. No recovery emails will be sent.")
 	}
+	var handler = new ApiHandler()
+	handler.setEngine(engine)
 	server.pushRequestHandler(handler)
 	return true
 }

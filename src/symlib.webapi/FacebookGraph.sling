@@ -1,0 +1,103 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2016-2018 Job and Esther Technologies Oy
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+class:
+
+import capex.http
+
+class FacebookHTTPClientListener is HTTPClientListener
+{
+	prop listener as function<void,DynamicMap,Error>
+	var body as buffer
+
+	func onError(message as string) override
+	{
+		if(listener != null) {
+			listener(null, Error.forMessage(message))
+		}
+	}
+
+	func onDataReceived(buffer as buffer) override as bool
+	{
+		body = buffer
+		return(true)
+	}
+
+	func replaceUnicodeChars(response as string) as string
+	{
+		var str = response
+		if(String.contains(response, "\\u0040")) {
+			str = String.replace(response, "\\u0040", "@")
+		}
+		if(String.contains(response, "\\u00f1")) {
+			str = String.replace(str, "\\u00f1", "ñ")
+		}
+		return(str)
+	}
+
+	func onResponseCompleted override
+	{
+		base.onResponseCompleted()
+		if(listener != null) {
+			var json = JSONParser.parse(DataValidator.toValidJSONString(replaceUnicodeChars(String.forUTF8Buffer(body)))) as DynamicMap
+			if(json == null) {
+				listener(null, Error.forMessage("Invalid response JSON Format from Facebook"))
+				return
+			}
+			var error = json.getDynamicMap("error")
+			if(error != null) {
+				var e = Error.forMessage(error.getString("message"))
+				e.setCode(error.getString("code"))
+				e.setDetail(error.getString("fbtrace_id"))
+				listener(null, e)
+				return
+			}
+			listener(json, null)
+		}
+	}
+}
+
+func getUserProfile(fbUserId as string, fbAccessToken as string, listener as function<void,DynamicMap,Error>) static:
+	getUserProfile(fbUserId, fbAccessToken, null, listener)
+
+func getUserProfile(fbUserId as string, fbAccessToken as string, fields as DynamicVector, listener as function<void,DynamicMap,Error>) static
+{
+	var f as string
+	if fields && fields.getSize() > 0 {
+		var sb = new StringBuilder()
+		var first = true
+		foreach field in fields.toVectorOfStrings() {
+			var v = String.strip(field)
+			if String.isEmpty(v):
+				continue
+			if not first:
+				sb.append(',')
+			first = false
+			sb.append(v)
+		}
+		f = sb.toString()
+	}
+	if String.isEmpty(f):
+		f = "id,address,about,birthday,email,gender,education,first_name,last_name"
+	var op = new HTTPClientOperation()
+	op.setAcceptInvalidCertificate(true)
+	var req = HTTPClientRequest.forGET("https://graph.facebook.com/" .. fbUserId .. "?fields=" .. f .. "&access_token=" .. fbAccessToken)
+	op.executeRequest(req, new FacebookHTTPClientListener().setListener(listener))
+	op.closeConnection(null)
+}

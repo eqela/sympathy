@@ -20,7 +20,7 @@
 class is ConsoleApplicationMain:
 
 import capex.console
-import sympathy.report
+import symlib.report
 
 main:
 	return executeMain(new this(), args)

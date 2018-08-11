@@ -10,40 +10,13 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU Affero General Public License for more details.
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is JSONObject:
-
-func forJsonObject(o as object) static as this
-{
-	var v = new this()
-	assert v.fromJsonObject(o)
-	return v
-}
-
-prop id as string
-prop created as long
-prop password as string
-
-func toJsonObject as object
-{
-	var v = new DynamicMap()
-	v.set("id", id)
-	v.set("created", created)
-	v.set("password", password)
-	return v
-}
-
-func fromJsonObject(o as object) as bool
-{
-	var v = assert o as DynamicMap
-	id = v.getString("id")
-	created = v.getLongInteger("created")
-	password = v.getString("password")
-	return true
-}
+type = "library"
+preFilters += "@cape"
+preFilters += "@sympathy"
