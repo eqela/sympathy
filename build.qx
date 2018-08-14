@@ -18,7 +18,7 @@
 
 use eqela:slingbuild:r15
 use eqela:jsh:r4
-set version 5.1.0
+set version 5.1.1
 
 buildAll {
 	call buildLib
