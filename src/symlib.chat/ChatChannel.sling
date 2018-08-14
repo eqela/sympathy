@@ -22,6 +22,7 @@ class:
 prop channelId as string
 prop channelCreatorUserId as string
 prop title as string
+prop externalId as string
 prop timeStampCreated as long
 prop timeStampLastUpdated as long
 var engine protected as ChatEngine
@@ -36,6 +37,7 @@ func onNewDataMessage(message as ChatMessage, connection as ChatConnectionHandle
 		message.setTitle(title)
 		message.setChannelCreatorUserId(channelCreatorUserId)
 		message.setChannelId(channelId)
+		message.setExternalId(externalId)
 		var command = assert ChatMessage.forMessageSavedCommand(message, this)
 		assert connection.sendMessage(command) > 0 {
 			var user = assert connection.getUser()

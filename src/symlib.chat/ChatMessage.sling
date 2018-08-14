@@ -42,6 +42,7 @@ func forMessageSavedCommand(message as this, channel as ChatChannel) static as t
 	data.set("channelCreatorUserId", channel.getChannelCreatorUserId())
 	data.set("title", channel.getTitle())
 	data.set("channelId", channel.getChannelId())
+	data.set("externalId", channel.getExternalId())
 	data.set("recipients", message.getRecipients())
 	v.setData(JSONEncoder.encode(data))
 	return v
@@ -67,6 +68,7 @@ func forBuffer(data as buffer) static as this
 	v.setChannelId(dmap.getString("channelId"))
 	v.setAttachmentFileName(dmap.getString("attachmentFileName"))
 	v.setChannelCreatorUserId(dmap.getString("channelCreatorUserId"))
+	v.setExternalId(dmap.getString("externalId"))
 	v.setTitle(dmap.getString("title"))
 	v.setUnreadCount(dmap.getLongInteger("unreadCount"))
 	v.setTimeStampCreated(dmap.getLongInteger("timeStampCreated"))
@@ -79,6 +81,7 @@ prop data as string
 prop title as string
 prop channelCreatorUserId as string
 prop channelId as string
+prop externalId as string
 prop messageId as string
 prop attachmentFileName as string
 prop creatorUserId as string
@@ -169,6 +172,8 @@ func toBuffer as buffer
 		d.set("messageId", messageId)
 	if String.isNotEmpty(channelId):
 		d.set("channelId", channelId)
+	if String.isNotEmpty(externalId):
+		d.set("externalId", externalId)
 	if String.isNotEmpty(attachmentFileName):
 		d.set("attachmentFileName", attachmentFileName)
 	var recipients = getRecipients()

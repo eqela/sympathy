@@ -19,9 +19,9 @@
 
 class #webapi:
 
-var engine protected as ChatEngine
+var engine protected as ChatyEngine
 
-func setEngine(engine as ChatEngine):
+func setEngine(engine as ChatyEngine):
 	this.engine = engine
 
 GET "getUserIdsAssociatedWithUserId/*"
