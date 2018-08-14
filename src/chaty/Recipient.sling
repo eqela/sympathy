@@ -35,7 +35,7 @@ func onInsert #onInsert
 	readIndex = 0
 }
 
-func getRecipients(channelId as string) static as DynamicVector
+func getRecipientIdsForChannelId(channelId as string) static as DynamicVector
 {
 	var db = DataManager.getDb()
 	if not db:
