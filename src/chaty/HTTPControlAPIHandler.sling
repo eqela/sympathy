@@ -99,3 +99,15 @@ POST "sendDataMessage"
 		req.sendJSONObject(JSONResponse.forOk())
 	})
 }
+
+DELETE "deleteChannelForExternalId/*"
+{
+	receivePath externalId
+	assert String.isNotEmpty(externalId):
+		req.sendJSONObject(JSONResponse.forInvalidRequest())
+	engine.deleteChannelForExternalId(externalId, func(error as Error) {
+		assert not error:
+			sendObject JSONResponse.forError(error)
+		sendOk
+	})
+}
