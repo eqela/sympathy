@@ -45,6 +45,8 @@ func getChannelForExternalId(externalId as string, callback as function<void, th
 	assert String.isNotEmpty(externalId):
 		callback(null)
 	db.querySingleRow(db.prepare("SELECT * FROM " .. DataManager.CHAT_CHANNELS .. " WHERE externalId = ?;").addParamString(externalId), func(v as DynamicMap) {
+		assert v:
+			callback(null)
 		callback(forDynamicMap(v))
 	})
 }

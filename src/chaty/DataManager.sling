@@ -221,6 +221,21 @@ func deleteChannel(channelId as string, userId as string, callback as function<v
 	})
 }
 
+func deleteChannelForExternalId(externalId as string, callback as function<void, Error>) static
+{
+	getChannelForExternalId(externalId, func(channel as Channel) {
+		assert channel:
+			callback(Error.instance("invalid_external_id", "Invalid external id"))
+		assert db.execute(db.prepare("DELETE FROM " .. CHAT_CHANNELS .. " WHERE channelId = ?;").addParamString(channel.getChannelId())):
+			callback(Error.instance("internal_error", "Internal error"))
+		assert db.execute(db.prepare("DELETE FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ?;").addParamString(channel.getChannelId())):
+			callback(Error.instance("internal_error", "Internal error"))
+		assert db.execute(db.prepare("DELETE FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?;").addParamString(channel.getChannelId())):
+			callback(Error.instance("internal_error", "Internal error"))
+		callback(null)
+	})
+}
+
 func updateRecipients(channelId as string, creatorUserId as string, newRecipients as DynamicVector, callback as function<void, Error>) static
 {
 	var channel = assert getChannel(channelId):

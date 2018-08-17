@@ -99,6 +99,7 @@ func authenticateConnection(authData as buffer, callback as function<void, ChatU
 			callback(null)
 		}
 		getUser(userId, func(user as ChatyUser) {
+			user.setSessionId(sessionId)
 			callback(user)
 		})
 	})
@@ -861,6 +862,13 @@ func createChannelForExternalIdAndGetChannelId(externalId as string, creatorUser
 			callback(newChannelId, null)
 		})
 	})
+}
+
+func deleteChannelForExternalId(externalId as string, callback as function<void, Error>)
+{
+	assert String.isNotEmpty(externalId):
+		callback(Error.instance("no_external_id", "No external id"))
+	DataManager.deleteChannelForExternalId(externalId, callback)
 }
 
 func onDataMessageFromHTTPControl(data as DynamicMap, callback as function<void, Error>)
