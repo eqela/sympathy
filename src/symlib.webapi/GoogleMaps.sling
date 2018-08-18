@@ -19,57 +19,19 @@
 
 class:
 
-import capex.http
+import capex.web
 
-class GoogleMapsHTTPClientListener is HTTPClientListener
+func getTravelDetails(apiKey as string, origin as string, destination as string, callback as function<void,DynamicMap,Error>) static
 {
-	prop listener as function<void,DynamicMap,Error>
-	var body as buffer
-
-	func onError(message as string) override
-	{
-		if(listener != null) {
-			listener(null, Error.forMessage(message))
-		}
-	}
-
-	func onDataReceived(buffer as buffer) override as bool
-	{
-		body = buffer
-		return(true)
-	}
-
-	func onResponseCompleted override
-	{
-		base.onResponseCompleted()
-		if(listener != null) {
-			var json = JSONParser.parse(DataValidator.toValidJSONString(String.forUTF8Buffer(body))) as DynamicMap
-			if(json == null) {
-				listener(null, Error.forCode("invalidResponse"))
-				return
-			}
-			if(String.equals("INVALID_REQUEST", json.getString("status"))) {
-				listener(null, Error.forCode("invalidRequest"))
-				return
-			}
-			listener(json, null)
-		}
-	}
-}
-
-func getTravelDetails(apiKey as string, origin as string, destination as string, listener as function<void,DynamicMap,Error>) static
-{
-	if(String.isEmpty(apiKey)) {
-		if(listener != null) {
-			listener(null, Error.forCode("apiKeyMissing"))
-		}
-		return
-	}
-	var op = new HTTPClientOperation()
-	op.setAcceptInvalidCertificate(true)
-	var req as HTTPClientRequest
-	req = HTTPClientRequest.forGET("https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&origins=" ..
-		URLEncoder.encode(origin) .. "&destinations=" .. URLEncoder.encode(destination) .. "&key=" .. apiKey)
-	op.executeRequest(req, new GoogleMapsHTTPClientListener().setListener(listener))
-	op.closeConnection(null)
+	assert String.isNotEmpty(apiKey):
+		callback(null, Error.forCode("apiKeyMissing"))
+	var client = assert NativeWebClient.instance():
+		callback(null, Error.forCode("failedToCreateNativeWebClient"))
+	client.query("GET", "https://maps.googleapis.com/maps/api/distancematrix/json?units=imperial&origins=" .. URLEncoder.encode(origin) .. "&destinations=" .. URLEncoder.encode(destination) .. "&key=" .. apiKey, null, null, func(statusCode as string, responseHeaders as KeyValueList<string,string>, body as buffer) {
+		var json = assert JSONParser.parse(DataValidator.toValidJSONString(String.forUTF8Buffer(body))) as DynamicMap:
+			callback(null, Error.forCode("invalidResponse"))
+		assert String.isNotEqual("INVALID_REQUEST", json.getString("status")):
+			callback(null, Error.forCode("invalidRequest"))
+		callback(json, null)
+	})
 }
