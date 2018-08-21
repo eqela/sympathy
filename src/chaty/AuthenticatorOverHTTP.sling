@@ -53,9 +53,6 @@ func forConfiguration(authConfig as DynamicMap) static as this
 	return v
 }
 
-ctor:
-	setWebClient(new CustomWebClient())
-
 prop authBaseURL as string
 prop authParameterKey as string
 prop authenticateURL as string
