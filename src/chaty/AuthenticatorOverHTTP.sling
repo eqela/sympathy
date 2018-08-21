@@ -19,7 +19,6 @@
 
 class is JSONAPIClient is Authenticator:
 
-import capex.http
 import capex.web
 
 macro CHECK_SESSION(sessionId, callback)
@@ -52,9 +51,6 @@ func forConfiguration(authConfig as DynamicMap) static as this
 	v.setVerifyExternalIdURL(verifyExternalIdURL)
 	return v
 }
-
-ctor:
-	setWebClient(new CustomWebClient())
 
 prop authBaseURL as string
 prop authParameterKey as string
