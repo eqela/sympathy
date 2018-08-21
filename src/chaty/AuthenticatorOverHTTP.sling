@@ -19,7 +19,6 @@
 
 class is JSONAPIClient is Authenticator:
 
-import capex.http
 import capex.web
 
 macro CHECK_SESSION(sessionId, callback)
