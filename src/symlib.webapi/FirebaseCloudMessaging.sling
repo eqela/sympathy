@@ -19,50 +19,16 @@
 
 class:
 
-import capex.http
+import capex.web
 
-class MyHTTPClientListener is HTTPClientListener
-{
-	prop listener as function<void, DynamicMap, Error>
-	var body as buffer
-
-	func onError(message as string) override
-	{
-		if listener:
-			listener(null, Error.forMessage(message))
-	}
-
-	func onAborted override
-	{
-		if listener:
-			listener(null, Error.forCode("aborted"))
-	}
-
-	func onDataReceived(buffer as buffer) override as bool
-	{
-		body = Buffer.append(body, buffer)
-		return true
-	}
-
-	func onResponseCompleted override
-	{
-		base.onResponseCompleted()
-		if listener {
-			var json = assert JSONParser.parse(body) as DynamicMap:
-				listener(null, Error.forMessage("Invalid JSON Format from Google: " .. String.asString(body)))
-			listener(json, null)
-		}
-	}
-}
-
-func send(fcmServerKey as string, registrationIds as DynamicVector, notification as DynamicMap, data as DynamicMap, listener as function<void,DynamicMap,Error>) static
+func send(fcmServerKey as string, registrationIds as DynamicVector, notification as DynamicMap, data as DynamicMap, callback as function<void, DynamicMap, Error>) static
 {
 	assert String.isNotEmpty(fcmServerKey):
-		listener(null, Error.forCode("missingFCMServerKey"))
+		callback(null, Error.forCode("missingFCMServerKey"))
 	var sz = registrationIds.getSize()
 	var body = new DynamicMap()
 	assert sz > 0:
-		listener(null, Error.forCode("missingRegistrationId"))
+		callback(null, Error.forCode("missingRegistrationId"))
 	if sz == 1 {
 		body.set("to", String.asString(registrationIds.get(0)))
 	}
@@ -79,11 +45,15 @@ func send(fcmServerKey as string, registrationIds as DynamicVector, notification
 	v.setNiceFormatting(false)
 	var json = v.execute(body)
 	assert String.isNotEmpty(json):
-		listener(null, Error.forCode("jsonEncodingFailed"))
-	var op = new HTTPClientOperation()
-	op.setAcceptInvalidCertificate(true)
-	var req = HTTPClientRequest.forPOST("https://fcm.googleapis.com/fcm/send", "application/json", String.toUTF8Buffer(json))
-	req.addHeader("Authorization", "key=" .. fcmServerKey)
-	op.executeRequest(req, new MyHTTPClientListener().setListener(listener))
-	op.closeConnection(null)
+		callback(null, Error.forCode("jsonEncodingFailed"))
+	var client = assert NativeWebClient.instance():
+		callback(null, Error.forCode("failedToCreateNativeWebClient"))
+	var headers = new KeyValueList<string,string>()
+	headers.add("Content-Type", "application/json")
+	headers.add("Authorization", "key=" .. fcmServerKey)
+	client.query("POST", "https://fcm.googleapis.com/fcm/send", headers, String.toUTF8Buffer(json), func(statusCode as string, responseHeaders as KeyValueList<string,string>, body as buffer) {
+		var json = assert JSONParser.parse(body) as DynamicMap:
+			callback(null, Error.forCode("invalidResponse"))
+		callback(json, null)
+	})
 }

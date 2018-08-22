@@ -19,7 +19,6 @@
 
 class is JSONAPIClient is NotificationForwarder:
 
-import capex.http
 import capex.web
 
 func forConfiguration(notificationForwarderConfig as DynamicMap) static as this
@@ -40,9 +39,6 @@ func forConfiguration(notificationForwarderConfig as DynamicMap) static as this
 	v.setAccessToken(accessToken)
 	return v
 }
-
-ctor:
-	setWebClient(new CustomWebClient())
 
 prop notificationForwarderBaseURL as string
 prop accessTokenKey as string
