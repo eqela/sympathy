@@ -23,13 +23,13 @@ import cape
 import capex.text
 import capex.console
 import sympathy
+import symlib.article
 
 func main(args as array<string>) static as int #main
 {
-	if(new this().execute(args) == false) {
-		return(1)
-	}
-	return(0)
+	if new this().execute(args) == false:
+		return 1
+	return 0
 }
 
 prop siteDirectory as File
@@ -43,142 +43,116 @@ prop categoryPathSuffix as string
 prop apiSecret as string
 prop serverMode = "web"
 
-func printHeader(stdout as PrintWriter) override
-{
+func printHeader(stdout as PrintWriter) override:
 	ConsoleApplication.PRINT_HEADER(stdout, null)
-}
 
-func printVersion(stdout as PrintWriter, longFormat as bool) override
-{
+func printVersion(stdout as PrintWriter, longFormat as bool) override:
 	ConsoleApplication.PRINT_VERSION(stdout, longFormat)
-}
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
-	if(base.configure(key, value, relativeTo, error)) {
-		return(true)
-	}
-	if(key == "siteDirectory") {
+	if base.configure(key, value, relativeTo, error):
+		return true
+	if key == "siteDirectory" {
 		siteDirectory = File.forRelativePath(value, relativeTo)
-		return(true)
+		return true
 	}
-	if(key == "dataDirectory") {
+	if key == "dataDirectory" {
 		dataDirectory = File.forRelativePath(value, relativeTo)
-		return(true)
+		return true
 	}
-	if(key == "themeDirectory") {
+	if key == "themeDirectory" {
 		themeDirectory = File.forRelativePath(value, relativeTo)
-		return(true)
+		return true
 	}
-	if(key == "publicDirectory") {
+	if key == "publicDirectory" {
 		publicDirectory = File.forRelativePath(value, relativeTo)
-		return(true)
+		return true
 	}
-	if(key == "urlPrefix") {
+	if key == "urlPrefix" {
 		urlPrefix = value
-		return(true)
+		return true
 	}
-	if(key == "defaultCategory") {
+	if key == "defaultCategory" {
 		defaultCategory = value
-		return(true)
+		return true
 	}
-	if(key == "categoryPathSuffix") {
+	if key == "categoryPathSuffix" {
 		categoryPathSuffix = value
-		return(true)
+		return true
 	}
-	if(key == "siteData") {
+	if key == "siteData" {
 		siteData = JSONParser.parse(value) as DynamicMap
-		if(siteData == null) {
+		assert siteData:
 			error.setMessage("Invalid value for `siteData'")
-			return(false)
-		}
-		return(true)
+		return true
 	}
-	if(key == "serverMode") {
+	if key == "serverMode" {
 		serverMode = value
-		return(true)
+		return true
 	}
-	if(key == "apiSecret") {
+	if key == "apiSecret" {
 		apiSecret = value
-		return(true)
+		return true
 	}
-	return(false)
+	return false
 }
 
 func getNotFoundHtml(ctx as LoggingContext) as string
 {
-	if(themeDirectory == null) {
-		return(null)
-	}
+	assert themeDirectory
 	var nf = themeDirectory.entry("notfound.html.t")
-	if(nf.isFile() == false) {
-		return(null)
-	}
+	assert nf.isFile()
 	var str = nf.getContentsString("UTF-8")
-	if(String.isEmpty(str)) {
-		return(null)
-	}
+	assert String.isNotEmpty(str)
 	var dirs = new vector<File>
 	dirs += themeDirectory
-	var tt = TextTemplate.forHTMLString(str, dirs, null, ctx)
-	if(tt == null) {
-		return(null)
-	}
+	var tt = assert TextTemplate.forHTMLString(str, dirs, null, ctx)
 	var dd = new DynamicMap()
 	dd.set("site", siteData)
-	return(tt.execute(dd))
+	return tt.execute(dd)
 }
 
 func initializeServer(server as HTTPServer) override as bool
 {
 	assert base.initializeServer(server)
 	server.UPDATE_SERVER_NAME()
-	if(siteDirectory == null) {
+	if siteDirectory == null:
 		siteDirectory = getConfigFileDirectory()
-	}
-	if(siteDirectory != null && siteDirectory.isDirectory() == false) {
+	if siteDirectory && siteDirectory.isDirectory() == false {
 		Log.error(ctx, "Site directory does not exist: `" .. siteDirectory.getPath() .. "'")
-		return(false)
+		return false
 	}
-	if(siteDirectory != null) {
-		if(dataDirectory == null) {
+	if siteDirectory {
+		if dataDirectory == null {
 			var d = siteDirectory.entry("data")
-			if(d.isDirectory()) {
+			if d.isDirectory():
 				dataDirectory = d
-			}
 		}
-		if(themeDirectory == null) {
+		if themeDirectory == null {
 			var d = siteDirectory.entry("theme")
-			if(d.isDirectory()) {
+			if d.isDirectory() {
 				themeDirectory = d
 			}
 			else {
 				Log.error(ctx, "Theme directory does not exist: `" .. d.getPath() .. "'")
-				return(false)
+				return false
 			}
 		}
-		if(publicDirectory == null) {
+		if publicDirectory == null {
 			var d = siteDirectory.entry("public")
-			if(d.isDirectory()) {
+			if d.isDirectory():
 				publicDirectory = d
-			}
 		}
 	}
-	if(dataDirectory == null) {
+	assert dataDirectory:
 		Log.error(ctx, "No valid data directory was specified. Either specify `siteDirectory' or `dataDirectory'")
-		return(false)
-	}
-	if(themeDirectory == null) {
+	assert themeDirectory:
 		Log.error(ctx, "No valid theme directory was specified.")
-		return(false)
-	}
-	var repository = ArticleRepositoryInDirectories.forDirectory(ctx, dataDirectory)
-	if(repository == null) {
+	var repository = assert ArticleRepositoryInDirectories.forDirectory(ctx, dataDirectory):
 		Log.error(ctx, "Failed to create article repository for data directory: `" .. dataDirectory.getPath() .. "'")
-		return(false)
-	}
 	repository.setDefaultCategory(defaultCategory)
-	if(serverMode == "web") {
+	if serverMode == "web" {
 		var templateData = new DynamicMap()
 		templateData.set("urlPrefix", urlPrefix)
 		templateData.set("site", siteData)
@@ -193,7 +167,7 @@ func initializeServer(server as HTTPServer) override as bool
 		themeStaticHandler.setProcessTemplateFiles(true)
 		themeStaticHandler.setIndexFiles([ "index.html", "index.html.t" ])
 		server.pushRequestHandler(themeStaticHandler)
-		if(publicDirectory != null && publicDirectory.isDirectory()) {
+		if publicDirectory && publicDirectory.isDirectory() {
 			var ph = HTTPServerDirectoryHandler.forDirectory(publicDirectory)
 			ph.setListDirectories(false)
 			ph.setProcessTemplateFiles(false)
@@ -202,19 +176,18 @@ func initializeServer(server as HTTPServer) override as bool
 		}
 		server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
 			var nf = getNotFoundHtml(ctx)
-			if(nf == null) {
+			if nf == null:
 				next()
-			}
 			req.sendHTMLString(nf)
 		})
 	}
-	else if(serverMode == "api") {
+	else if serverMode == "api" {
 		// support the posting of large documents
 		server.setSmallBodyLimit(1024 * 1024)
-		if(apiSecret != null) {
+		if apiSecret {
 			server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
 				var secret = req.getHeader("x-secret")
-				if(secret != null && secret == apiSecret) {
+				if secret && secret == apiSecret {
 					next()
 				}
 				else {
@@ -226,7 +199,7 @@ func initializeServer(server as HTTPServer) override as bool
 	}
 	else {
 		Log.error(ctx, "Unsupported server mode: `" .. serverMode .. "'")
-		return(false)
+		return false
 	}
-	return(true)
+	return true
 }

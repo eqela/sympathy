@@ -60,6 +60,9 @@ ctor
 	data = new DynamicMap()
 }
 
+func getRedirect as string:
+	return data.getString("redirect")
+
 func getId as string
 {
 	return(data.getString("id"))

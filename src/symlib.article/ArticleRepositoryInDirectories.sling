@@ -109,6 +109,28 @@ ctor
 	articleListCache = new DynamicMap()
 }
 
+func setArticlesForCategory(category as string, articles as vector<string>)
+{
+	var list = new ArticleList()
+	list.setFileTimeStamp(0L)
+	list.setArticleNames(articles)
+	articleListCache.set(category, list)
+}
+
+func setArticlesForCategories(categoryMap as DynamicMap)
+{
+	assert categoryMap
+	var cit = categoryMap.iterateKeys()
+	while cit {
+		var key = cit.next()
+		if key == null:
+			break
+		var articles = categoryMap.getDynamicVector(key)
+		if articles:
+			setArticlesForCategory(key, articles.toVectorOfStrings())
+	}
+}
+
 func getCategoryMap as DynamicMap
 {
 	var file = directory.entry("categories.json")
@@ -150,58 +172,44 @@ func getCategoryMap as DynamicMap
 func getCategoryById(aid as string) as Category
 {
 	var id = aid
-	if(id == null) {
+	if id == null:
 		id = defaultCategory
-	}
-	if(id == null) {
-		return(null)
-	}
-	var cats = getCategoryMap()
-	if(cats == null) {
-		return(null)
-	}
-	return(cats.get(id) as Category)
+	assert id
+	var cats = assert getCategoryMap()
+	return cats.get(id) as Category
 }
 
 func getArticleListForCategory(categoryName as string) as ArticleList
 {
 	var category = categoryName
-	if(category == null) {
+	if category == null:
 		category = defaultCategory
-	}
-	if(category == null) {
-		return(null)
-	}
+	assert category
 	var file = directory.entry(category .. ".index")
 	var cachedList = articleListCache.get(category) as ArticleList
-	if(cachedList != null) {
-		if(file.hasChangedSince(cachedList.getFileTimeStamp())) {
+	if cachedList {
+		if file.isFile() && file.hasChangedSince(cachedList.getFileTimeStamp()) {
 			articleListCache.remove(category)
 		}
 		else {
-			return(cachedList)
+			return cachedList
 		}
 	}
-	if(file.isFile() == false) {
-		return(null)
-	}
+	assert file.isFile()
 	var listData = JSONParser.parse(file.getContentsString("UTF-8")) as DynamicVector
-	if(listData == null) {
+	assert listData:
 		Log.error(context, "Failed to parse article list file: `" .. file.getPath() .. "'")
-		return(null)
-	}
-	articleListCache.set(category, listData)
 	var v = new ArticleList()
 	v.setFileTimeStamp(file.getLastModifiedTimeStamp())
 	var r = new vector<string>
-	foreach(o in listData.toVector()) {
+	foreach o in listData.toVector() {
 		var s = o as string
-		if(s != null) {
+		if s:
 			r += s
-		}
 	}
 	v.setArticleNames(r)
-	return(v)
+	articleListCache.set(category, v)
+	return v
 }
 
 func getCategories(callback as function<void,vector<Category>>)

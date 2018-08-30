@@ -238,27 +238,27 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 func onGETArticle(req as HTTPServerRequest, next as function)
 {
 	var pageId = req.peekResource()
-	if(String.isEmpty(pageId)) {
+	if String.isEmpty(pageId) {
 		next()
 		return
 	}
 	var myObject = this
 	repository.getArticleById(pageId, func(article as Article) {
-		if(article == null) {
+		if article == null {
 			next()
 			return
 		}
 		req.popResource()
-		if(req.hasMoreResources()) {
+		if req.hasMoreResources() {
 			var attachmentFileName = req.popResource()
-			if(req.isForDirectory() || req.hasMoreResources()) {
+			if req.isForDirectory() || req.hasMoreResources() {
 				req.unpopResource()
 				req.unpopResource()
 				next()
 				return
 			}
 			article.getAttachment(attachmentFileName, func(mimeType as string, data as buffer) {
-				if(data == null) {
+				if data == null {
 					req.unpopResource()
 					req.unpopResource()
 					next()
@@ -269,7 +269,12 @@ func onGETArticle(req as HTTPServerRequest, next as function)
 			})
 			return
 		}
-		if(req.isForDirectory() == false) {
+		var redirect = article.getRedirect()
+		if String.isNotEmpty(redirect) {
+			req.sendRedirect(redirect)
+			return
+		}
+		if req.isForDirectory() == false {
 			req.sendRedirectAsDirectory()
 			return
 		}
@@ -338,12 +343,12 @@ func sendHTMLResponse(req as HTTPServerRequest, data as DynamicMap, tt as string
 
 func onGET(req as HTTPServerRequest, next as function) override
 {
-	if(repository == null) {
+	if repository == null {
 		next()
 		return
 	}
-	if(req.hasMoreResources() == false) {
-		if(req.isForDirectory() == false) {
+	if req.hasMoreResources() == false {
+		if req.isForDirectory() == false {
 			req.sendRedirectAsDirectory()
 			return
 		}
@@ -351,25 +356,27 @@ func onGET(req as HTTPServerRequest, next as function) override
 		return
 	}
 	var resource = req.peekResource()
-	if(resource == "articles") {
+	if resource == "articles" {
 		var path = String.getSubString(req.getURLPath(), 9)
+		if String.isEmpty(path):
+			path = "/"
 		req.sendRedirect(path)
 		return
 	}
-	if(enableCategoryList && resource == "categories") {
+	if enableCategoryList && resource == "categories" {
 		req.popResource()
-		if(req.hasMoreResources()) {
+		if req.hasMoreResources() {
 			next()
 			return
 		}
-		if(req.isForDirectory() == false) {
+		if req.isForDirectory() == false {
 			req.sendRedirectAsDirectory()
 			return
 		}
 		onGETCategoryList(req, next)
 		return
 	}
-	if(Article.isValidIdentifier(resource) == false) {
+	if Article.isValidIdentifier(resource) == false {
 		next()
 		return
 	}

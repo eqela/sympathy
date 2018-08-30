@@ -109,6 +109,7 @@ func readConfigurationFile(file as File) private as Configuration
 	var reader = assert PrintReader.forReader(configurationFile.read()):
 		Log.error(ctx, "Failed to read file: `" .. configurationFile.getPath() .. "'")
 	var v = new Configuration()
+	v.setWorkdir(file.getParent())
 	v.setTimeStamp(configurationFile.getLastModifiedTimeStamp())
 	loop {
 		var line = reader.readLine()
@@ -145,6 +146,10 @@ func readConfigurationFile(file as File) private as Configuration
 			service.setCommand(cmd)
 			service.setParameters(args)
 			v.addToServices(service)
+			continue
+		}
+		if String.startsWith(line, "workdir ") {
+			v.setWorkdir(File.forPath(String.getSubString(line, 8)))
 			continue
 		}
 		Log.error(ctx, "Unsupported configuration line: `" .. line .. "'")
