@@ -17,13 +17,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is HTTPServerRequestHandlerAdapter is RichTextDocumentReferenceResolver imports cape imports sympathy imports capex.text:
+class is HTTPServerRequestHandlerAdapter is RichTextDocumentReferenceResolver:
+
+import sympathy
+import capex.text
 
 func forRepository(repository as ArticleRepository) static as this
 {
 	var v = new this()
 	v.setRepository(repository)
-	return(v)
+	return v
 }
 
 prop repository as ArticleRepository
@@ -34,91 +37,67 @@ prop templatePrefix as string
 prop languages as vector<string>
 prop enableCategoryList = false
 prop categoryPathSuffix as string
-
-func initialize(server as HTTPServerBase) override
-{
-	base.initialize(server)
-}
+prop defaultCategory as string
 
 func getReferenceHref(refid as string) as string
 {
 	var urlPrefix as string
-	if(templateData != null) {
+	if templateData:
 		urlPrefix = templateData.getString("urlPrefix")
-	}
-	if(urlPrefix == null) {
-		return("/" .. refid)
-	}
-	return(urlPrefix .. "/" .. refid)
+	if urlPrefix == null:
+		return "/" .. refid
+	return urlPrefix .. "/" .. refid
 }
 
 func getReferenceTitle(refid as string) as string
 {
-	if(repository == null) {
-		return(refid)
-	}
-	var v = repository.getArticleTitleSync(refid)
-	if(v != null) {
-		return(v)
-	}
-	var catId = refid
-	if(categoryPathSuffix != null) {
-		if(String.endsWith(catId, categoryPathSuffix)) {
-			catId = String.getSubString(catId, 0, String.getLength(catId) - String.getLength(categoryPathSuffix))
+	if repository {
+		var v = repository.getArticleTitleSync(refid)
+		if v:
+			return v
+		var catId = refid
+		if categoryPathSuffix {
+			if String.endsWith(catId, categoryPathSuffix) {
+				catId = String.getSubString(catId, 0, String.getLength(catId) - String.getLength(categoryPathSuffix))
+			}
+			else {
+				catId = null
+			}
 		}
-		else {
-			catId = null
-		}
-	}
-	if(catId != null) {
-		var v = repository.getCategoryTitleSync(catId)
-		if(v != null) {
-			return(v)
+		if catId {
+			var v = repository.getCategoryTitleSync(catId)
+			if v:
+				return v
 		}
 	}
-	return(refid)
+	return refid
 }
 
 func getContentString(cid as string) as string
 {
-	var tsf = templateStorage as TemplateStorageUsingFiles
-	if(tsf == null) {
-		ERROR("Only implemented for TemplateStorageUsingFiles")
-		return(null)
-	}
-	var dir = tsf.getDirectory()
-	if(dir == null) {
-		return(null)
-	}
+	var tsf = assert templateStorage as TemplateStorageUsingFiles:
+		Log.error(logContext, "Only implemented for TemplateStorageUsingFiles")
+	var dir = assert tsf.getDirectory()
 	var file = dir.entry("content").entry(cid .. ".html")
-	if(file.isFile() == false) {
-		return(null)
-	}
-	return(file.getContentsString("UTF-8"))
+	assert file.isFile()
+	return file.getContentsUTF8()
 }
 
 func isResponseHTML(req as HTTPServerRequest) as bool
 {
-	if(templateStorage == null) {
-		return(false)
-	}
-	if(req.getQueryParameter("format") == "json") {
-		return(false)
-	}
-	return(true)
+	assert templateStorage
+	assert req.getQueryParameter("format") != "json"
+	return true
 }
 
 func onGETCategoryList(req as HTTPServerRequest, next as function)
 {
 	repository.getCategories(func(results as vector<Category>) {
-		if(results == null) {
+		assert results:
 			sendResponse(req, "error", JSONResponse.forErrorCode("queryFailed"))
-			return
-		}
 		var v = new vector
-		foreach(result in results) {
-			v += result.toDynamicMap()
-		}
+		foreach result in results:
+			v += result.toJsonObject()
 		var data = new DynamicMap()
 		data.set("categories", v)
 		sendResponse(req, "categorylist", data)
@@ -128,7 +107,7 @@ func onGETCategoryList(req as HTTPServerRequest, next as function)
 func processTimeStamp(values as DynamicMap)
 {
 	var timeStamp = values.getInteger("timeStamp")
-	if(timeStamp > 0) {
+	if timeStamp > 0 {
 		var date = VerboseDateTimeString.getDateStringForDateTime(DateTime.forTimeSeconds(timeStamp))
 		var time = VerboseDateTimeString.getTimeStringForDateTime(DateTime.forTimeSeconds(timeStamp))
 		values.set("date", date)
@@ -140,96 +119,85 @@ func processTimeStamp(values as DynamicMap)
 func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 {
 	var catId = req.peekResource()
-	if(catId != null && categoryPathSuffix != null) {
-		if(String.endsWith(catId, categoryPathSuffix) == false) {
+	if catId && categoryPathSuffix {
+		assert String.endsWith(catId, categoryPathSuffix):
 			next()
-			return
-		}
 		catId = String.getSubString(catId, 0, String.getLength(catId) - String.getLength(categoryPathSuffix))
 	}
 	var pp = 0
 	var spage = req.getQueryParameter("page")
-	if(spage != null) {
+	if spage:
 		pp = String.toInteger(spage) - 1
-	}
-	if(pp < 0) {
+	if pp < 0:
 		pp = 0
-	}
 	var myObject = this
+	if String.isEmpty(catId) && defaultCategory:
+		catId = defaultCategory
 	repository.getArticleCount(catId, func(count as int) {
-		if(count < 0) {
+		assert count >= 0:
 			next()
-			return
-		}
 		req.popResource()
-		if(req.hasMoreResources()) {
+		if req.hasMoreResources() {
 			req.unpopResource()
 			next()
 			return
 		}
-		if(req.isForDirectory() == false) {
+		if req.isForDirectory() == false {
 			req.sendRedirectAsDirectory()
 			return
 		}
 		var pages = count /  articlesPerPage
-		if(count % articlesPerPage > 0) {
+		if count % articlesPerPage > 0:
 			pages ++
-		}
-		if(pages < 1) {
+		if pages < 1:
 			pages = 1
-		}
 		repository.getArticles(catId, pp * articlesPerPage, articlesPerPage, func(category as Category, results as vector<Article>) {
-			if(results == null) {
+			assert results:
 				sendResponse(req, "error", JSONResponse.forErrorCode("queryFailed"))
-				return
-			}
 			var v = new vector
 			var resultCount = Vector.getSize(results)
 			var doSendResponse = func {
 				var data = new DynamicMap()
 				var cat = category
-				if(cat == null) {
+				if cat == null {
 					cat = new Category()
 					cat.setId(catId)
 					cat.setTitle(catId)
 				}
 				var intro = cat.getIntro()
-				if(intro == null) {
+				if intro == null:
 					intro = ""
-				}
 				data.set("intro", intro)
 				data.set("description", intro)
 				data.set("articles", v)
-				data.set("category", cat.toDynamicMap())
-				if(pp > 0) {
+				data.set("category", cat.toJsonObject())
+				if pp > 0:
 					data.set("previousPage", pp)
-				}
-				if(pp+2 <= pages) {
+				if pp+2 <= pages:
 					data.set("nextPage", pp+2)
-				}
 				data.set("currentPage", pp+1)
 				data.set("pageCount", pages)
 				sendResponse(req, "articlelist", data)
 			}
-			if(resultCount < 1) {
+			if resultCount < 1 {
 				doSendResponse()
 				return
 			}
 			var resultCounter = 0
 			var onIntroHtmlRetrieved = func {
 				resultCounter ++
-				if(resultCounter == resultCount) {
+				if resultCounter == resultCount:
 					doSendResponse()
-				}
 			}
-			foreach(result in results) {
-				var map = result.toDynamicMap()
+			foreach result in results {
+				var map = result.toJsonObject() as DynamicMap
+				if not map:
+					map = new DynamicMap()
 				processTimeStamp(map)
 				v += map
-				result.getIntroHtml(myObject, func(html as string) {
-					map.set("introHtml", html)
-					onIntroHtmlRetrieved()
-				})
+				var html = repository.getIntroHtml(result, myObject)
+				map.set("introHtml", html)
+				onIntroHtmlRetrieved()
 			}
 		})
 	})
@@ -238,16 +206,12 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 func onGETArticle(req as HTTPServerRequest, next as function)
 {
 	var pageId = req.peekResource()
-	if String.isEmpty(pageId) {
+	assert String.isNotEmpty(pageId):
 		next()
-		return
-	}
 	var myObject = this
 	repository.getArticleById(pageId, func(article as Article) {
-		if article == null {
+		assert article:
 			next()
-			return
-		}
 		req.popResource()
 		if req.hasMoreResources() {
 			var attachmentFileName = req.popResource()
@@ -257,7 +221,7 @@ func onGETArticle(req as HTTPServerRequest, next as function)
 				next()
 				return
 			}
-			article.getAttachment(attachmentFileName, func(mimeType as string, data as buffer) {
+			repository.getArticleAttachment(article.getId(), attachmentFileName, func(mimeType as string, data as buffer) {
 				if data == null {
 					req.unpopResource()
 					req.unpopResource()
@@ -278,15 +242,17 @@ func onGETArticle(req as HTTPServerRequest, next as function)
 			req.sendRedirectAsDirectory()
 			return
 		}
-		var map = article.toDynamicMap()
-		article.getIntroHtml(myObject, func(introHtml as string) {
-			map.set("introHtml", introHtml)
-			article.getContentHtml(myObject, func(contentHtml as string) {
-				map.set("contentHtml", contentHtml)
-				processTimeStamp(map)
-				sendResponse(req, "article", map)
-			})
-		})
+		var map = article.toJsonObject() as DynamicMap
+		if not map:
+			map = new DynamicMap()
+		if String.isEmpty(map.getString("shareDescription")):
+			map.set("shareDescription", map.getString("slogan"))
+		var introHtml = repository.getIntroHtml(article, myObject)
+		map.set("introHtml", introHtml)
+		var contentHtml = repository.getContentHtml(article, myObject)
+		map.set("contentHtml", contentHtml)
+		processTimeStamp(map)
+		sendResponse(req, "article", map)
 	})
 }
 
@@ -298,20 +264,16 @@ func sendResponse(req as HTTPServerRequest, type as string, content as object)
 	var rq = new DynamicMap()
 	rq.set("path", req.getURLPath())
 	rdata.set("request", rq)
-	if(templateData != null) {
+	if templateData:
 		rdata.mergeFrom(templateData)
-	}
-	if(isResponseHTML(req)) {
+	if isResponseHTML(req) {
 		var tp = templatePrefix
-		if(tp == null) {
+		if tp == null:
 			tp = ""
-		}
 		var templateName = tp .. type
 		templateStorage.getTemplate(templateName, func(template as string) {
-			if(template == null) {
+			assert template:
 				req.sendJSONObject(rdata)
-				return
-			}
 			sendHTMLResponse(req, rdata, template)
 		})
 	}
@@ -324,29 +286,20 @@ func sendHTMLResponse(req as HTTPServerRequest, data as DynamicMap, tt as string
 {
 	var includeDirs = new vector<File>
 	var tsf = templateStorage as TemplateStorageUsingFiles
-	if(tsf != null) {
+	if tsf:
 		includeDirs += tsf.getDirectory()
-	}
-	var template = TextTemplate.forHTMLString(tt, includeDirs)
-	if(template == null) {
+	var template = assert TextTemplate.forHTMLString(tt, includeDirs):
 		req.sendInternalError("Text template parsing")
-		return
-	}
 	template.setLanguagePreferences(languages)
-	var str = template.execute(data, includeDirs)
-	if(str == null) {
+	var str = assert template.execute(data, includeDirs):
 		req.sendInternalError("Text template execution")
-		return
-	}
 	req.sendHTMLString(str)
 }
 
 func onGET(req as HTTPServerRequest, next as function) override
 {
-	if repository == null {
+	assert repository:
 		next()
-		return
-	}
 	if req.hasMoreResources() == false {
 		if req.isForDirectory() == false {
 			req.sendRedirectAsDirectory()
@@ -376,7 +329,7 @@ func onGET(req as HTTPServerRequest, next as function) override
 		onGETCategoryList(req, next)
 		return
 	}
-	if Article.isValidIdentifier(resource) == false {
+	if ArticleUtil.isValidIdentifier(resource) == false {
 		next()
 		return
 	}

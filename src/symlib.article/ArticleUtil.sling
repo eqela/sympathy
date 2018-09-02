@@ -17,19 +17,33 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-model:
+class:
 
-id as string
-title as string
-slogan as string
-author as string
-introMarkup as string
-introHtml as string
-date as string
-redirect as string
-banner as string
-shareImage as string
-shareDescription as string
-categories as string[]
-contentMarkup as string
-contentHtml as string
+func isValidIdentifier(name as string) static as bool
+{
+	assert name
+	if String.getLength(name) < 1:
+		return false
+	var it = String.iterate(name)
+	while it {
+		var c = it.getNextChar()
+		if Character.isEOF(c):
+			break
+		if c >= 'a' && c <= 'z' {
+			;
+		}
+		else if c >= 'A' && c <= 'Z' {
+			;
+		}
+		else if c >= '0' && c <= '9' {
+			;
+		}
+		else if c == '-' || c == '_' || c == '.' {
+			;
+		}
+		else {
+			return false
+		}
+	}
+	return true
+}

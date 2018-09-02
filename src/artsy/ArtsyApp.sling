@@ -149,14 +149,14 @@ func initializeServer(server as HTTPServer) override as bool
 		Log.error(ctx, "No valid data directory was specified. Either specify `siteDirectory' or `dataDirectory'")
 	assert themeDirectory:
 		Log.error(ctx, "No valid theme directory was specified.")
-	var repository = assert ArticleRepositoryInDirectories.forDirectory(ctx, dataDirectory):
+	var repository = assert ArticleRepositoryDirectory.forDirectory(ctx, dataDirectory):
 		Log.error(ctx, "Failed to create article repository for data directory: `" .. dataDirectory.getPath() .. "'")
-	repository.setDefaultCategory(defaultCategory)
 	if serverMode == "web" {
 		var templateData = new DynamicMap()
 		templateData.set("urlPrefix", urlPrefix)
 		templateData.set("site", siteData)
 		var handler = ArticleWebHandler.forRepository(repository)
+		handler.setDefaultCategory(defaultCategory)
 		handler.setCategoryPathSuffix(categoryPathSuffix)
 		handler.setTemplateData(templateData)
 		handler.setTemplateStorage(TemplateStorageUsingFiles.forHTMLTemplateDirectory(themeDirectory))
@@ -181,6 +181,7 @@ func initializeServer(server as HTTPServer) override as bool
 			req.sendHTMLString(nf)
 		})
 	}
+	/* FIXME: Admin API handler currently not available in the library
 	else if serverMode == "api" {
 		// support the posting of large documents
 		server.setSmallBodyLimit(1024 * 1024)
@@ -197,6 +198,7 @@ func initializeServer(server as HTTPServer) override as bool
 		}
 		server.pushRequestHandler(ArticleAdminAPIHandler.forRepository(repository))
 	}
+	*/
 	else {
 		Log.error(ctx, "Unsupported server mode: `" .. serverMode .. "'")
 		return false

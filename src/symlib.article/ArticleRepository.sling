@@ -17,15 +17,40 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-interface imports cape:
+class abstract:
 
-func getCategories(callback as function<void,vector<Category>>)
-func getArticleCount(category as string, callback as function<void,int>)
-func getAllArticles(callback as function<void,vector<Article>>)
-func getArticles(category as string, offset as int, limit as int, callback as function<void,Category,vector<Article>>)
-func getArticleById(id as string, callback as function<void,Article>)
-func getArticleTitleSync(id as string) as string
-func getCategoryTitleSync(id as string) as string
-func addArticle(id as string, headers as DynamicMap, content as string, callback as function<void,Error>)
-func updateArticle(id as string, headers as DynamicMap, content as string, callback as function<void,Error>)
-func deleteArticle(id as string, callback as function<void,Error>)
+import capex.text
+
+func getCategories(callback as function<void,vector<Category>>) abstract
+func getArticleCount(category as string, callback as function<void,int>) abstract
+func getArticles(category as string, offset as int, limit as int, callback as function<void,Category,vector<Article>>) abstract
+func getArticleById(id as string, callback as function<void,Article>) abstract
+func getArticleTitleSync(id as string) abstract as string
+func getCategoryTitleSync(id as string) abstract as string
+func getArticleAttachment(id as string, name as string, callback as function<void,string,buffer>) abstract
+
+func getIntroHtml(article as Article, resolver as RichTextDocumentReferenceResolver) as string
+{
+	assert article
+	var html = article.getIntroHtml()
+	if html:
+		return html
+	var markup = article.getIntroMarkup()
+	if String.isEmpty(markup):
+		return ""
+	var doc = assert RichTextDocument.forWikiMarkupString(markup)
+	return doc.toHtml(resolver)
+}
+
+func getContentHtml(article as Article, resolver as RichTextDocumentReferenceResolver) as string
+{
+	assert article
+	var html = article.getContentHtml()
+	if html:
+		return html
+	var markup = article.getContentMarkup()
+	if String.isEmpty(markup):
+		return ""
+	var doc = assert RichTextDocument.forWikiMarkupString(markup)
+	return doc.toHtml(resolver)
+}

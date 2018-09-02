@@ -17,54 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is DynamicMapObject imports cape:
+model:
 
-var data as DynamicMap
-
-ctor
-{
-	data = new DynamicMap()
-}
-
-func getId as string
-{
-	return(data.getString("id"))
-}
-
-func setId(value as string) as this
-{
-	data.set("id", value)
-	return(this)
-}
-
-func getTitle as string
-{
-	return(data.getString("title"))
-}
-
-func setTitle(value as string) as this
-{
-	data.set("title", value)
-	return(this)
-}
-
-func getIntro as string
-{
-	return(data.getString("intro"))
-}
-
-func setIntro(value as string) as this
-{
-	data.set("intro", value)
-	return(this)
-}
-
-func toDynamicMap as DynamicMap
-{
-	return(data.duplicateMap())
-}
-
-func fromDynamicMap(map as DynamicMap)
-{
-	data.mergeFrom(map)
-}
+id as string
+title as string
+slogan as string
+intro as string
+banner as string

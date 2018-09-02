@@ -24,35 +24,6 @@ import capex.console
 import capex.text
 import capex.util
 
-func isValidIdentifier(name as string) static as bool
-{
-	assert name
-	if String.getLength(name) < 1:
-		return false
-	var it = String.iterate(name)
-	while it {
-		var c = it.getNextChar()
-		if Character.isEOF(c):
-			break
-		if c >= 'a' && c <= 'z' {
-			;
-		}
-		else if c >= 'A' && c <= 'Z' {
-			;
-		}
-		else if c >= '0' && c <= '9' {
-			;
-		}
-		else if c == '-' || c == '_' || c == '.' {
-			;
-		}
-		else {
-			return false
-		}
-	}
-	return true
-}
-
 func addToCategory(id as string, category as string, categories as DynamicMap) static
 {
 	var list = categories.getDynamicVector(category)
@@ -89,7 +60,7 @@ func processContentDirectory(ctx as LoggingContext, categoryMap as DynamicMap, c
 		Log.error(ctx, "Directory has no basename: `" .. dir.getPath() .. "'")
 		v = false
 	}
-	else if isValidIdentifier(id) == false {
+	else if ArticleUtil.isValidIdentifier(id) == false {
 		Log.error(ctx, "Directory name is not a valid identifier: `" .. dir.getPath() .. "'")
 		v = false
 	}
@@ -163,7 +134,7 @@ func processContentDirectory(ctx as LoggingContext, categoryMap as DynamicMap, c
 		else {
 			var refs = doc.getAllReferences()
 			foreach ref in refs {
-				if isValidIdentifier(ref) == false {
+				if ArticleUtil.isValidIdentifier(ref) == false {
 					Log.error(ctx, "Invalid reference identifier: `" .. ref .. "' in `" .. markupFile.getPath() .. "'")
 					v = false
 				}
@@ -230,7 +201,7 @@ func checkCategoryDeclarations(ctx as LoggingContext, categoryMap as DynamicMap,
 		var key = it.next()
 		if key == null:
 			break
-		if isValidIdentifier(key) == false {
+		if ArticleUtil.isValidIdentifier(key) == false {
 			Log.error(ctx, "Invalid category name (not a valid identifier): `" .. key .. "'")
 			v = false
 		}
