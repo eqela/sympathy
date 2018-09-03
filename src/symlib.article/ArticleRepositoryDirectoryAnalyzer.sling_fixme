@@ -1,0 +1,269 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2016-2018 Job and Esther Technologies Oy
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+class:
+
+import cape
+import capex.console
+import capex.text
+import capex.util
+
+func addToCategory(id as string, category as string, categories as DynamicMap) static
+{
+	var list = categories.getDynamicVector(category)
+	if list == null {
+		list = new DynamicVector()
+		categories.set(category, list)
+	}
+	list.append(id)
+}
+
+func isValidCategoryReference(ref as string, categoryPathSuffix as string, categoryDeclarations as DynamicMap) static as bool
+{
+	assert ref
+	var catid = ref
+	if categoryPathSuffix {
+		if String.endsWith(catid, categoryPathSuffix) {
+			catid = String.getSubString(catid, 0, String.getLength(catid) - String.getLength(categoryPathSuffix))
+		}
+		else {
+			catid = null
+		}
+	}
+	assert catid
+	if categoryDeclarations.get(catid):
+		return true
+	return false
+}
+
+func processContentDirectory(ctx as LoggingContext, categoryMap as DynamicMap, categoryDeclarations as DynamicMap, categoryPathSuffix as string, dir as File) static as bool
+{
+	var v = true
+	var id = dir.baseName()
+	if String.isEmpty(id) {
+		Log.error(ctx, "Directory has no basename: `" .. dir.getPath() .. "'")
+		v = false
+	}
+	else if ArticleUtil.isValidIdentifier(id) == false {
+		Log.error(ctx, "Directory name is not a valid identifier: `" .. dir.getPath() .. "'")
+		v = false
+	}
+	var f = dir.entry("header.json")
+	if f.isFile() == false {
+		Log.error(ctx, "Directory does not contain a `header.json' file: `" .. dir.getPath() .. "'")
+		v = false
+	}
+	else {
+		var data = JSONParser.parse(f) as DynamicMap
+		if data == null {
+			Log.error(ctx, "Invalid file format: `" .. f.getPath() .. "'")
+			v = false
+		}
+		else {
+			var title = data.getString("title")
+			var slogan = data.getString("slogan")
+			var intro = data.getString("intro")
+			var banner = data.getString("banner")
+			var customBanner = data.getString("customBanner")
+			if String.isEmpty(title):
+				Log.warning(ctx, "No title: `" .. f.getPath() .. "'")
+			if String.isEmpty(slogan):
+				Log.warning(ctx, "No slogan: `" .. f.getPath() .. "'")
+			if String.isEmpty(intro):
+				Log.warning(ctx, "No intro: `" .. f.getPath() .. "'")
+			if String.isEmpty(banner) == false {
+				if String.endsWith(banner, ".jpg") == false:
+					Log.warning(ctx, "Banner `" .. banner .. "' for article `" .. id .. "' is not a JPG image.")
+				var bannerFile = dir.getParent().getSibling("theme").entry(banner)
+				if bannerFile.isFile() == false {
+					Log.error(ctx, "Banner `" .. banner .. "' for article `" .. id .. "' does not exist: `" .. bannerFile.getPath() .. "'")
+					v = false
+				}
+			}
+			else if String.isEmpty(customBanner) == false {
+				if String.endsWith(customBanner, ".jpg") == false:
+					Log.warning(ctx, "Custom banner `" .. customBanner .. "' for article `" .. id .. "' is not a JPG image.")
+				var bannerFile = dir.entry(customBanner)
+				if bannerFile.isFile() == false {
+					Log.error(ctx, "Custom banner `" .. customBanner .. "' for article `" .. id .. "' does not exist: `" .. bannerFile.getPath() .. "'")
+					v = false
+				}
+			}
+			else {
+				Log.warning(ctx, "No banner: `" .. f.getPath() .. "'")
+			}
+			var categories = data.getDynamicVector("categories")
+			if categories == null {
+				Log.warning(ctx, "Categories are not defined in file: `" .. f.getPath() .. "'")
+			}
+			else {
+				if categories.getSize() < 1:
+					Log.warning(ctx, "No categories specified (empty array): `" .. f.getPath() .. "'")
+				foreach category as string in categories.toVector():
+					addToCategory(id, category, categoryMap)
+			}
+		}
+	}
+	var markupFile = dir.entry("content.markup")
+	if markupFile.isFile() == false {
+		Log.error(ctx, "Content markup file is missing: `" .. markupFile.getPath() .. "'")
+		v = false
+	}
+	else {
+		var doc = RichTextDocument.forWikiMarkupString(markupFile.getContentsString("UTF-8"))
+		if doc == null {
+			Log.error(ctx, "Failed to parse rich text document: `" .. markupFile.getPath() .. "'")
+			v = false
+		}
+		else {
+			var refs = doc.getAllReferences()
+			foreach ref in refs {
+				if ArticleUtil.isValidIdentifier(ref) == false {
+					Log.error(ctx, "Invalid reference identifier: `" .. ref .. "' in `" .. markupFile.getPath() .. "'")
+					v = false
+				}
+				else {
+					var refdir = dir.getSibling(ref)
+					if refdir.isDirectory() {
+						; // ok
+					}
+					else if isValidCategoryReference(ref, categoryPathSuffix, categoryDeclarations) {
+						; // also ok
+					}
+					else {
+						Log.error(ctx, "Invalid reference (content does not exist): `" .. ref .. "' in `" .. markupFile.getPath() .. "'")
+						v = false
+					}
+				}
+			}
+			var links = doc.getAllLinks()
+			foreach link in links {
+				if String.startsWith(link, "http://") || String.startsWith(link, "https://") {
+					; // this is ok
+				}
+				else if String.indexOf(link, '/') < 0 && String.indexOf(link, '.') > 0 {
+					; // this is also ok
+				}
+				else {
+					Log.error(ctx, "Invalid link `" .. link .. "' in `" .. markupFile.getPath() .. "': Should EITHER start with http:// or https:// OR (not contain any slashes AND have a dot)")
+					v = false
+				}
+			}
+		}
+	}
+	Log.debug(ctx, "Content directory processed: `" .. f.getPath() .. "'")
+	return v
+}
+
+func isStaticCategory(category as DynamicMap) static as bool
+{
+	assert category
+	return category.getBoolean("static", false)
+}
+
+func checkCategoryDeclarations(ctx as LoggingContext, categoryMap as DynamicMap, categoryDeclarations as DynamicMap, cj as File, dir as File) static as bool
+{
+	var v = true
+	var it = categoryMap.iterateKeys()
+	while it {
+		var key = it.next()
+		if key == null:
+			break
+		var decl = categoryDeclarations.getDynamicMap(key)
+		if decl == null {
+			Log.error(ctx, "Category `" .. key .. "' is not declared in file: `" .. cj.getPath() .. "'")
+			Log.debug(ctx, "Category `" .. key .. "' is used by: `" .. JSONEncoder.encode(categoryMap.get(key)) .. "'")
+			v = false
+		}
+		else if isStaticCategory(decl) {
+			Log.error(ctx, "Static category `" .. key .. "' has articles assigned to it: `" .. JSONEncoder.encode(categoryMap.get(key)) .. "'")
+			v = false
+		}
+	}
+	it = categoryDeclarations.iterateKeys()
+	while it {
+		var key = it.next()
+		if key == null:
+			break
+		if ArticleUtil.isValidIdentifier(key) == false {
+			Log.error(ctx, "Invalid category name (not a valid identifier): `" .. key .. "'")
+			v = false
+		}
+		var categoryData = categoryDeclarations.getDynamicMap(key)
+		if String.isEmpty(categoryData.getString("title")):
+			Log.warning(ctx, "Category has no title: `" .. key .. "'")
+		if String.isEmpty(categoryData.getString("slogan")):
+			Log.warning(ctx, "Category has no slogan: `" .. key .. "'")
+		if String.isEmpty(categoryData.getString("intro")):
+			Log.warning(ctx, "Category has no intro: `" .. key .. "'")
+		var banner = categoryData.getString("banner")
+		if String.isEmpty(banner) {
+			Log.warning(ctx, "Category has no banner: `" .. key .. "'")
+		}
+		else {
+			var bannerFile = dir.getSibling("theme").entry(banner)
+			if bannerFile.isFile() == false {
+				Log.error(ctx, "Banner `" .. banner .. "' for category `" .. key .. "' does not exist: `" .. bannerFile.getPath() .. "'")
+				v = false
+			}
+		}
+		if isStaticCategory(categoryData):
+			continue
+		var ee = categoryMap.getDynamicVector(key)
+		if ee == null:
+			Log.warning(ctx, "Unused category `" .. key .. "' declared in file: `" .. cj.getPath() .. "'")
+	}
+	return v
+}
+
+func analyze(ctx as LoggingContext, dataDir as File, categoryPathSuffix as string) static as DynamicMap
+{
+	var v = true
+	var categoryDeclarations as DynamicMap
+	var cj = dataDir.entry("categories.json")
+	if cj.isFile() == false {
+		Log.warning(ctx, "Category declaration file does not exist: `" .. cj.getPath() .. "'")
+	}
+	else {
+		categoryDeclarations = JSONParser.parse(cj) as DynamicMap
+		if categoryDeclarations == null {
+			Log.error(ctx, "Failed to read category declaration file: `" .. cj.getPath() .. "'")
+			v = false
+		}
+	}
+	if categoryDeclarations == null:
+		categoryDeclarations = new DynamicMap()
+	var categoryMap = new DynamicMap()
+	var it = dataDir.entries()
+	while it {
+		var e = it.next()
+		if e == null:
+			break
+		if e.isDirectory() {
+			var bn = e.baseName()
+			if bn && categoryPathSuffix && String.endsWith(bn, categoryPathSuffix):
+				Log.warning(ctx, "Article name ends with category path suffix (possible conflict with category pages): `" .. bn .. "'")
+			if processContentDirectory(ctx, categoryMap, categoryDeclarations, categoryPathSuffix, e) == false:
+				v = false
+		}
+	}
+	if checkCategoryDeclarations(ctx, categoryMap, categoryDeclarations, cj, dataDir) == false:
+		v = false
+	return categoryMap
+}

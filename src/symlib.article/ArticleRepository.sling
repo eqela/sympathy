@@ -1,0 +1,56 @@
+
+/*
+ * This file is part of Sympathy
+ * Copyright (c) 2016-2018 Job and Esther Technologies Oy
+ * Copyright (c) 2018 Eqela Oy
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License, version 3,
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+class abstract:
+
+import capex.text
+
+func getCategories(callback as function<void,vector<Category>>) abstract
+func getArticleCount(category as string, callback as function<void,int>) abstract
+func getArticles(category as string, offset as int, limit as int, callback as function<void,Category,vector<Article>>) abstract
+func getArticleById(id as string, callback as function<void,Article>) abstract
+func getArticleTitleSync(id as string) abstract as string
+func getCategoryTitleSync(id as string) abstract as string
+func getArticleAttachment(id as string, name as string, callback as function<void,string,buffer>) abstract
+
+func getIntroHtml(article as Article, resolver as RichTextDocumentReferenceResolver) as string
+{
+	assert article
+	var html = article.getIntroHtml()
+	if html:
+		return html
+	var markup = article.getIntroMarkup()
+	if String.isEmpty(markup):
+		return ""
+	var doc = assert RichTextDocument.forWikiMarkupString(markup)
+	return doc.toHtml(resolver)
+}
+
+func getContentHtml(article as Article, resolver as RichTextDocumentReferenceResolver) as string
+{
+	assert article
+	var html = article.getContentHtml()
+	if html:
+		return html
+	var markup = article.getContentMarkup()
+	if String.isEmpty(markup):
+		return ""
+	var doc = assert RichTextDocument.forWikiMarkupString(markup)
+	return doc.toHtml(resolver)
+}

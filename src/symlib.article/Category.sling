@@ -17,34 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+model:
 
-prop timeStamp as long
-prop workdir as File
-prop repositories as vector<string>
-prop services as vector<Service>
-prop environment as map<string,string>
-
-func addToRepositories(rep as string)
-{
-	assert rep
-	if not repositories:
-		repositories = new vector<string>
-	repositories += rep
-}
-
-func addToServices(service as Service)
-{
-	assert service
-	if not services:
-		services = new vector<Service>
-	services += service
-}
-
-func addToEnvironment(key as string, value as string)
-{
-	assert key
-	if not environment:
-		environment = new map<string,string>
-	environment[key] = value
-}
+id as string
+title as string
+slogan as string
+intro as string
+banner as string
