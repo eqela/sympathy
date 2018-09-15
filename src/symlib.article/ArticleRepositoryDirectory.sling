@@ -25,6 +25,19 @@ import capex.text
 class MyArticle is Article
 {
 	prop timestamp as long
+
+	func mergeToCategories(categories as vector<string>)
+	{
+		assert categories
+		var cc = new vector<string>
+		if Vector.isEmpty(categories) == false {
+			foreach category in categories:
+				cc += category
+			foreach category in getCategories():
+				cc += category
+		}
+		setCategories(cc)
+	}
 }
 
 func forDirectory(ctx as LoggingContext, dir as File) static as this
@@ -254,8 +267,9 @@ func doReadArticleFile(file as File) private as MyArticle
 				v.setDate(iarticle.getDate())
 				v.setRedirect(iarticle.getRedirect())
 				v.setBanner(iarticle.getBanner())
-				v.setCategories(iarticle.getCategories())
+				v.mergeToCategories(iarticle.getCategories())
 				v.setShareImage(iarticle.getShareImage())
+				v.setParent(iarticle.getParent())
 				v.setShareDescription(iarticle.getShareDescription())
 			}
 			continue
@@ -291,6 +305,9 @@ func doReadArticleFile(file as File) private as MyArticle
 				}
 				else if key == "shareDescription" {
 					v.setShareDescription(value)
+				}
+				else if key == "parent" {
+					v.setParent(value)
 				}
 				else if key == "categories" {
 					var vc = new vector<string>

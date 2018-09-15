@@ -203,6 +203,19 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 	})
 }
 
+func getBreadcrumbs(article as Article) as vector
+{
+	assert article
+	var parent = article.getParent()
+	assert String.isNotEmpty(parent)
+	var v = new vector
+	var o = new DynamicMap()
+	o.set("reference", parent)
+	o.set("text", repository.getArticleTitleSync(parent))
+	v += o
+	return v
+}
+
 func onGETArticle(req as HTTPServerRequest, next as function)
 {
 	var pageId = req.peekResource()
@@ -251,6 +264,7 @@ func onGETArticle(req as HTTPServerRequest, next as function)
 		map.set("introHtml", introHtml)
 		var contentHtml = repository.getContentHtml(article, myObject)
 		map.set("contentHtml", contentHtml)
+		map.set("breadcrumbs", getBreadcrumbs(article))
 		processTimeStamp(map)
 		sendResponse(req, "article", map)
 	})

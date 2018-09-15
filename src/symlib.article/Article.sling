@@ -31,5 +31,6 @@ banner as string
 shareImage as string
 shareDescription as string
 categories as string[]
+parent as string
 contentMarkup as string
 contentHtml as string

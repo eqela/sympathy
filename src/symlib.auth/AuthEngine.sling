@@ -62,7 +62,6 @@ model UserModel
 }
 
 prop ctx as LoggingContext
-prop allowRegistration = true
 prop db as SQLDatabase
 prop validationEmailTemplate as string
 prop recoveryEmailTemplate as string
