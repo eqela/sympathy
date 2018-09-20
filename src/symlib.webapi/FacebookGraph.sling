@@ -21,6 +21,18 @@ class:
 
 import capex.web
 
+var client static private as JSONAPIClient
+
+func getClient static private as JSONAPIClient
+{
+	if not client {
+		client = new JSONAPIClient()
+		client.setApiUrl("https://graph.facebook.com/")
+		client.setRedirectionEnabled(true)
+	}
+	return client
+}
+
 func getUserProfile(fbUserId as string, fbAccessToken as string, callback as function<void,DynamicMap,Error>) static:
 	getUserProfile(fbUserId, fbAccessToken, null, callback)
 
@@ -43,9 +55,8 @@ func getUserProfile(fbUserId as string, fbAccessToken as string, fields as Dynam
 	}
 	if String.isEmpty(f):
 		f = "id,address,about,birthday,email,gender,education,first_name,last_name"
-	var client = assert NativeWebClient.instance():
-		callback(null, Error.forCode("failedToCreateNativeWebClient"))
-	client.query("GET", "https://graph.facebook.com/" .. fbUserId .. "?fields=" .. f .. "&access_token=" .. fbAccessToken, null, null, func(statusCode as string, responseHeaders as KeyValueList<string,string>, body as buffer) {
+	var client = getClient()
+	client.doSendRequest("GET", client.getFullURL(fbUserId .. "?fields=" .. f .. "&access_token=" .. fbAccessToken), null, null, func(responseHeaders as KeyValueList<string,string>, body as buffer) {
 		var json = assert JSONParser.parse(DataValidator.toValidJSONString(replaceUnicodeChars(String.forUTF8Buffer(body)))) as DynamicMap:
 			callback(null, Error.forCode("invalidResponse"))
 		var error = json.getDynamicMap("error")
@@ -56,17 +67,37 @@ func getUserProfile(fbUserId as string, fbAccessToken as string, fields as Dynam
 			callback(null, e)
 		}
 		callback(json, null)
+	}, func(error as Error) {
+		callback(null, error)
+	})
+}
+
+func getUserPhoto(fbUserId as string, width as int, height as int, callback as function<void, KeyValueList<string,string>, buffer, Error>) static
+{
+	assert String.isNotEmpty(fbUserId):
+		callback(null, null, Error.instance("no_fb_id", "No FB id"))
+	var w = width
+	if w < 100:
+		w = 100
+	var h = height
+	if h < 100:
+		h = 100
+	var client = getClient()
+	client.doGetFile(fbUserId .. "/picture?height=" .. String.forInteger(h) .. "&width=" .. String.forInteger(w), func(responseHeaders as KeyValueList<string,string>, body as buffer) {
+		assert body && Buffer.getSize(body) > 0:
+			callback(null, null, Error.instance("failedToConnect", "Failed to connect to server. Please check your internet connection and then try again."))
+		callback(responseHeaders, body, null)
+	}, func(error as Error) {
+		callback(null, null, error)
 	})
 }
 
 func replaceUnicodeChars(response as string) static as string
 {
 	var str = response
-	if(String.contains(response, "\\u0040")) {
+	if String.contains(response, "\\u0040"):
 		str = String.replace(response, "\\u0040", "@")
-	}
-	if(String.contains(response, "\\u00f1")) {
+	if String.contains(response, "\\u00f1"):
 		str = String.replace(str, "\\u00f1", "ñ")
-	}
-	return(str)
+	return str
 }
