@@ -16,9 +16,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-use eqela:slingbuild:r19
+use eqela:slingbuild:r27
 use eqela:jsh:r4
-set version 5.4.0
+set version 5.3.2
 
 buildAll {
 	call buildLib
@@ -33,23 +33,36 @@ buildLib {
 }
 
 buildApps {
-	eqela:slingbuild buildEqelaPackageDll src=src/apigwy output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/artsc output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/artsy output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/authdby output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/chaty output=build/output version=${version} $(*)
-	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/dby output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/filesy output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/html2pdfy output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/svcy output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/pnfwy output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/profiley output=build/output version=${version} $(*)
+	call buildDll src=apigwy title="Sympathy Ppigwy"
+	call buildDll src=artsc title="Sympathy Article Compiler"
+	call buildDll src=artsy title="Sympathy Article Server"
+	call buildDll src=authdby title="Auth Database Server"
+	call buildDll src=chaty title="Sympathy Chat Server"
+	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/dby output=build/output version=${version} $(*) -PprojectType=console
+	call buildDll src=filesy title="Sympathy File Server"
+	call buildDll src=html2pdfy title="Sympathy HTML to PDF Service"
+	call buildDll src=svcy title="Sympathy Svcy"
+	call buildDll src=pnfwy title="Sympathy Push Notification Forwarder"
+	call buildDll src=profiley title="Sympathy Profiley"
 	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/reporttool output=build/output version=${version} $(*)
 	# FIXME: eqela:slingbuild buildEqelaPackageDll src=src/reporty output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/smsgwy output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/sqlc output=build/output version=${version} $(*)
-	eqela:slingbuild buildEqelaPackageDll src=src/sqlfwy output=build/output version=${version} $(*)
+	call buildDll src=smsgwy title="Sympathy SMS Gateway"
+	call buildDll src=sqlc title="Sympathy SQL Client"
+	call buildDll src=sqlfwy title="Sympathy SQL Forwarder"
 	eqela:slingbuild buildEqelaPackageFile files=build/output name=sympathy vendor=eqela version=${version}
+}
+
+buildDll : src title {
+	requireValue src
+	requireValue title
+	eqela:slingbuild buildEqelaPackageDll src=src/${src} output=build/output version=${version} $(*) \
+		-PprojectType=console \
+		-Ptitle=${title} \
+		-Purl="http://sympathy.ws" \
+		-Pdescription="Dynamic web service and application platform" \
+		-Pcopyright="Copyright (c) 2018 Eqela Oy" \
+		-Plicense="Licensed under AGPLv3 (see LICENSE for details)" \
+		-PvendorId="ws.sympathy"
 }
 
 buildOneApp : name {
