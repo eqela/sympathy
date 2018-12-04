@@ -22,6 +22,9 @@ class is WebServerWithDatabase:
 import capex.console
 import capex.net
 import sympathy
+import sympathy.db
+import capex.mysql
+import capex.data
 import sympathy.dbapp
 import symlib.chat
 
@@ -120,3 +123,6 @@ func initializeWithIOManager(ioManager as IOManager, ctx as LoggingContext) over
 	assert engine.initializeEngine(ioManager)
 	return true
 }
+
+func initializeSQLDatabase(dbstring as string) override as SQLDatabase:
+	return SQLDatabaseProvider.getDatabase(ctx, dbstring, MySQLDatabase.SSL_MODE_NONE, true)
