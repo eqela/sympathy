@@ -81,7 +81,7 @@ func generateCode(prefix as string = null, length as int = 8, allCaps as bool = 
 func updateReadStatus(channelId as string, userId as string) static
 {
 	assert String.isNotEmpty(channelId) && String.isNotEmpty(userId)
-	db.execute(db.prepare("UPDATE " .. CHAT_RECIPIENTS .. " SET readIndex = COALESCE((SELECT MAX(messageIndex) AS topIndex FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?), 0) WHERE channelId = ? AND userId = ?;").addParamString(channelId).addParamString(channelId).addParamString(userId))
+	db.execute(db.prepare("UPDATE " .. CHAT_RECIPIENTS .. " SET readIndex = COALESCE((SELECT MAX(messageIndex + 1) AS topIndex FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?), 0) WHERE channelId = ? AND userId = ?;").addParamString(channelId).addParamString(channelId).addParamString(userId))
 }
 
 func getReadStatusAsMapForUserId(userId as string) static as DynamicMap
@@ -93,7 +93,7 @@ func getReadStatusAsMapForUserId(userId as string) static as DynamicMap
 		if not c:
 			break
 		var channelId = c.getString("channelId")
-		var v = db.querySingleRow(db.prepare("SELECT COALESCE((SELECT MAX(messageIndex) FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?), 0) - COALESCE(readIndex, 0) AS unreadCount FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ? AND userId = ?;").addParamString(channelId).addParamString(channelId).addParamString(userId))
+		var v = db.querySingleRow(db.prepare("SELECT COALESCE((SELECT MAX(messageIndex + 1) FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?), 0) - COALESCE(readIndex, 0) AS unreadCount FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ? AND userId = ?;").addParamString(channelId).addParamString(channelId).addParamString(userId))
 		if v {
 			var uc = v.getLongInteger("unreadCount")
 			if uc < 0:
@@ -113,7 +113,7 @@ func getReadStatusAsMapForChannelId(channelId as string) static as DynamicMap
 		if not c:
 			break
 		var userId = c.getString("userId")
-		var v = db.querySingleRow(db.prepare("SELECT COALESCE((SELECT MAX(messageIndex) FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?), 0) - COALESCE(readIndex, 0) AS unreadCount FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ? AND userId = ?;").addParamString(channelId).addParamString(channelId).addParamString(userId))
+		var v = db.querySingleRow(db.prepare("SELECT COALESCE((SELECT MAX(messageIndex + 1) FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?), 0) - COALESCE(readIndex, 0) AS unreadCount FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ? AND userId = ?;").addParamString(channelId).addParamString(channelId).addParamString(userId))
 		if v {
 			var uc = v.getLongInteger("unreadCount")
 			if uc < 0:
