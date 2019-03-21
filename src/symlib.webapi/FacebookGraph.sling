@@ -69,7 +69,7 @@ func getUserProfile(fbUserId as string, fbAccessToken as string, fields as Dynam
 		callback(json, null)
 	}, func(error as Error) {
 		callback(null, error)
-	})
+	}, 0)
 }
 
 func getUserPhoto(fbUserId as string, width as int, height as int, callback as function<void, KeyValueList<string,string>, buffer, Error>) static

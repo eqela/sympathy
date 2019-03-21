@@ -88,7 +88,7 @@ func get(url as string, headers as KeyValueList<string,string>, callback as func
 		callback(json, null)
 	}, func(error as Error) {
 		callback(null, error)
-	})
+	}, 0)
 }
 
 func post(url as string, headers as KeyValueList<string,string>, data as DynamicMap, callback as function<void, DynamicMap, Error>) private
@@ -101,7 +101,7 @@ func post(url as string, headers as KeyValueList<string,string>, data as Dynamic
 		callback(json, null)
 	}, func(error as Error) {
 		callback(null, error)
-	})
+	}, 0)
 }
 
 func put(url as string, headers as KeyValueList<string,string>, data as DynamicMap, callback as function<void, DynamicMap, Error>) private
@@ -114,7 +114,7 @@ func put(url as string, headers as KeyValueList<string,string>, data as DynamicM
 		callback(json, null)
 	}, func(error as Error) {
 		callback(null, error)
-	})
+	}, 0)
 }
 
 func delete(url as string, headers as KeyValueList<string,string>, callback as function<void, DynamicMap, Error>) private
@@ -127,7 +127,7 @@ func delete(url as string, headers as KeyValueList<string,string>, callback as f
 		callback(json, null)
 	}, func(error as Error) {
 		callback(null, error)
-	})
+	}, 0)
 }
 
 func authenticate(sessionId as string, callback as function<void, DynamicMap, Error>)

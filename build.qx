@@ -16,9 +16,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-use eqela:slingbuild:r28
+use eqela:slingbuild:r33
 use eqela:jsh:r4
-set version 5.4.1
+set version 5.5.0
 
 buildAll {
 	call buildLib

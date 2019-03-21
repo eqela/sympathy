@@ -17,11 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServer imports sympathy.app:
+class is WebServer:
 
 import cape
 import capex.console
 import sympathy
+import sympathy.app
 
 var contentDirectory as File
 var listDirectories = true
