@@ -36,6 +36,7 @@ func forMessageSavedCommand(message as this, channel as ChatChannel) static as t
 	data.set("messageId", message.getMessageId())
 	data.set("message", message.getMessage())
 	data.set("attachmentFileName", message.getAttachmentFileName())
+	data.set("attachmentURL", message.getAttachmentURL())
 	data.set("creatorUserId", message.getCreatorUserId())
 	data.set("timeStampCreated", message.getTimeStampCreated())
 	data.set("timeStampLastUpdated", message.getTimeStampLastUpdated())
@@ -64,6 +65,7 @@ func forBuffer(data as buffer) static as this
 		v.setMessageId(dmap.getString("messageId"))
 	v.setChannelId(dmap.getString("channelId"))
 	v.setAttachmentFileName(dmap.getString("attachmentFileName"))
+	v.setAttachmentURL(dmap.getString("attachmentURL"))
 	v.setChannelCreatorUserId(dmap.getString("channelCreatorUserId"))
 	v.setExternalId(dmap.getString("externalId"))
 	v.setTitle(dmap.getString("title"))
@@ -81,6 +83,7 @@ prop channelId as string
 prop externalId as string
 prop messageId as string
 prop attachmentFileName as string
+prop attachmentURL as string
 prop creatorUserId as string
 prop timeStampCreated as long
 prop timeStampLastUpdated as long
@@ -173,6 +176,8 @@ func toBuffer as buffer
 		d.set("externalId", externalId)
 	if String.isNotEmpty(attachmentFileName):
 		d.set("attachmentFileName", attachmentFileName)
+	if String.isNotEmpty(attachmentURL):
+		d.set("attachmentURL", attachmentURL)
 	var recipients = getRecipients()
 	if recipients:
 		d.set("recipients", recipients)
