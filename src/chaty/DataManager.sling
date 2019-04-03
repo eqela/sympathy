@@ -271,7 +271,8 @@ func insertMessage(message as ChatMessage, newChannelId as string, creatorUserId
 		callback(null, Error.instance("no_message", "No message"))
 	var messageText = message.getMessage()
 	var attachmentFileName = message.getAttachmentFileName()
-	assert String.isNotEmpty(messageText) || String.isNotEmpty(attachmentFileName):
+	var attachmentURL = message.getAttachmentURL()
+	assert String.isNotEmpty(messageText) || String.isNotEmpty(attachmentFileName) || String.isNotEmpty(attachmentURL):
 		callback(null, Error.instance("no_message_or_attachment_file_name", "No message or attachment file name"))
 	assert String.isNotEmpty(creatorUserId):
 		callback(null, Error.instance("no_creator_user_id", "No creator user id"))
@@ -280,6 +281,7 @@ func insertMessage(message as ChatMessage, newChannelId as string, creatorUserId
 	v.setChannelId(newChannelId)
 	v.setMessage(messageText)
 	v.setAttachmentFileName(attachmentFileName)
+	v.setAttachmentURL(attachmentURL)
 	Message.insert(v, func(error as Error) {
 		assert not error:
 			callback(null, error)
