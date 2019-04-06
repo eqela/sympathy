@@ -25,7 +25,7 @@ import capex.data
 prop messageId as string #dataField #primary
 prop channelId as string #dataField #index
 prop creatorUserId as string #dataField #index
-prop message as string #dataField
+prop message as string #dataField #text
 prop timeStampCreated as long #dataField #index
 prop timeStampLastUpdated as long #dataField #index
 prop messageIndex as long #dataField #index
