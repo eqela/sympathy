@@ -904,15 +904,15 @@ func onDataMessageFromHTTPControl(data as DynamicMap, callback as function<void,
 		}
 		var recipients = getRecipientIdsForChannelId(channelId)
 		assert recipients && recipients.getSize() > 1 {
-			logError("Internal error: fetched channel has no recipients.")
-			callback(Error.instance("internal_error", "Internal error"))
+			logError("fetched channel has no recipients.")
+			callback(null)
 		}
 		var recipientMap = new DynamicMap()
 		foreach userId in recipients.toVectorOfStrings():
 			recipientMap.set(userId, userId)
 		assert recipientMap.getCount() > 1 {
-			logError("Internal error: fetched channel has no recipients.")
-			callback(Error.instance("internal_error", "Internal error"))
+			logError("fetched channel has no recipients.")
+			callback(null)
 		}
 		assert recipientMap.containsKey(creatorUserId) {
 			logError("Internal error: fetched channel recipients do not include creator user id.")
