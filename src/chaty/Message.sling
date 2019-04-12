@@ -61,15 +61,38 @@ func getMessageCount(channelId as string) static as long
 	return v.getLongInteger("size")
 }
 
-func getMessages(channelId as string, callback as function<void, DynamicVector>) static
+func getMessages(channelId as string, page as int, limit as int, callback as function<void, DynamicVector, int, int>) static
 {
+	if limit <= 0:
+		limit = 20
+	var offset = page - 1
+	if offset < 0:
+		offset = 0
 	var db = assert DataManager.getDb():
-		callback(new DynamicVector())
-	db.query(db.prepare("SELECT messageId, channelId, creatorUserId, message, timeStampCreated, timeStampLastUpdated, messageIndex, attachmentFileName, attachmentURL FROM " .. DataManager.CHAT_MESSAGES .. " WHERE channelId = ? ORDER BY timeStampCreated ASC;").addParamString(channelId), func(itr as SQLResultSetIterator) {
+		callback(new DynamicVector(), 0, 0)
+	db.query(db.prepare(createQueryString(false)).addParamString(channelId).addParamInteger(limit).addParamInteger(offset * limit), func(itr as SQLResultSetIterator) {
 		assert itr:
-			callback(new DynamicVector())
-		callback(itr.toVectorOfMaps())
+			callback(new DynamicVector(), 0, 0)
+		var data = assert db.query(db.prepare(createQueryString(true)).addParamString(channelId)):
+			callback(new DynamicVector(), 0, 0)
+		var dvector = assert data.toVectorOfMaps():
+			callback(new DynamicVector(), 0, 0)
+		var count = dvector.getSize()
+		var pageCount = count / limit
+		if((count % limit) > 0):
+			pageCount++
+		callback(itr.toVectorOfMaps(), pageCount, count)
 	})
+}
+
+func createQueryString(isForCount as bool) private static as string
+{
+	var sb = new StringBuilder()
+	sb.append("SELECT messageId, channelId, creatorUserId, message, timeStampCreated, timeStampLastUpdated, messageIndex, attachmentFileName, attachmentURL FROM " .. DataManager.CHAT_MESSAGES .. " WHERE channelId = ?")
+	if not isForCount:
+		sb.append(" ORDER BY timeStampCreated ASC LIMIT ? OFFSET ?")
+	sb.append(";")
+	return sb.toString()
 }
 
 func getRecentMessage(channelId as string) static as DynamicMap

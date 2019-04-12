@@ -229,7 +229,8 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 	var commandMap = assert JSONParser.parse(message.getData()) as DynamicMap
 	var command = commandMap.getString("command")
 	if "get_channels" == command {
-		DataManager.getChannels(creatorUserId, commandMap.getInteger("page"), func(channels as DynamicVector) {
+		var page = commandMap.getInteger("page", 1)
+		DataManager.getChannels(creatorUserId, page, commandMap.getInteger("limit"), func(channels as DynamicVector, pageCount as int, totalRecords as int) {
 			var rsm = getReadStatusAsMapForUserId(creatorUserId)
 			foreach channel in channels.toVectorOfDynamicMaps() {
 				var channelId = channel.getString("channelId")
@@ -242,6 +243,9 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 			var data = new DynamicMap()
 			data.set("command", "get_channels")
 			data.set("channels", channels)
+			data.set("currentPage", page)
+			data.set("totalPages", pageCount)
+			data.set("totalRecords", totalRecords)
 			var v = new DynamicMap()
 			v.set("messageType", ChatMessage.COMMAND_TYPE)
 			v.set("data", data)
@@ -252,6 +256,8 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 	else if "get_messages" == command {
 		var channelId = commandMap.getString("channelId")
 		var externalId = commandMap.getString("externalId")
+		var page = commandMap.getInteger("page", 1)
+		var limit = commandMap.getInteger("limit")
 		if String.isNotEmpty(externalId) {
 			authenticator.verifyExternalId(user.getSessionId(), externalId, func(responseData as DynamicMap, error as Error) {
 				assert not error {
@@ -303,7 +309,7 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 										logError("Update recipients error: '" .. error3.toString() .. "'. Closing the connection instead.")
 										callback(null, error3)
 									}
-									DataManager.getMessages(channelId, func(messages as DynamicVector) {
+									DataManager.getMessages(channelId, page, limit, func(messages as DynamicVector, pageCount as int, totalRecords as int) {
 										DataManager.updateReadStatus(channelId, creatorUserId)
 										var data = new DynamicMap()
 										data.set("command", "get_messages")
@@ -313,6 +319,9 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 										data.set("recipients", getRecipientIdsForChannelId(channelId))
 										data.set("externalId", externalId)
 										data.set("messages", messages)
+										data.set("currentPage", page)
+										data.set("totalPages", pageCount)
+										data.set("totalRecords", totalRecords)
 										var v = new DynamicMap()
 										v.set("messageType", ChatMessage.COMMAND_TYPE)
 										v.set("data", data)
@@ -328,7 +337,7 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 								logError("Update recipients error: '" .. error2.toString() .. "'. Closing the connection instead.")
 								callback(null, error2)
 							}
-							DataManager.getMessages(channelId, func(messages as DynamicVector) {
+							DataManager.getMessages(channelId, page, limit, func(messages as DynamicVector, pageCount as int, totalRecords as int) {
 								DataManager.updateReadStatus(channelId, creatorUserId)
 								var data = new DynamicMap()
 								data.set("command", "get_messages")
@@ -338,6 +347,9 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 								data.set("recipients", getRecipientIdsForChannelId(channelId))
 								data.set("externalId", externalId)
 								data.set("messages", messages)
+								data.set("currentPage", page)
+								data.set("totalPages", pageCount)
+								data.set("totalRecords", totalRecords)
 								var v = new DynamicMap()
 								v.set("messageType", ChatMessage.COMMAND_TYPE)
 								v.set("data", data)
@@ -353,7 +365,7 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 								logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
 								callback(null, Error.forCode("internalError"))
 							}
-							DataManager.getMessages(newChannelId, func(messages as DynamicVector) {
+							DataManager.getMessages(channelId, page, limit, func(messages as DynamicVector, pageCount as int, totalRecords as int) {
 								DataManager.updateReadStatus(newChannelId, creatorUserId)
 								var data = new DynamicMap()
 								data.set("command", "get_messages")
@@ -363,6 +375,9 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 								data.set("recipients", getRecipientIdsForChannelId(newChannelId))
 								data.set("externalId", externalId)
 								data.set("messages", messages)
+								data.set("currentPage", page)
+								data.set("totalPages", pageCount)
+								data.set("totalRecords", totalRecords)
 								var v = new DynamicMap()
 								v.set("messageType", ChatMessage.COMMAND_TYPE)
 								v.set("data", data)
@@ -383,7 +398,7 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 		assert String.isNotEmpty(channelId)
 		DataManager.getChannel(channelId, func(channel as Channel) {
 			assert channel && String.equals(channelId, channel.getChannelId())
-			DataManager.getMessages(channelId, func(messages as DynamicVector) {
+			DataManager.getMessages(channelId, page, limit, func(messages as DynamicVector, pageCount as int, totalRecords as int) {
 				DataManager.updateReadStatus(channelId, creatorUserId)
 				var data = new DynamicMap()
 				data.set("command", "get_messages")
@@ -393,6 +408,9 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 				data.set("channelId", channelId)
 				data.set("recipients", getRecipientIdsForChannelId(channelId))
 				data.set("messages", messages)
+				data.set("currentPage", page)
+				data.set("totalPages", pageCount)
+				data.set("totalRecords", totalRecords)
 				var v = new DynamicMap()
 				v.set("messageType", ChatMessage.COMMAND_TYPE)
 				v.set("data", data)
