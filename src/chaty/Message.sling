@@ -32,6 +32,7 @@ prop messageIndex as long #dataField #index
 prop attachmentFileName as string #dataField #index
 prop attachmentURL as string #dataField #index
 prop attachment as buffer #dataField
+prop attachmentMimetype as string #dataField
 
 func insert(message as this, callback as function<void, Error>) static
 {
