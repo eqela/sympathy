@@ -30,6 +30,7 @@ prop timeStampCreated as long #dataField #index
 prop timeStampLastUpdated as long #dataField #index
 prop channelPhotoFileName as string #dataField #index
 prop channelPhoto as buffer #dataField
+prop channelPhotoMimetype as string #dataField
 
 func onInsert #onInsert
 {
