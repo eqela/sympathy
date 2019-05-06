@@ -100,6 +100,17 @@ POST "sendDataMessage"
 	})
 }
 
+POST "broadcastMessage"
+{
+	var data = assert req.getBodyJSONMap():
+		req.sendJSONObject(JSONResponse.forInvalidRequest())
+	engine.broadcastMessageFromHTTPControl(data.getString("messageId"), func(error as Error) {
+		assert not error:
+			req.sendJSONObject(JSONResponse.forError(error))
+		req.sendJSONObject(JSONResponse.forOk())
+	})
+}
+
 DELETE "deleteChannelForExternalId/*"
 {
 	receivePath externalId

@@ -575,6 +575,9 @@ func createAcknowledgeCommand(userId as string, callback as function<void, ChatM
 func createMessage(data as buffer) as ChatMessage:
 	return ChatMessage.forBuffer(data)
 
+func createMessageFromMap(data as DynamicMap) as ChatMessage:
+	return ChatMessage.forDynamicMap(data)
+
 func getUserCount(callback as function<void, int>) virtual:
 	callback(0)
 

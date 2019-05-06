@@ -289,6 +289,15 @@ func insertMessage(message as ChatMessage, newChannelId as string, creatorUserId
 	})
 }
 
+func getMessageById(messageId as string, callback as function<void, Message, Error>) static
+{
+	Message.getMessageById(messageId, func(message as Message) {
+		assert message:
+			callback(null, Error.instance("internal_error", "Internal error"))
+		callback(message, null)
+	})
+}
+
 func getChannelForExternalId(externalId as string, callback as function<void, Channel>) static:
 	Channel.getChannelForExternalId(externalId, callback)
 
