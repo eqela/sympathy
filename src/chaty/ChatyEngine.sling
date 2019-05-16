@@ -665,6 +665,8 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 				})
 				return
 			}
+			foreach userId in oldRecipients.toVectorOfStrings():
+				newRecipientMap.remove(userId)
 			newRecipients = DynamicVector.forStringVector(newRecipientMap.getKeys())
 			DataManager.updateRecipients(channelId, creatorUserId, newRecipients, func(error as Error) {
 				assert not error {

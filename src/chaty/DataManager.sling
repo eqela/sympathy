@@ -246,8 +246,6 @@ func updateRecipients(channelId as string, creatorUserId as string, newRecipient
 	assert newRecipients && newRecipients.getSize() >= 0:
 		callback(Error.instance("empty_recipient_list", "Empty recipient list"))
 	var userIdMap = new DynamicMap()
-	if String.isNotEmpty(creatorUserId):
-		userIdMap.set(creatorUserId, creatorUserId)
 	foreach userId in newRecipients.toVectorOfStrings() {
 		assert String.isNotEmpty(userId):
 			callback(Error.instance("empty_user_id_found", "Empty user id found in the list of recipients"))
@@ -256,11 +254,7 @@ func updateRecipients(channelId as string, creatorUserId as string, newRecipient
 	var userIds = userIdMap.getKeys()
 	assert userIds && SIZE(userIds) > 0:
 		callback(Error.instance("invalid_recipient_count", "Cannot have recipient size less than one"))
-	db.execute(db.prepare("DELETE FROM " .. CHAT_RECIPIENTS .. " WHERE channelId = ?;").addParamString(channelId), func(deleted as bool) {
-		assert deleted:
-			callback(Error.instance("internal_error", "Internal error"))
-		insertRecipients(channelId, creatorUserId, DynamicVector.forStringVector(userIds), callback)
-	})
+	insertRecipients(channelId, creatorUserId, DynamicVector.forStringVector(userIds), callback)
 }
 
 func insertMessage(message as ChatMessage, newChannelId as string, creatorUserId as string, callback as function<void, Message, Error>) static
@@ -355,24 +349,26 @@ func insertRecipients(channelId as string, channelCreatorUserId as string, recip
 	var newRecipients = assert recipients:
 		callback(Error.instance("internal_error", "Internal error"))
 	var userIdMap = new DynamicMap()
-	if String.isNotEmpty(channelCreatorUserId):
-		newRecipients.append(channelCreatorUserId)
 	foreach userId in newRecipients.toVectorOfStrings() {
 		assert String.isNotEmpty(userId):
 			callback(Error.instance("empty_user_id_found", "Empty user id found in the list of recipients"))
 		userIdMap.set(userId, userId)
 	}
+	var count as int
+	var cdata = db.querySingleRow(db.prepare("SELECT COUNT(*) as count FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?").addParamString(channelId))
+	if cdata:
+		count = cdata.getInteger("count")
 	var userIds = userIdMap.getKeys()
 	assert userIds && SIZE(userIds) > 0:
 		callback(Error.instance("invalid_recipient_count", "Cannot have recipient size less than one"))
 	var sb = new StringBuilder()
-	sb.append("INSERT INTO " .. CHAT_RECIPIENTS .. " (channelId, userId, timeStampCreated, timeStampLastUpdated) VALUES ")
+	sb.append("INSERT INTO " .. CHAT_RECIPIENTS .. " (channelId, userId, timeStampCreated, timeStampLastUpdated, readIndex) VALUES ")
 	var first = true
 	foreach userId in userIds {
 		if not first:
 			sb.append(", ")
 		first = false
-		sb.append("(?, ?, ?, ?)")
+		sb.append("(?, ?, ?, ?, ?)")
 	}
 	sb.append(";")
 	var stmt = assert db.prepare(sb.toString()):
@@ -383,6 +379,7 @@ func insertRecipients(channelId as string, channelCreatorUserId as string, recip
 		stmt.addParamString(userId)
 		stmt.addParamLongInteger(now)
 		stmt.addParamLongInteger(now)
+		stmt.addParamInteger(count)
 	}
 	db.execute(stmt, func(success as bool) {
 		assert success:
