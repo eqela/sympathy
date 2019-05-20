@@ -354,6 +354,8 @@ func insertRecipients(channelId as string, channelCreatorUserId as string, recip
 			callback(Error.instance("empty_user_id_found", "Empty user id found in the list of recipients"))
 		userIdMap.set(userId, userId)
 	}
+	if String.isEmpty(userIdMap.getString(channelCreatorUserId)):
+		userIdMap.set(channelCreatorUserId, channelCreatorUserId)
 	var count as int
 	var cdata = db.querySingleRow(db.prepare("SELECT COUNT(*) as count FROM " .. CHAT_MESSAGES .. " WHERE channelId = ?").addParamString(channelId))
 	if cdata:
