@@ -665,6 +665,8 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 				})
 				return
 			}
+			foreach userId in oldRecipients.toVectorOfStrings():
+				newRecipientMap.remove(userId)
 			newRecipients = DynamicVector.forStringVector(newRecipientMap.getKeys())
 			DataManager.updateRecipients(channelId, creatorUserId, newRecipients, func(error as Error) {
 				assert not error {
@@ -937,6 +939,50 @@ func onDataMessageFromHTTPControl(data as DynamicMap, callback as function<void,
 			callback(Error.instance("internal_error", "Internal error"))
 		}
 		onSaveMessageFromHTTPControl(message, channel, callback)
+	})
+}
+
+func broadcastMessageFromHTTPControl(messageId as string, callback as function<void, Error>)
+{
+	var engine = this
+	DataManager.getMessageById(messageId, func(message as Message, error as Error) {
+		assert not error:
+			logError("Internal error: '" .. error.toString() .. "'")
+		var channelId = message.getChannelId()
+		getChannel(channelId, func(channel as ChatChannel) {
+			channel.setEngine(engine)
+			assert channel && String.equals(channel.getChannelId(), channelId) {
+				logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
+				callback(Error.instance("internal_error", "Internal error"))
+			}
+			var recipients = getRecipientIdsForChannelId(channelId)
+			assert recipients && recipients.getSize() > 1 {
+				logError("fetched channel has no recipients.")
+				callback(null)
+			}
+			var recipientMap = new DynamicMap()
+			foreach userId in recipients.toVectorOfStrings():
+				recipientMap.set(userId, userId)
+			assert recipientMap.getCount() > 1 {
+				logError("fetched channel has no recipients.")
+				callback(null)
+			}
+			assert recipientMap.containsKey(message.getCreatorUserId()) {
+				logError("Internal error: fetched channel recipients do not include creator user id.")
+				callback(Error.instance("internal_error", "Internal error"))
+			}
+			var data = new DynamicMap()
+			data.set("messageType", ChatMessage.DATA_TYPE)
+			var mdta = message.toDynamicMap()
+			mdta.set("recipients", recipients)
+			data.set("data", mdta)
+			var cmessage = assert createMessageFromMap(data) {
+				logError("Failed to create chat message instance.")
+				callback(Error.instance("internal_error", "Internal error"))
+			}
+			callback(null)
+			channel.onNewDataMessage(cmessage)
+		})
 	})
 }
 

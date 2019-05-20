@@ -55,6 +55,13 @@ func insert(message as this, callback as function<void, Error>) static
 	})
 }
 
+func getMessageById(messageId as string, callback as function<void, this>) static
+{
+	var db = assert DataManager.getDb():
+		callback(null)
+	SQL.queryByMessageId(db, DataManager.CHAT_MESSAGES, messageId, callback)
+}
+
 func getMessageCount(channelId as string) static as long
 {
 	var db = assert DataManager.getDb()

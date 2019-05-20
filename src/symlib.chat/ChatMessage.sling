@@ -76,6 +76,33 @@ func forBuffer(data as buffer) static as this
 	return v
 }
 
+func forDynamicMap(data as DynamicMap) static as this
+{
+	assert data
+	var m = data
+	var t = m.getInteger("messageType")
+	assert t == COMMAND_TYPE || t == DATA_TYPE
+	var v = new this()
+	v.setMessageType(t)
+	var d = m.getString("data")
+	var dmap = assert JSONParser.parse(d) as DynamicMap
+	v.setCreatorUserId(dmap.getString("creatorUserId"))
+	v.setData(d)
+	if t == DATA_TYPE:
+		v.setMessageId(dmap.getString("messageId"))
+	v.setChannelId(dmap.getString("channelId"))
+	v.setAttachmentFileName(dmap.getString("attachmentFileName"))
+	v.setAttachmentURL(dmap.getString("attachmentURL"))
+	v.setChannelCreatorUserId(dmap.getString("channelCreatorUserId"))
+	v.setExternalId(dmap.getString("externalId"))
+	v.setTitle(dmap.getString("title"))
+	v.setUnreadCount(dmap.getLongInteger("unreadCount"))
+	v.setTimeStampCreated(dmap.getLongInteger("timeStampCreated"))
+	v.setTimeStampLastUpdated(dmap.getLongInteger("timeStampLastUpdated"))
+	v.setRecipients(dmap.getDynamicVector("recipients"))
+	return v
+}
+
 prop data as string
 prop title as string
 prop channelCreatorUserId as string
