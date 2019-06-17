@@ -23,7 +23,6 @@ import capex.console
 import capex.net
 import sympathy
 
-prop connectionId as string
 prop engine as ChatEngine
 prop user as ChatUser
 var isConnectionOpen private = false
