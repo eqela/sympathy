@@ -75,9 +75,9 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 	return base.configure(key, value, relativeTo, error)
 }
 
-func initialize override as bool
+func initializeApplication override as bool
 {
-	assert base.initialize()
+	assert base.initializeApplication()
 	assert authConfig:
 		Log.error(ctx, "Please configure authentication service with the parameter key: 'authConfig'.")
 	authenticator = AuthenticatorOverHTTP.forConfiguration(authConfig)
