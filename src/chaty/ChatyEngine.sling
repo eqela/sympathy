@@ -186,7 +186,6 @@ func createAndSaveChannel(recipients as DynamicVector, channelCreatorUserId as s
 					callback(null)
 				recipients.removeValue(channelCreatorUserId)
 				if recipients.getSize() == 1 {
-					PRINT "--------------- R1"
 					eventHandler.onStartChatChannel(channelCreatorUserId, user.getSessionId(), channelId, func(err as Error) {
 						if err {
 							logError(err.toString())
@@ -197,7 +196,6 @@ func createAndSaveChannel(recipients as DynamicVector, channelCreatorUserId as s
 					})
 				}
 				else if recipients.getSize() > 1 {
-					PRINT "--------------- R2"
 					eventHandler.onStartGroupChatChannel(channelCreatorUserId, user.getSessionId(), channelId, func(err as Error) {
 						if err {
 							logError(err.toString())
