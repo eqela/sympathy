@@ -24,18 +24,20 @@ import capex.data
 import sympathy
 
 prop authenticator as Authenticator
+prop eventHandler as ChatEventHandlerOverHTTP
 prop db as SQLDatabase
 var userMap private as DynamicMap
 
 ctor:
 	userMap = new DynamicMap()
 
-func create(port as int, db as SQLDatabase, authenticator as Authenticator, forwarder as NotificationForwarder, ctx as LoggingContext, server as WSServer = null) static as this
+func create(port as int, db as SQLDatabase, authenticator as Authenticator, eventHandler as ChatEventHandlerOverHTTP, forwarder as NotificationForwarder, ctx as LoggingContext, server as WSServer = null) static as this
 {
 	var v = new this()
 	v.setPort(port)
 	v.setDb(db)
 	v.setAuthenticator(authenticator)
+	v.setEventHandler(eventHandler)
 	v.setForwarder(forwarder)
 	v.setCtx(ctx)
 	v.setServer(server)
@@ -55,7 +57,20 @@ func createChannelAndGetIdForExternalId(externalId as string, recipients as Dyna
 			callback(null)
 		}
 		logDebug("New channel '" .. channelId .. "' created.")
-		callback(channelId)
+		assert eventHandler:
+			callback(channelId)
+		getUser(creatorUserId, func(user as ChatyUser) {
+			assert user:
+				callback(null)
+			eventHandler.onStartGroupChatChannel(creatorUserId, user.getSessionId(), channelId, func(err as Error) {
+				if err {
+					logError(err.toString())
+					callback(null)
+					return
+				}
+				callback(channelId)
+			})
+		})
 	})
 }
 
@@ -164,7 +179,35 @@ func createAndSaveChannel(recipients as DynamicVector, channelCreatorUserId as s
 		DataManager.insertRecipients(channelId, channelCreatorUserId, recipients, func(error2 as Error) {
 			assert not error2:
 				callback(null)
-			callback(createChatChannel(channel))
+			assert eventHandler:
+				callback(createChatChannel(channel))
+			getUser(channelCreatorUserId, func(user as ChatyUser) {
+				assert user:
+					callback(null)
+				recipients.removeValue(channelCreatorUserId)
+				if recipients.getSize() == 1 {
+					PRINT "--------------- R1"
+					eventHandler.onStartChatChannel(channelCreatorUserId, user.getSessionId(), channelId, func(err as Error) {
+						if err {
+							logError(err.toString())
+							callback(null)
+							return
+						}
+						callback(createChatChannel(channel))
+					})
+				}
+				else if recipients.getSize() > 1 {
+					PRINT "--------------- R2"
+					eventHandler.onStartGroupChatChannel(channelCreatorUserId, user.getSessionId(), channelId, func(err as Error) {
+						if err {
+							logError(err.toString())
+							callback(null)
+							return
+						}
+						callback(createChatChannel(channel))
+					})
+				}
+			})
 		})
 	})
 }
