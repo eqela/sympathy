@@ -36,7 +36,7 @@ var chatEventConfig private as DynamicMap
 var notificationForwarderConfig private as DynamicMap
 var authTimeoutDelay private as long = 5
 var authenticator private as Authenticator
-var eventHandler private as ChatEventHandlerOverHTTP
+var eventForwarder private as ChatEventForwarderOverHTTP
 var forwarder private as NotificationForwarder
 var engine private as ChatyEngine
 
@@ -90,7 +90,7 @@ func initializeApplication override as bool
 	assert authenticator:
 		Log.error(ctx, "Failed to initialize authenticator. Please check your authentication service configuration.")
 	if chatEventConfig:
-		eventHandler = ChatEventHandlerOverHTTP.forConfiguration(chatEventConfig)
+		eventForwarder = ChatEventForwarderOverHTTP.forConfiguration(chatEventConfig)
 	assert notificationForwarderConfig:
 		Log.error(ctx, "Please configure notification forwarder service with the parameter key: 'notificationForwarderConfig'.")
 	forwarder = NotificationForwarderOverHTTP.forConfiguration(notificationForwarderConfig)
@@ -107,7 +107,7 @@ func initializeServer(server as HTTPServer) override as bool
 		Log.error(ctx, "WebSocket port should not be the same with HTTP port.")
 	assert wsPort > 1023 && wsPort < 65536:
 		Log.error(ctx, "WebSocket port should be between 1024 and 65535.")
-	engine = ChatyEngine.create(wsPort, getDb(), authenticator, eventHandler, forwarder, ctx)
+	engine = ChatyEngine.create(wsPort, getDb(), authenticator, eventForwarder, forwarder, ctx)
 	assert engine:
 		Log.error(ctx, "Failed to create chat engine instance.")
 	engine.setAuthTimeoutDelay(authTimeoutDelay)

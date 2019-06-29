@@ -24,20 +24,20 @@ import capex.data
 import sympathy
 
 prop authenticator as Authenticator
-prop eventHandler as ChatEventHandlerOverHTTP
+prop eventForwarder as ChatEventForwarderOverHTTP
 prop db as SQLDatabase
 var userMap private as DynamicMap
 
 ctor:
 	userMap = new DynamicMap()
 
-func create(port as int, db as SQLDatabase, authenticator as Authenticator, eventHandler as ChatEventHandlerOverHTTP, forwarder as NotificationForwarder, ctx as LoggingContext, server as WSServer = null) static as this
+func create(port as int, db as SQLDatabase, authenticator as Authenticator, eventForwarder as ChatEventForwarderOverHTTP, forwarder as NotificationForwarder, ctx as LoggingContext, server as WSServer = null) static as this
 {
 	var v = new this()
 	v.setPort(port)
 	v.setDb(db)
 	v.setAuthenticator(authenticator)
-	v.setEventHandler(eventHandler)
+	v.setEventForwarder(eventForwarder)
 	v.setForwarder(forwarder)
 	v.setCtx(ctx)
 	v.setServer(server)
@@ -57,12 +57,12 @@ func createChannelAndGetIdForExternalId(externalId as string, recipients as Dyna
 			callback(null)
 		}
 		logDebug("New channel '" .. channelId .. "' created.")
-		assert eventHandler:
+		assert eventForwarder:
 			callback(channelId)
 		getUser(creatorUserId, func(user as ChatyUser) {
 			assert user:
 				callback(null)
-			eventHandler.onStartGroupChatChannel(creatorUserId, user.getSessionId(), channelId, func(err as Error) {
+			eventForwarder.onStartGroupChatChannel(creatorUserId, user.getSessionId(), channelId, func(err as Error) {
 				if err {
 					logError(err.toString())
 					callback(null)
@@ -179,14 +179,14 @@ func createAndSaveChannel(recipients as DynamicVector, channelCreatorUserId as s
 		DataManager.insertRecipients(channelId, channelCreatorUserId, recipients, func(error2 as Error) {
 			assert not error2:
 				callback(null)
-			assert eventHandler:
+			assert eventForwarder:
 				callback(createChatChannel(channel))
 			getUser(channelCreatorUserId, func(user as ChatyUser) {
 				assert user:
 					callback(null)
 				recipients.removeValue(channelCreatorUserId)
 				if recipients.getSize() == 1 {
-					eventHandler.onStartChatChannel(channelCreatorUserId, user.getSessionId(), channelId, func(err as Error) {
+					eventForwarder.onStartChatChannel(channelCreatorUserId, user.getSessionId(), channelId, func(err as Error) {
 						if err {
 							logError(err.toString())
 							callback(null)
@@ -196,7 +196,7 @@ func createAndSaveChannel(recipients as DynamicVector, channelCreatorUserId as s
 					})
 				}
 				else if recipients.getSize() > 1 {
-					eventHandler.onStartGroupChatChannel(channelCreatorUserId, user.getSessionId(), channelId, func(err as Error) {
+					eventForwarder.onStartGroupChatChannel(channelCreatorUserId, user.getSessionId(), channelId, func(err as Error) {
 						if err {
 							logError(err.toString())
 							callback(null)
