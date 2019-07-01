@@ -56,7 +56,6 @@ func listObjects(accessToken as string, bucketName as string, callback as functi
 			callback(null, Error.instance("failedToConnect", "Failed to connect to server. Please check your internet connection and then try again."))
 		var responseBody = assert JSONParser.parse(String.forUTF8Buffer(body)) as DynamicMap:
 			callback(null, Error.forCode("invalidServerResponse"))
-		PRINT String.asString(responseBody)
 		var items = assert responseBody.getDynamicVector("items"):
 			callback(null, Error.forCode("noItems"))
 		callback(items, null)
