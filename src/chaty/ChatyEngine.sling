@@ -281,7 +281,7 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 				channel.set("message", DataManager.getRecentMessage(channelId))
 				if rsm:
 					channel.set("unreadCount", rsm.getLongInteger(channelId))
-				if commandMap.getBoolean("includeRecipientData") {
+				if commandMap.getBoolean("includeRecipientsData") {
 					eventForwarder.getChatChannelRecipientsData(user.getSessionId(), recipients, func(data as DynamicVector, err as Error) {
 						assert not err:
 							logError("Error: '" .. err.toString() .. "'.")
