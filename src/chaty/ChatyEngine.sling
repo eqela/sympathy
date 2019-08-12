@@ -276,10 +276,18 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 			foreach channel in channels.toVectorOfDynamicMaps() {
 				var channelId = channel.getString("channelId")
 				assert String.isNotEmpty(channelId)
-				channel.set("recipients", getRecipientIdsForChannelId(channelId))
+				var recipients = getRecipientIdsForChannelId(channelId)
+				channel.set("recipients", recipients)
 				channel.set("message", DataManager.getRecentMessage(channelId))
 				if rsm:
 					channel.set("unreadCount", rsm.getLongInteger(channelId))
+				if commandMap.getBoolean("hasRecipientData") {
+					eventForwarder.onGetChatChannelRecipientsData(user.getSessionId(), recipients, func(data as DynamicVector, err as Error) {
+						assert not err:
+							logError("Error: '" .. err.toString() .. "'.")
+						channel.set("recipientData", data)
+					})
+				}
 			}
 			var data = new DynamicMap()
 			data.set("command", "get_channels")
