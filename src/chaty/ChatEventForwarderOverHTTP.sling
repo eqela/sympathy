@@ -163,7 +163,7 @@ func onStartGroupChatChannel(creatorUserId as string, sessionId as string, chann
 	})
 }
 
-func onGetChatChannelRecipientsData(sessionId as string, ids as DynamicVector, callback as function<void, DynamicVector, Error>)
+func getChatChannelRecipientsData(sessionId as string, ids as DynamicVector, callback as function<void, DynamicVector, Error>)
 {
 	assert String.isNotEmpty(sessionId):
 		callback(null, Error.instance("no_session_id", "No session id"))
