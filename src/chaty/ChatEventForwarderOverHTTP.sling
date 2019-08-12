@@ -43,11 +43,14 @@ func forConfiguration(authConfig as DynamicMap) static as this
 	assert String.isNotEmpty(startChatChannelURL)
 	var startGroupChatChannelURL = authConfig.getString("startGroupChatChannelURL")
 	assert String.isNotEmpty(startGroupChatChannelURL)
+	var getChannelRecipientsURL = authConfig.getString("getChannelRecipientsURL")
+	assert String.isNotEmpty(getChannelRecipientsURL)
 	var v = new this()
 	v.setAuthBaseURL(authBaseURL)
 	v.setAuthParameterKey(authParameterKey)
 	v.setStartChatChannelURL(startChatChannelURL)
 	v.setStartGroupChatChannelURL(startGroupChatChannelURL)
+	v.setGetChannelRecipientsURL(getChannelRecipientsURL)
 	return v
 }
 
@@ -56,6 +59,7 @@ prop authParameterKey as string
 prop idParameterKey as string
 prop startChatChannelURL as string
 prop startGroupChatChannelURL as string
+prop getChannelRecipientsURL as string
 
 func getFullURL(api as string) override as string
 {
@@ -156,5 +160,25 @@ func onStartGroupChatChannel(creatorUserId as string, sessionId as string, chann
 		assert String.equals(response.getString("status"), "ok"):
 			callback(Error.instance("error_from_http_server", "Encounter error from http server"))
 		callback(null)
+	})
+}
+
+func getChatChannelRecipientsData(sessionId as string, ids as DynamicVector, callback as function<void, DynamicVector, Error>)
+{
+	assert String.isNotEmpty(sessionId):
+		callback(null, Error.instance("no_session_id", "No session id"))
+	var headers = new KeyValueList<string,string>()
+	headers.add(authParameterKey, sessionId)
+	headers.add("Content-Type", "application/json")
+	var data = new DynamicMap()
+	data.set("recipientIds", ids)
+	post(getChannelRecipientsURL, headers, data, func(response as DynamicMap, e as Error) {
+		assert not e:
+			callback(null, e)
+		assert String.equals(response.getString("status"), "ok"):
+			callback(null, Error.instance("error_from_http_server", "Encounter error from http server"))
+		var data = assert response.getDynamicVector("data"):
+			callback(null, Error.instance("invalid_server_response", "Invalid response from authentication server"))
+		callback(data, null)
 	})
 }
