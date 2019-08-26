@@ -50,7 +50,7 @@ POST "createChannelForExternalId"
 	var externalId = data.getString("externalId")
 	assert String.isNotEmpty(externalId):
 		req.sendJSONObject(JSONResponse.forInvalidRequest())
-	engine.createChannelForExternalIdAndGetChannelId(externalId, creatorUserId, title, recipients, func(channelId as string, error as Error) {
+	engine.createChannelForExternalIdAndGetChannelId(true, externalId, creatorUserId, title, recipients, func(channelId as string, error as Error) {
 		assert not error:
 			req.sendJSONObject(JSONResponse.forError(error))
 		assert String.isNotEmpty(channelId):
