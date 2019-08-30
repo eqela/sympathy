@@ -130,8 +130,8 @@ func getChannel(channelId as string) static as Channel:
 func getChannel(channelId as string, callback as function<void, Channel>) static:
 	Channel.SQL.queryByChannelId(db, CHAT_CHANNELS, channelId, callback)
 
-func getChannels(userId as string, page as int, limit as int, callback as function<void, DynamicVector, int, int>) static:
-	Channel.getChannels(userId, page, limit, callback)
+func getChannels(userId as string, externalIdPattern as string, page as int, limit as int, callback as function<void, DynamicVector, int, int>) static:
+	Channel.getChannels(userId, externalIdPattern, page, limit, callback)
 
 func getRecipientIdsForChannelId(channelId as string) static as DynamicVector:
 	return Recipient.getRecipientIdsForChannelId(channelId)

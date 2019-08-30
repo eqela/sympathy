@@ -52,7 +52,7 @@ func getChannelForExternalId(externalId as string, callback as function<void, th
 	})
 }
 
-func getChannels(userId as string, page as int, limit as int, callback as function<void, DynamicVector, int, int>) static
+func getChannels(userId as string, externalIdPattern as string, page as int, limit as int, callback as function<void, DynamicVector, int, int>) static
 {
 	if limit <= 0:
 		limit = 20
@@ -63,10 +63,11 @@ func getChannels(userId as string, page as int, limit as int, callback as functi
 		callback(new DynamicVector(), 0, 0)
 	assert String.isNotEmpty(userId):
 		callback(new DynamicVector(), 0, 0)
-	db.query(db.prepare(createQueryString(false)).addParamString(userId).addParamString(userId).addParamInteger(limit).addParamInteger(offset * limit), func(itr as SQLResultSetIterator) {
+	var st = db.prepare(createQueryString(false, externalIdPattern)).addParamString(userId).addParamString(userId).addParamInteger(limit).addParamInteger(offset * limit)
+	db.query(st, func(itr as SQLResultSetIterator) {
 		assert itr:
 			callback(new DynamicVector(), 0, 0)
-		var data = assert db.query(db.prepare(createQueryString(true)).addParamString(userId).addParamString(userId)):
+		var data = assert db.query(db.prepare(createQueryString(true, externalIdPattern)).addParamString(userId).addParamString(userId)):
 			callback(new DynamicVector(), 0, 0)
 		var dvector = assert data.toVectorOfMaps():
 			callback(new DynamicVector(), 0, 0)
@@ -78,10 +79,13 @@ func getChannels(userId as string, page as int, limit as int, callback as functi
 	})
 }
 
-func createQueryString(isForCount as bool) private static as string
+func createQueryString(isForCount as bool, externalIdPattern as string) private static as string
 {
 	var sb = new StringBuilder()
-	sb.append("SELECT * FROM " .. DataManager.CHAT_CHANNELS .. " WHERE channelCreatorUserId = ? OR channelId IN (SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId = ?)")
+	sb.append("SELECT * FROM " .. DataManager.CHAT_CHANNELS .. " WHERE channelCreatorUserId = ? OR channelId IN (SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId = ?")
+	if externalIdPattern:
+		sb.append(" AND externalId LIKE '%" .. externalIdPattern .. "%'")
+	sb.append(")")
 	if not isForCount:
 		sb.append(" ORDER BY timeStampLastUpdated DESC, timeStampCreated DESC LIMIT ? OFFSET ?")
 	sb.append(";")
