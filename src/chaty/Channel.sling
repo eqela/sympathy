@@ -82,10 +82,9 @@ func getChannels(userId as string, externalIdPattern as string, page as int, lim
 func createQueryString(isForCount as bool, externalIdPattern as string) private static as string
 {
 	var sb = new StringBuilder()
-	sb.append("SELECT * FROM " .. DataManager.CHAT_CHANNELS .. " WHERE channelCreatorUserId = ? OR channelId IN (SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId = ?")
+	sb.append("SELECT * FROM " .. DataManager.CHAT_CHANNELS .. " WHERE (channelCreatorUserId = ? OR channelId IN (SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId = ?))")
 	if externalIdPattern:
 		sb.append(" AND externalId LIKE '%" .. externalIdPattern .. "%'")
-	sb.append(")")
 	if not isForCount:
 		sb.append(" ORDER BY timeStampLastUpdated DESC, timeStampCreated DESC LIMIT ? OFFSET ?")
 	sb.append(";")
