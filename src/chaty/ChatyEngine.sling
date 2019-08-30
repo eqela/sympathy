@@ -44,7 +44,7 @@ func create(port as int, db as SQLDatabase, authenticator as Authenticator, even
 	return v
 }
 
-func createChannelAndGetIdForExternalId(externalId as string, recipients as DynamicVector, creatorUserId as string, title as string, callback as function<void, string>) private
+func createChannelAndGetIdForExternalId(isFromHttpClient as bool, externalId as string, recipients as DynamicVector, creatorUserId as string, title as string, callback as function<void, string>) private
 {
 	createAndSaveChannelForExternalId(externalId, recipients, creatorUserId, title, func(channel as ChatChannel) {
 		assert channel {
@@ -62,14 +62,18 @@ func createChannelAndGetIdForExternalId(externalId as string, recipients as Dyna
 		getUser(creatorUserId, func(user as ChatyUser) {
 			assert user:
 				callback(null)
-			eventForwarder.onStartGroupChatChannel(creatorUserId, user.getSessionId(), channelId, func(err as Error) {
-				if err {
-					logError(err.toString())
-					callback(null)
-					return
-				}
+			if not isFromHttpClient {
+				eventForwarder.onStartGroupChatChannel(creatorUserId, user.getSessionId(), channelId, func(err as Error) {
+					if err {
+						logError(err.toString())
+						callback(null)
+						return
+					}
+				})
+			}
+			else {
 				callback(channelId)
-			})
+			}
 		})
 	})
 }
@@ -277,10 +281,18 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 			foreach channel in channels.toVectorOfDynamicMaps() {
 				var channelId = channel.getString("channelId")
 				assert String.isNotEmpty(channelId)
-				channel.set("recipients", getRecipientIdsForChannelId(channelId))
+				var recipients = getRecipientIdsForChannelId(channelId)
+				channel.set("recipients", recipients)
 				channel.set("message", DataManager.getRecentMessage(channelId))
 				if rsm:
 					channel.set("unreadCount", rsm.getLongInteger(channelId))
+				if commandMap.getBoolean("includeRecipientsData") {
+					eventForwarder.getChatChannelRecipientsData(user.getSessionId(), recipients, func(data as DynamicVector, err as Error) {
+						assert not err:
+							logError("Error: '" .. err.toString() .. "'.")
+						channel.set("recipientsData", data)
+					})
+				}
 			}
 			var data = new DynamicMap()
 			data.set("command", "get_channels")
@@ -401,7 +413,7 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 						})
 						return
 					}
-					createChannelAndGetIdForExternalId(externalId, newRecipients, creatorUserId, title, func(newChannelId as string) {
+					createChannelAndGetIdForExternalId(false, externalId, newRecipients, creatorUserId, title, func(newChannelId as string) {
 						getChannel(newChannelId, func(channel as ChatChannel) {
 							assert channel && String.equals(channel.getChannelId(), newChannelId) {
 								logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
@@ -897,7 +909,7 @@ func updateRecipientsForExternalId(externalId as string, recipients as DynamicVe
 	})
 }
 
-func createChannelForExternalIdAndGetChannelId(externalId as string, creatorUserId as string, title as string, recipients as DynamicVector, callback as function<void, string, Error>)
+func createChannelForExternalIdAndGetChannelId(isFromHttpClient as bool, externalId as string, creatorUserId as string, title as string, recipients as DynamicVector, callback as function<void, string, Error>)
 {
 	assert String.isNotEmpty(externalId):
 		callback(null, Error.instance("no_external_id", "No external id"))
@@ -918,7 +930,7 @@ func createChannelForExternalIdAndGetChannelId(externalId as string, creatorUser
 			callback(null, Error.instance("invalid_creator_user_id", "Invalid creator user id"))
 		assert not c:
 			callback(null, Error.instance("channel_already_exists", "Channel already exists"))
-		createChannelAndGetIdForExternalId(externalId, newRecipients, creatorUserId, title, func(newChannelId as string) {
+		createChannelAndGetIdForExternalId(isFromHttpClient, externalId, newRecipients, creatorUserId, title, func(newChannelId as string) {
 			assert String.isNotEmpty(newChannelId):
 				callback(null, Error.instance("internal_error", "Internal error"))
 			callback(newChannelId, null)
