@@ -275,7 +275,8 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 	var command = commandMap.getString("command")
 	if "get_channels" == command {
 		var page = commandMap.getInteger("page", 1)
-		DataManager.getChannels(creatorUserId, page, commandMap.getInteger("limit"), func(channels as DynamicVector, pageCount as int, totalRecords as int) {
+		var externalIdPattern = commandMap.getString("externalIdPattern")
+		DataManager.getChannels(creatorUserId, externalIdPattern, page, commandMap.getInteger("limit"), func(channels as DynamicVector, pageCount as int, totalRecords as int) {
 			var rsm = getReadStatusAsMapForUserId(creatorUserId)
 			foreach channel in channels.toVectorOfDynamicMaps() {
 				var channelId = channel.getString("channelId")
