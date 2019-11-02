@@ -17,20 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServer imports sympathy.app:
-
 import cape
 import capex.text
 import capex.console
 import sympathy
 import symlib.article
+import sympathy.app
 
-func main(args as array<string>) static as int #main
-{
-	if new this().execute(args) == false:
-		return 1
-	return 0
-}
+class is WebServer:
 
 prop siteDirectory as File
 prop dataDirectory as File
@@ -44,10 +38,10 @@ prop apiSecret as string
 prop serverMode = "web"
 
 func printHeader(stdout as PrintWriter) override:
-	ConsoleApplication.PRINT_HEADER(stdout, null)
+	ConsoleApplicationUtil.printHeader(Stdout.instance(), VALUE "sling_project_title", VALUE "sling_project_version", VALUE "sling_project_copyright", VALUE "sling_project_license", VALUE "target_platform")
 
 func printVersion(stdout as PrintWriter, longFormat as bool) override:
-	ConsoleApplication.PRINT_VERSION(stdout, longFormat)
+	ConsoleApplicationUtil.printVersion(Stdout.instance(), VALUE "sling_project_version", VALUE "sling_project_title")
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
@@ -116,7 +110,7 @@ func getNotFoundHtml(ctx as LoggingContext) as string
 func initializeServer(server as HTTPServer) override as bool
 {
 	assert base.initializeServer(server)
-	server.UPDATE_SERVER_NAME()
+	HTTPServerBase.UPDATE_SERVER_NAME(server, VALUE "sling_project_title", VALUE "sling_project_version")
 	if siteDirectory == null:
 		siteDirectory = getConfigFileDirectory()
 	if siteDirectory && siteDirectory.isDirectory() == false {
@@ -204,4 +198,11 @@ func initializeServer(server as HTTPServer) override as bool
 		return false
 	}
 	return true
+}
+
+main
+{
+	if new this().execute(args) == false:
+		return 1
+	return 0
 }
