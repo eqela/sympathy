@@ -132,5 +132,9 @@ func initializeWithIOManager(ioManager as IOManager, ctx as LoggingContext) over
 	return true
 }
 
-func initializeSQLDatabase(dbstring as string) override as SQLDatabase:
-	return SQLDatabaseProvider.getDatabase(ctx, dbstring, MySQLDatabase.SSL_MODE_NONE, true)
+func initializeSQLDatabase(config as DynamicMap) override as SQLDatabase
+{
+	config.set("sslMode", MySQLDatabase.SSL_MODE_NONE)
+	config.set("enableUTF8",true)
+	return SQLDatabaseProvider.getDatabase(ctx, config)
+}
