@@ -17,14 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is ArticleRepository:
-
 import capex.util
 import capex.text
 
+class is ArticleRepository:
+
 class MyArticle is Article
 {
-	prop timestamp as long
+	prop lastModifiedTimeStamp as long
 
 	func mergeToCategories(categories as vector<string>)
 	{
@@ -37,6 +37,19 @@ class MyArticle is Article
 				cc += category
 		}
 		setCategories(cc)
+	}
+
+	func mergeToTags(tags as vector<string>)
+	{
+		assert tags
+		var cc = new vector<string>
+		if Vector.isEmpty(tags) == false {
+			foreach tag in tags:
+				cc += tag
+			foreach tag in getTags():
+				cc += tag
+		}
+		setTags(cc)
 	}
 }
 
@@ -59,9 +72,9 @@ var categoryMapTimestamp = 0L
 
 func refreshArticles
 {
-	Log.debug(context, "Refreshing articles ..")
 	articles = new map<string,MyArticle>
 	if directory {
+		Log.debug(context, "Refreshing articles: `" .. directory.getPath() .."' ..")
 		var it = directory.entries()
 		while it {
 			var file = it.next()
@@ -77,9 +90,47 @@ func refreshArticles
 				continue
 			articles[id] = article
 		}
+		Log.debug(context, "DONE refreshing articles.")
+	}
+	else {
+		Log.debug(context, "No directory specified. Cannot refresh articles.")
 	}
 	updateArticleLists()
-	Log.debug(context, "DONE refreshing articles.")
+}
+
+func sortArticleLists
+{
+	Log.debug(context, "Sorting article lists ..")
+	var it = Map.iterateValues(articleLists) as! Iterator<vector<string>>
+	while it {
+		var list = it.next()
+		if not list:
+			break
+		Vector.sort(list, func(a as string, b as string) as int {
+			var aa = Map.get(articles, a)
+			var ab = Map.get(articles, b)
+			if not aa && not ab:
+				return 0
+			if not aa:
+				return 1
+			if not ab:
+				return -1
+			var aprio = aa.getPriorityValue()
+			var bprio = ab.getPriorityValue()
+			if aprio > 0 && aprio > bprio:
+				return -1
+			if bprio > 0 && bprio > aprio:
+				return 1
+			var ats = aa.getTimeStampValue()
+			var bts = ab.getTimeStampValue()
+			if ats < bts:
+				return 1
+			if ats > bts:
+				return -1
+			return 0
+		})
+	}
+	Log.debug(context, "Done sorting article lists ..")
 }
 
 func updateArticleLists
@@ -103,6 +154,7 @@ func updateArticleLists
 			list += id
 		}
 	}
+	sortArticleLists()
 	Log.debug(context, "DONE updating article lists.")
 }
 
@@ -222,6 +274,7 @@ func doReadArticleFile(file as File) private as MyArticle
 	var reader = assert PrintReader.forReader(file.read()):
 		Log.error(context, "Failed to read article file: `" .. file.getPath() .. "'")
 	var v = new MyArticle()
+	v.setLastModifiedTimeStamp(file.getLastModifiedTimeStamp())
 	v.setId(file.getBasenameWithoutExtension())
 	Log.debug(context, "Reading article file: `" .. file.getPath() .. "' ..")
 	loop {
@@ -271,6 +324,12 @@ func doReadArticleFile(file as File) private as MyArticle
 				v.setShareImage(iarticle.getShareImage())
 				v.setParent(iarticle.getParent())
 				v.setShareDescription(iarticle.getShareDescription())
+				v.setTimeStamp(iarticle.getTimeStamp())
+				v.setPriority(iarticle.getPriority())
+				v.setDescription(iarticle.getDescription())
+				v.setIntroPhoto(iarticle.getIntroPhoto())
+				v.setFbImage(iarticle.getFbImage())
+				v.mergeToTags(iarticle.getTags())
 			}
 			continue
 		}
@@ -309,6 +368,24 @@ func doReadArticleFile(file as File) private as MyArticle
 				else if key == "parent" {
 					v.setParent(value)
 				}
+				else if key == "timeStamp" {
+					var tsv = String.toLong(value)
+					if tsv < 10000:
+						Log.warning(context, "Invalid timestamp value: `" .. value .. "'")
+					v.setTimeStampValue(tsv)
+				}
+				else if key == "priority" {
+					v.setPriorityValue(String.toInteger(value))
+				}
+				else if key == "description" {
+					v.setDescription(value)
+				}
+				else if key == "introPhoto" {
+					v.setIntroPhoto(value)
+				}
+				else if key == "fbImage" {
+					v.setFbImage(value)
+				}
 				else if key == "categories" {
 					var vc = new vector<string>
 					var cats = String.split(value, ' ')
@@ -318,6 +395,16 @@ func doReadArticleFile(file as File) private as MyArticle
 							vc += cc
 					}
 					v.setCategories(vc)
+				}
+				else if key == "tags" {
+					var vc = new vector<string>
+					var cats = String.split(value, ' ')
+					foreach cat in cats {
+						var cc = String.strip(cat)
+						if String.isNotEmpty(cc):
+							vc += cc
+					}
+					v.setTags(vc)
 				}
 				else {
 					Log.warning(context, "Unsupported header value in file `" .. file.getPath() .. "': `" .. key .. "'")
@@ -350,7 +437,7 @@ func doGetArticleById(id as string) as Article
 	if directory {
 		var file = directory.entry(id .. ".article")
 		if file.isFile() {
-			if v == null || file.hasChangedSince(v.getTimestamp()) {
+			if v == null || file.hasChangedSince(v.getLastModifiedTimeStamp()) {
 				var nv = doReadArticleFile(file)
 				if nv {
 					v = nv

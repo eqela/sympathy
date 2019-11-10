@@ -26,6 +26,7 @@ author as string
 introMarkup as string
 introHtml as string
 date as string
+timeStamp as long
 redirect as string
 banner as string
 shareImage as string
@@ -34,3 +35,8 @@ categories as string[]
 parent as string
 contentMarkup as string
 contentHtml as string
+priority as int
+description as string
+introPhoto as string
+fbImage as string
+tags as string[]

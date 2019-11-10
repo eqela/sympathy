@@ -106,7 +106,7 @@ func onGETCategoryList(req as HTTPServerRequest, next as function)
 
 func processTimeStamp(values as DynamicMap)
 {
-	var timeStamp = values.getInteger("timeStamp")
+	var timeStamp = values.getLongInteger("timeStamp")
 	if timeStamp > 0 {
 		var date = VerboseDateTimeString.getDateStringForDateTime(DateTime.forTimeSeconds(timeStamp))
 		var time = VerboseDateTimeString.getTimeStringForDateTime(DateTime.forTimeSeconds(timeStamp))
@@ -292,6 +292,8 @@ func sendResponse(req as HTTPServerRequest, type as string, content as object)
 		})
 	}
 	else {
+		rdata.remove("site")
+		rdata.remove("request")
 		req.sendJSONObject(rdata)
 	}
 }
