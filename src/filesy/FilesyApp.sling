@@ -29,10 +29,10 @@ var listDirectories = true
 var processTemplateFiles = false
 
 func printHeader(stdout as PrintWriter) override:
-	ConsoleApplication.PRINT_HEADER(stdout, null)
+	ConsoleApplicationUtil.printHeader(Stdout.instance(), VALUE "sling_project_title", VALUE "sling_project_version", VALUE "sling_project_copyright", VALUE "sling_project_license", VALUE "target_platform")
 
 func printVersion(stdout as PrintWriter, longFormat as bool) override:
-	ConsoleApplication.PRINT_VERSION(stdout, longFormat)
+	ConsoleApplicationUtil.printVersion(Stdout.instance(), VALUE "sling_project_version", VALUE "sling_project_title")
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
@@ -67,7 +67,7 @@ func acceptCommandLineArgument(arg as CommandLineArgument) override as bool
 func initializeServer(server as HTTPServer) override as bool
 {
 	assert base.initializeServer(server)
-	server.UPDATE_SERVER_NAME()
+	HTTPServerBase.UPDATE_SERVER_NAME(server, VALUE "sling_project_title", VALUE "sling_project_version")
 	assert contentDirectory:
 		Log.error(ctx, "No `contentDirectory' specified. Either use a config file or specify -OcontentDirectory=<directory>")
 	assert contentDirectory.isDirectory():
