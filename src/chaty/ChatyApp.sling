@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServerWithDatabase:
+class is WebServer:
 
 import capex.console
 import capex.net
@@ -25,9 +25,10 @@ import sympathy
 import sympathy.db
 import capex.mysql
 import capex.data
-import sympathy.dbapp
+import sympathy.app
 import symlib.chat
 
+prop db as SQLDatabase
 var httpControlPort private = -1
 var httpControlSecret private as string
 var wsPort private = 9090
@@ -39,6 +40,7 @@ var authenticator private as Authenticator
 var eventForwarder private as ChatEventForwarderOverHTTP
 var forwarder private as NotificationForwarder
 var engine private as ChatyEngine
+var dbConfig private as DynamicMap
 
 main
 {
@@ -78,21 +80,71 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 			authTimeoutDelay = 0
 		return true
 	}
+	if key == "dbConfig" {
+		dbConfig = JSONParser.parse(value) as DynamicMap
+		return true
+	}
 	return base.configure(key, value, relativeTo, error)
+}
+
+func getENVValue(key as string) as string:
+	return Environment.getVariable(key)
+
+func validateConfigs as bool
+{
+	if not dbConfig {
+		dbConfig = new DynamicMap()
+		dbConfig.set("type", getENVValue("DB_TYPE"))
+		dbConfig.set("serverAddress", getENVValue("DB_ADDRESS"))
+		dbConfig.set("username", getENVValue("DB_USERNAME"))
+		dbConfig.set("password", getENVValue("DB_PASSWORD"))
+		dbConfig.set("database", getENVValue("CHATY_DB_DATABASE"))
+		dbConfig.set("protocol", getENVValue("DB_PROTOCOL"))
+	}
+	assert dbConfig:
+		Log.error(ctx, "Please configure the database setting.")
+	if not notificationForwarderConfig:
+		notificationForwarderConfig = JSONParser.parse(getENVValue("NOTIFICATION_FORWARDER_CONFIG")) as DynamicMap
+	assert notificationForwarderConfig:
+		Log.error(ctx, "Please configure notification forwarder service with .config properety 'notificationForwarderConfig' or environment variable 'NOTIFICATION_FORWARDER_CONFIG'.")
+	if not authConfig:
+		authConfig = JSONParser.parse(getENVValue("AUTH_CONFIG")) as DynamicMap
+	assert authConfig:
+		Log.error(ctx, "Please configure authentication service with .config properety 'authConfig' or environment variable 'AUTH_CONFIG'.")
+	if not chatEventConfig:
+		chatEventConfig = JSONParser.parse(getENVValue("CHAT_EVENT_CONFIG")) as DynamicMap
+	var atd = LongInteger.asLong(getENVValue("AUTH_TIME_DELAY"))
+	if atd > 0:
+		authTimeoutDelay = atd
+	var mtd = LongInteger.asLong(getENVValue("MAINTENANCE_TIMER_DELAY"))
+	if mtd > 0:
+		setMaintenanceTimerDelay(mtd)
+	if not getEnableDebugMessages():
+		setEnableDebugMessages(Boolean.asBoolean(getENVValue("DEBUG")))
+	var wp = String.toInteger(getENVValue("WS_PORT"))
+	if wp > 0:
+		wsPort = wp
+	var hcp = String.toInteger(getENVValue("HTTP_CONTROL_PORT"))
+	if hcp > 0:
+		httpControlPort = hcp
+	if String.isNotEmpty(getENVValue("HTTP_CONTROL_SECRET")):
+		httpControlSecret = getENVValue("HTTP_CONTROL_SECRET")
+	if not getAlsoPrintOnConsole():
+		setAlsoPrintOnConsole(Boolean.asBoolean(getENVValue("PRINT_ON_CONSOLE")))
+	return true
 }
 
 func initializeApplication override as bool
 {
 	assert base.initializeApplication()
-	assert authConfig:
-		Log.error(ctx, "Please configure authentication service with the parameter key: 'authConfig'.")
+	assert validateConfigs()
+	assert db = initializeSQLDatabase(dbConfig):
+		Log.error(ctx, "Unable to connect to database: `" .. String.asString(dbConfig) .. "'")
 	authenticator = AuthenticatorOverHTTP.forConfiguration(authConfig)
 	assert authenticator:
 		Log.error(ctx, "Failed to initialize authenticator. Please check your authentication service configuration.")
 	if chatEventConfig:
 		eventForwarder = ChatEventForwarderOverHTTP.forConfiguration(chatEventConfig)
-	assert notificationForwarderConfig:
-		Log.error(ctx, "Please configure notification forwarder service with the parameter key: 'notificationForwarderConfig'.")
 	forwarder = NotificationForwarderOverHTTP.forConfiguration(notificationForwarderConfig)
 	assert forwarder:
 		Log.error(ctx, "Failed to initialize notification forwarder. Please check your notification forwarder service configuration.")
@@ -132,7 +184,7 @@ func initializeWithIOManager(ioManager as IOManager, ctx as LoggingContext) over
 	return true
 }
 
-func initializeSQLDatabase(config as DynamicMap) override as SQLDatabase
+func initializeSQLDatabase(config as DynamicMap) as SQLDatabase
 {
 	config.set("sslMode", MySQLDatabase.SSL_MODE_NONE)
 	config.set("enableUTF8",true)
