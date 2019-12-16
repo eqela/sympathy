@@ -42,6 +42,12 @@ var forwarder private as NotificationForwarder
 var engine private as ChatyEngine
 var dbConfig private as DynamicMap
 
+ctor
+{
+	base()
+	validateConfigs()
+}
+
 main
 {
 	return new this().executeMain(args)
@@ -137,7 +143,6 @@ func validateConfigs as bool
 func initializeApplication override as bool
 {
 	assert base.initializeApplication()
-	assert validateConfigs()
 	assert db = initializeSQLDatabase(dbConfig):
 		Log.error(ctx, "Unable to connect to database: `" .. String.asString(dbConfig) .. "'")
 	authenticator = AuthenticatorOverHTTP.forConfiguration(authConfig)
