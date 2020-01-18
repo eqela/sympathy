@@ -19,6 +19,7 @@
 
 class:
 
+import jk.time
 import capex.pdf.maker
 import cave
 import capex.text
@@ -189,7 +190,7 @@ func getFieldContent(field as ReportDefinition.FieldObject) as string
 {
 	var ds = field.getDataSource()
 	if ds == "PrintDate" {
-		return VerboseDateTimeString.getDateStringForDateTime(DateTime.forNow())
+		return VerboseDateTimeString.getDateStringForDateTime(SystemClock.asDateTimeLocal())
 	}
 	else if ds == "PageNofM" {
 		return String.forInteger(currentPageNumber) .. " of " .. String.forInteger(Vector.getSize(pages))

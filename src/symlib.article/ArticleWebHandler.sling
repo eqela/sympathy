@@ -108,8 +108,8 @@ func processTimeStamp(values as DynamicMap)
 {
 	var timeStamp = values.getLongInteger("timeStamp")
 	if timeStamp > 0 {
-		var date = VerboseDateTimeString.getDateStringForDateTime(DateTime.forTimeSeconds(timeStamp))
-		var time = VerboseDateTimeString.getTimeStringForDateTime(DateTime.forTimeSeconds(timeStamp))
+		var date = VerboseDateTimeString.getDateStringForDateTime(DateTime.forSeconds(timeStamp))
+		var time = VerboseDateTimeString.getTimeStringForDateTime(DateTime.forSeconds(timeStamp))
 		values.set("date", date)
 		values.set("time", time)
 		values.set("dateTime", date .. " " .. time)
