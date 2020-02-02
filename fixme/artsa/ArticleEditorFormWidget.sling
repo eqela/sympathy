@@ -17,11 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is FormWidget is TitledWidget #widget:
+import jk.widget.form
 
-import cape
-import cave
-import cave.ui
+class is FormWidget is TitledWidget #widget:
 
 prop api as APIClient
 prop articleId as string

@@ -17,9 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.web
+import jk.json
 
-import capex.web
+class:
 
 func send(fcmServerKey as string, registrationIds as DynamicVector, notification as DynamicMap, data as DynamicMap, callback as function<void, DynamicMap, Error>) static
 {
@@ -30,17 +31,17 @@ func send(fcmServerKey as string, registrationIds as DynamicVector, notification
 	assert sz > 0:
 		callback(null, Error.forCode("missingRegistrationId"))
 	if sz == 1 {
-		body.set("to", String.asString(registrationIds.get(0)))
+		body.setString("to", String.asString(registrationIds.get(0)))
 	}
 	else if sz > 1 {
-		body.set("registration_ids", registrationIds)
+		body.setObject("registration_ids", registrationIds)
 	}
-	body.set("priority", "high")
-	body.set("content_available", true)
+	body.setString("priority", "high")
+	body.setBoolean("content_available", true)
 	if notification:
-		body.set("notification", notification)
+		body.setObject("notification", notification)
 	if data:
-		body.set("data", data)
+		body.setObject("data", data)
 	var v = new JSONEncoder()
 	v.setNiceFormatting(false)
 	var json = v.execute(body)

@@ -17,12 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServer:
+import jk.io
+import jk.fs
+import jk.log
+import jk.console
+import jk.server.web
+import jk.http.server
+import jk.http.server.fs
 
-import cape
-import capex.console
-import sympathy
-import sympathy.app
+class is WebServer:
 
 var contentDirectory as File
 var listDirectories = true

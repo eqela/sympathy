@@ -17,18 +17,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import jk.fs
+import jk.log
+import jk.sql
+import jk.sql.factory
+import jk.time
+import jk.time.format
+import jk.console
+
 class is ConsoleApplicationMain:
 
-import capex.data
-import capex.console
-import sympathy.db
-
-func main(args as array<string>) static as int #main:
+main:
 	return ConsoleApplicationMain.executeMain(new this(), args)
 
 var connectionString as string
 var sqlQuery as string
 var sqlExecute as string
+var params = new vector<object>
 var verbose = false
 var nodata = false
 var listTables = false
@@ -40,7 +45,7 @@ var operationStartTime as TimeValue
 func trace(msg as string)
 {
 	assert verbose
-	Log.info(ctx, SystemClock.asString() .. ": " .. msg)
+	Log.debug(ctx, VerboseDateTimeString.forNow() .. ": " .. msg)
 }
 
 func startOperation(name as string)
@@ -58,15 +63,37 @@ func endOperation
 	currentOperation = null
 }
 
+func addParamsToStatement(stmt as SQLStatement) private
+{
+	assert stmt
+	foreach param in params {
+		if param is string {
+			stmt.addParamString(param as! string)
+		}
+		else if param is IntegerObject {
+			stmt.addParamInteger((param as! IntegerObject).toInteger())
+		}
+		else if param is LongIntegerObject {
+			stmt.addParamLongInteger((param as! LongIntegerObject).toLong())
+		}
+		else if param is DoubleObject {
+			stmt.addParamDouble((param as! DoubleObject).toDouble())
+		}
+		else if param is buffer {
+			stmt.addParamBlob(param as! buffer)
+		}
+	}
+}
+
 func execute override as bool
 {
 	foreach arg in args {
 		if arg.isFlag("help") || arg.isFlag("h") {
-			ConsoleApplication.PRINT_HEADER(stdout, null)
+			ConsoleApplicationUtil.printHeader(Stdout.instance(), VALUE "sling_project_title", VALUE "sling_project_version", VALUE "sling_project_copyright", VALUE "sling_project_license", VALUE "target_platform")
 			return true
 		}
 		else if arg.isFlag("version") || arg.isFlag("v") {
-			ConsoleApplication.PRINT_VERSION(stdout, false)
+			ConsoleApplicationUtil.printVersion(Stdout.instance(), VALUE "sling_project_version", VALUE "sling_project_title")
 			return true
 		}
 		else if arg.isFlag("verbose") {
@@ -94,6 +121,26 @@ func execute override as bool
 		else if arg.isFlag("stream") {
 			stream = true
 		}
+		else if arg.isOption("paramString") {
+			params += arg.getStringValue()
+		}
+		else if arg.isOption("paramInteger") {
+			params += Integer.asObject(String.toInteger(arg.getStringValue()))
+		}
+		else if arg.isOption("paramLong") {
+			params += LongInteger.asObject(String.toLong(arg.getStringValue()))
+		}
+		else if arg.isOption("paramDouble") {
+			params += Double.asObject(String.toDouble(arg.getStringValue()))
+		}
+		else if arg.isOption("paramBlob") {
+			var ff = File.forPath(arg.getStringValue())
+			assert ff.exists():
+				Log.error(ctx, "File does not exist: `" .. ff.getPath() .. "'")
+			var data = assert ff.getContentsBuffer():
+				Log.error(ctx, "Failed to read file: `" .. ff.getPath() .. "'")
+			params += data
+		}
 		else {
 			arg.reportAsUnsupported(ctx)
 			return false
@@ -103,8 +150,8 @@ func execute override as bool
 	assert String.isNotEmpty(connectionString):
 		Log.error(ctx, "No connection string specified. Use -db=.. to specify.")
 	trace("Opening database connection")
-	var db = assert SQLDatabaseProvider.getDatabase(ctx, connectionString):
-		Log.error(ctx, "Invalid connection string: `" .. connectionString .. "'")
+	var db = assert SQLDatabaseFactory.getDatabase(ctx, connectionString):
+		Log.error(ctx, "Failed to initialize database connection: `" .. connectionString .. "'")
 	trace("Database connection opened.")
 	var v = false
 	if listTables {
@@ -147,6 +194,7 @@ func execute override as bool
 	else if sqlQuery {
 		startOperation("Preparing SQL query")
 		var stmt = db.prepare(sqlQuery)
+		addParamsToStatement(stmt)
 		endOperation()
 		if not stmt {
 			Log.error(ctx, "Failed to prepare SQL statement: `" .. sqlQuery .. "'")
@@ -191,11 +239,34 @@ func execute override as bool
 					}
 				}
 			}
+			startOperation("Closing prepared statement")
+			stmt.close()
+			endOperation()
 			v = true
 		}
 	}
 	else if sqlExecute {
-		Log.info(ctx, "SQL execute: `" .. sqlExecute .. "'")
+		startOperation("Preparing SQL query")
+		var stmt = db.prepare(sqlExecute)
+		addParamsToStatement(stmt)
+		endOperation()
+		if not stmt {
+			Log.error(ctx, "Failed to prepare SQL statement: `" .. sqlExecute .. "'")
+		}
+		else {
+			startOperation("Executing SQL query")
+			var sv = db.execute(stmt)
+			endOperation()
+			startOperation("Closing prepared statement")
+			stmt.close()
+			endOperation()
+			if not sv {
+				Log.error(ctx, "SQL query failed: `" .. sqlExecute .. "'")
+			}
+			else {
+				Log.info(ctx, "SQL query successful: `" .. sqlExecute .. "'")
+			}
+		}
 		v = true
 	}
 	else {

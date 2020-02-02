@@ -17,9 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.url
+import jk.json
+import jk.http.client
 
-import capex.http
+class:
 
 class MyHTTPClientListener is HTTPClientListener
 {
@@ -28,30 +30,28 @@ class MyHTTPClientListener is HTTPClientListener
 
 	func onError(message as string) override
 	{
-		if(listener != null) {
+		if listener:
 			listener(null, Error.forMessage(message))
-		}
 	}
 
 	func onAborted override
 	{
-		if(listener != null) {
+		if listener:
 			listener(null, Error.forCode("aborted"))
-		}
 	}
 
 	func onDataReceived(buffer as buffer) override as bool
 	{
 		body = Buffer.append(body, buffer)
-		return(true)
+		return true
 	}
 
 	func onResponseCompleted override
 	{
 		base.onResponseCompleted()
-		if(listener != null) {
+		if listener {
 			var json = JSONParser.parse(body) as DynamicMap
-			if(json == null) {
+			if json == null {
 				listener(null, Error.forMessage("Invalid JSON Format from Google"))
 				return
 			}

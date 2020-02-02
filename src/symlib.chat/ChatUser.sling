@@ -19,8 +19,6 @@
 
 class abstract:
 
-import cape
-
 prop userId as string
 var engine protected as ChatEngine
 

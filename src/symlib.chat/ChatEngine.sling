@@ -17,13 +17,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class abstract:
+import jk.log
+import jk.ws.server
+import jk.json
+import jk.socket.io
+import jk.random
+import jk.time
+import jk.md5
+import jk.thread
 
-import cape
-import capex.data
-import capex.net
-import capex.crypto
-import sympathy
+class abstract:
 
 class UserConnection
 {
@@ -45,7 +48,7 @@ class UserConnection
 	func addConnection(connection as ChatConnectionHandler)
 	{
 		assert connection && connection.isOpen()
-		connectionMap.set(connection.getConnectionId(), connection)
+		connectionMap.setObject(connection.getConnectionId(), connection)
 		timeStamp = -1
 	}
 
@@ -208,7 +211,7 @@ func addUserConnection(userId as string, connection as ChatConnectionHandler) pr
 	if not uc {
 		uc = new UserConnection()
 		uc.setUserId(userId)
-		connectionMap.set(userId, uc)
+		connectionMap.setObject(userId, uc)
 	}
 	uc.addConnection(connection)
 }
@@ -301,15 +304,15 @@ func onParseData(data as buffer, connection as ChatConnectionHandler) private
 		connection.close()
 	}
 	switch message.getMessageType() {
-		case ChatMessage.COMMAND_TYPE: {
+		case ChatMessage.COMMAND_TYPE {
 			onNewCommandMessage(message, connection)
 			break
 		}
-		case ChatMessage.DATA_TYPE: {
+		case ChatMessage.DATA_TYPE {
 			onNewDataMessage(message, connection)
 			break
 		}
-		default: {
+		default {
 			logError("ChatMessage message type is invalid. Closing the connection instead.")
 			connection.close()
 		}
@@ -356,14 +359,14 @@ func onNewDataMessage(message as ChatMessage, connection as ChatConnectionHandle
 		assert channel && String.equals(channel.getChannelId(), channelId) {
 			logError("Internal error: fetched channel has different channel id. Closing the connection instead.")
 			var data = new DynamicMap()
-			data.set("command", "message_saved")
-			data.set("channelId", channelId)
-			data.set("status", "error")
-			data.set("code", "invalid_channel_id")
-			data.set("message", "Invalid channel id")
+			data.setString("command", "message_saved")
+			data.setString("channelId", channelId)
+			data.setString("status", "error")
+			data.setString("code", "invalid_channel_id")
+			data.setString("message", "Invalid channel id")
 			var v = new DynamicMap()
-			v.set("messageType", ChatMessage.COMMAND_TYPE)
-			v.set("data", data)
+			v.setInteger("messageType", ChatMessage.COMMAND_TYPE)
+			v.setObject("data", data)
 			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
 			var r = connection.sendMessage(reply)
 			assert r > 0 {
@@ -374,12 +377,12 @@ func onNewDataMessage(message as ChatMessage, connection as ChatConnectionHandle
 		var recipients = getRecipientIdsForChannelId(channelId)
 		assert recipients && recipients.getSize() > 1 {
 			var data = new DynamicMap()
-			data.set("command", "message_saved")
-			data.set("channelId", channelId)
-			data.set("status", "ok")
+			data.setString("command", "message_saved")
+			data.setString("channelId", channelId)
+			data.setString("status", "ok")
 			var v = new DynamicMap()
-			v.set("messageType", ChatMessage.COMMAND_TYPE)
-			v.set("data", data)
+			v.setInteger("messageType", ChatMessage.COMMAND_TYPE)
+			v.setObject("data", data)
 			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
 			var r = connection.sendMessage(reply)
 			assert r > 0 {
@@ -389,15 +392,15 @@ func onNewDataMessage(message as ChatMessage, connection as ChatConnectionHandle
 		}
 		var recipientMap = new DynamicMap()
 		foreach userId in recipients.toVectorOfStrings():
-			recipientMap.set(userId, userId)
+			recipientMap.setString(userId, userId)
 		assert recipientMap.getCount() > 1 {
 			var data = new DynamicMap()
-			data.set("command", "message_saved")
-			data.set("channelId", channelId)
-			data.set("status", "ok")
+			data.setString("command", "message_saved")
+			data.setString("channelId", channelId)
+			data.setString("status", "ok")
 			var v = new DynamicMap()
-			v.set("messageType", ChatMessage.COMMAND_TYPE)
-			v.set("data", data)
+			v.setInteger("messageType", ChatMessage.COMMAND_TYPE)
+			v.setObject("data", data)
 			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
 			var r = connection.sendMessage(reply)
 			assert r > 0 {
@@ -407,14 +410,14 @@ func onNewDataMessage(message as ChatMessage, connection as ChatConnectionHandle
 		}
 		assert recipientMap.containsKey(creatorUserId) {
 			var data = new DynamicMap()
-			data.set("command", "message_saved")
-			data.set("channelId", channelId)
-			data.set("status", "error")
-			data.set("code", "user_does_not_belong")
-			data.set("message", "You're not part of this conversation anymore.")
+			data.setString("command", "message_saved")
+			data.setString("channelId", channelId)
+			data.setString("status", "error")
+			data.setString("code", "user_does_not_belong")
+			data.setString("message", "You're not part of this conversation anymore.")
 			var v = new DynamicMap()
-			v.set("messageType", ChatMessage.COMMAND_TYPE)
-			v.set("data", data)
+			v.setInteger("messageType", ChatMessage.COMMAND_TYPE)
+			v.setObject("data", data)
 			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
 			var r = connection.sendMessage(reply)
 			assert r > 0 {
@@ -543,12 +546,12 @@ func broadcastMessage(message as ChatMessage)
 		}
 		if forwarder {
 			var data = new DynamicMap()
-			data.set("message", modifiedMessage.getMessage())
-			data.set("creatorUserId", creatorUserId)
-			data.set("recipients", recipients)
-			data.set("channelId", modifiedMessage.getChannelId())
-			data.set("externalId", modifiedMessage.getExternalId())
-			data.set("messageId", modifiedMessage.getMessageId())
+			data.setString("message", modifiedMessage.getMessage())
+			data.setString("creatorUserId", creatorUserId)
+			data.setObject("recipients", recipients)
+			data.setString("channelId", modifiedMessage.getChannelId())
+			data.setString("externalId", modifiedMessage.getExternalId())
+			data.setString("messageId", modifiedMessage.getMessageId())
 			var task = new NotificationForwarderTask()
 			task.setForwarder(forwarder)
 			task.setData(data)
@@ -566,8 +569,8 @@ func createAcknowledgeCommand(userId as string, callback as function<void, ChatM
 	var message = new ChatMessage()
 	message.setMessageType(ChatMessage.COMMAND_TYPE)
 	var data = new DynamicMap()
-	data.set("command", "authentication_acknowledged")
-	data.set("userId", userId)
+	data.setString("command", "authentication_acknowledged")
+	data.setString("userId", userId)
 	message.setData(json.execute(data))
 	callback(message)
 }

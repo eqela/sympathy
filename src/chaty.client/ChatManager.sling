@@ -17,11 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.log
 
-import cape
-import cave
-import cave.ui
+class:
 
 func create(ctx as LoggingContext) static as this
 {
@@ -66,7 +64,7 @@ func connect(url as string, authData as buffer)
 }
 
 func pushMessage(message as ChatMessage) private:
-	queue.append(message)
+	queue.appendObject(message)
 
 func popMessage as ChatMessage
 {
@@ -78,7 +76,7 @@ func popMessage as ChatMessage
 
 func onOpenConnection private
 {
-	PRINT "status: connected"
+	println "status: connected"
 	// Handle status connected here
 }
 
@@ -116,9 +114,9 @@ func saveMessage(message as ChatMessage) private
 	var c = conversationMap.get(channelId) as DynamicVector
 	if c == null {
 		c = new DynamicVector()
-		conversationMap.set(channelId, c)
+		conversationMap.setObject(channelId, c)
 	}
-	c.append(message)
+	c.appendObject(message)
 }
 
 func sendMessage(message as ChatMessage)

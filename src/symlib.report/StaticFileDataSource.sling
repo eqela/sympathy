@@ -17,6 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import jk.fs
+import jk.json
+
 class is ReportDataSource:
 
 func forFile(file as File) static as this
@@ -50,7 +53,7 @@ class MyIterator is Iterator<DynamicMap>
 			iterator = null
 		var v = new DynamicMap()
 		for(var n=0; n<fields.getSize(); n++):
-			v.set(fields.getString(n), o.get(n))
+			v.setObject(fields.getString(n), o.get(n))
 		return v
 	}
 }

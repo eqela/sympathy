@@ -17,11 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WSServerConnectionHandler:
+import jk.ws.server
+import jk.socket.io
 
-import capex.console
-import capex.net
-import sympathy
+class is WSServerConnectionHandler:
 
 prop engine as ChatEngine
 prop user as ChatUser

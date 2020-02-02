@@ -21,55 +21,52 @@ class private:
 
 func toValidJSONString(response as string) static as string
 {
-	if(String.isEmpty(response)) {
-		return(null)
-	}
+	if String.isEmpty(response):
+		return null
 	var prev as char
 	var sb = new StringBuilder()
 	var iter = CharacterIteratorForString.forString(response)
 	var hasOpeningQuote = false
 	var hasClosingQuote = false
-	while(true) {
-		if(iter.hasEnded()) {
+	loop {
+		if iter.hasEnded():
 			break
-		}
 		var c = iter.getCurrentChar()
-		if(c == '\"' || c == ' ' || c == '\n' || c == '\t' || c == '{' || c == '[' || c == '}' || c == ']') {
-			if(hasOpeningQuote == false && c == '\"') {
+		if c == '\"' || c == ' ' || c == '\n' || c == '\t' || c == '{' || c == '[' || c == '}' || c == ']' {
+			if hasOpeningQuote == false && c == '\"' {
 				hasOpeningQuote = true
 			}
-			else if(hasOpeningQuote == true && hasClosingQuote == false && c == '\"') {
+			else if hasOpeningQuote == true && hasClosingQuote == false && c == '\"' {
 				hasClosingQuote = true
 			}
-			else if(hasClosingQuote == false && hasOpeningQuote == false) {
-				if(c == '\n' && prev != '\"' && prev != '}' && prev != ']' && prev != ',' && prev != '[' && prev != '{') {
-					sb.append('\"')
-				}
+			else if hasClosingQuote == false && hasOpeningQuote == false {
+				if c == '\n' && prev != '\"' && prev != '}' && prev != ']' && prev != ',' && prev != '[' && prev != '{':
+					sb.appendCharacter('\"')
 			}
-			if(hasOpeningQuote && hasClosingQuote) {
+			if hasOpeningQuote && hasClosingQuote {
 				hasOpeningQuote = false
 				hasClosingQuote = false
 			}
 			prev = c
-			sb.append(c)
+			sb.appendCharacter(c)
 			iter.moveToNextChar()
 			continue
 		}
-		if(c == ':') {
-			sb.append(c)
-			sb.append(' ')
+		if c == ':' {
+			sb.appendCharacter(c)
+			sb.appendCharacter(' ')
 			iter.moveToNextChar()
 			iter.moveToNextChar()
 			c = iter.getCurrentChar()
-			if(c != '\"' && c != '{' && c != '[') {
-				sb.append('\"')
-				sb.append(c)
+			if c != '\"' && c != '{' && c != '[' {
+				sb.appendCharacter('\"')
+				sb.appendCharacter(c)
 				iter.moveToNextChar()
 			}
 			continue
 		}
-		sb.append(c)
+		sb.appendCharacter(c)
 		iter.moveToNextChar()
 	}
-	return(sb.toString())
+	return sb.toString()
 }

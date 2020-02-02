@@ -17,7 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is JSONAPIClientWithGui imports cape imports cave.ui:
+import jk.widget.web
+
+class is JSONAPIClientWithGui:
 
 prop apiSecret as string
 
@@ -72,8 +74,8 @@ func getArticleDetails(articleId as string, callback as function<void,DynamicMap
 func updateArticle(articleId as string, headers as DynamicMap, content as string, callback as function)
 {
 	var data = new DynamicMap()
-	data.set("headers", headers)
-	data.set("content", content)
+	data.setObject("headers", headers)
+	data.setString("content", content)
 	doPut("/articles/" .. articleId, data, func(data as DynamicMap) {
 		if(handleAsError(data)) {
 			return

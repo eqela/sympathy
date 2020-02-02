@@ -17,16 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServer:
-
-import capex.console
-import capex.net
-import sympathy
-import sympathy.db
-import capex.mysql
-import capex.data
-import sympathy.app
+import jk.fs
+import jk.sql
+import jk.server.web
 import symlib.chat
+import jk.http.server
+import jk.socket.io
+import jk.log
+
+class is WebServer:
 
 prop db as SQLDatabase
 var httpControlPort private = -1

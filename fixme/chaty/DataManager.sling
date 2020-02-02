@@ -17,12 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
-
-import cape
-import capex.crypto
-import capex.data
+import jk.log
+import jk.sql
+import jk.random
 import symlib.chat
+
+class:
 
 const CHAT_CHANNELS = "chat_channels"
 const CHAT_RECIPIENTS = "chat_recipients"
@@ -130,8 +130,44 @@ func getChannel(channelId as string) static as Channel:
 func getChannel(channelId as string, callback as function<void, Channel>) static:
 	Channel.SQL.queryByChannelId(db, CHAT_CHANNELS, channelId, callback)
 
-func getChannels(userId as string, externalIdPattern as string, page as int, limit as int, callback as function<void, DynamicVector, int, int>) static:
-	Channel.getChannels(userId, externalIdPattern, page, limit, callback)
+func createGetChannelsQueryString(isForCount as bool, externalIdPattern as string) private static as string
+{
+	var sb = new StringBuilder()
+	sb.append("SELECT * FROM " .. DataManager.CHAT_CHANNELS .. " WHERE (channelCreatorUserId = ? OR channelId IN (SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE userId = ?))")
+	if externalIdPattern:
+		sb.append(" AND externalId LIKE '%" .. externalIdPattern .. "%'")
+	if not isForCount:
+		sb.append(" ORDER BY timeStampLastUpdated DESC, timeStampCreated DESC LIMIT ? OFFSET ?")
+	sb.append(";")
+	return sb.toString()
+}
+
+func getChannels(userId as string, externalIdPattern as string, page as int, limit as int, callback as function<void, DynamicVector, int, int>) static
+{
+	if limit <= 0:
+		limit = 20
+	var offset = page - 1
+	if offset < 0:
+		offset = 0
+	var db = assert getDb():
+		callback(new DynamicVector(), 0, 0)
+	assert String.isNotEmpty(userId):
+		callback(new DynamicVector(), 0, 0)
+	var st = db.prepare(createGetChannelsQueryString(false, externalIdPattern)).addParamString(userId).addParamString(userId).addParamInteger(limit).addParamInteger(offset * limit)
+	db.query(st, func(itr as SQLResultSetIterator) {
+		assert itr:
+			callback(new DynamicVector(), 0, 0)
+		var data = assert db.query(db.prepare(createQueryString(true, externalIdPattern)).addParamString(userId).addParamString(userId)):
+			callback(new DynamicVector(), 0, 0)
+		var dvector = assert data.toVectorOfMaps():
+			callback(new DynamicVector(), 0, 0)
+		var count = dvector.getSize()
+		var pageCount = count / limit
+		if (count % limit) > 0:
+			pageCount++
+		callback(itr.toVectorOfMaps(), pageCount, count)
+	})
+}
 
 func getRecipientIdsForChannelId(channelId as string) static as DynamicVector:
 	return Recipient.getRecipientIdsForChannelId(channelId)
@@ -158,7 +194,7 @@ func deleteMessages(channelId as string, userId as string, messageIds as Dynamic
 		assert messageIdMap.getCount() > 0:
 			callback(Error.instance("no_message_ids", "No message ids"))
 		var ids = messageIdMap.getKeys()
-		assert ids && SIZE(ids) > 0:
+		assert ids && sizeof ids > 0:
 			callback(Error.instance("internal_error", "Internal error"))
 		var sb = new StringBuilder()
 		sb.append("SELECT COUNT(*) AS size FROM " .. CHAT_MESSAGES .. " WHERE creatorUserId = ? AND messageId IN (")
@@ -177,7 +213,7 @@ func deleteMessages(channelId as string, userId as string, messageIds as Dynamic
 			stmt.addParamString(id)
 		var result = assert db.querySingleRow(stmt):
 			callback(Error.instance("internal_error", "Internal error"))
-		var diff = result.getLongInteger("size") - SIZE(ids)
+		var diff = result.getLongInteger("size") - sizeof ids
 		assert diff < 1:
 			callback(Error.instance("not_allowed", "Cannot delete messages that doesn't belong to you."))
 		sb = new StringBuilder()
@@ -252,7 +288,7 @@ func updateRecipients(channelId as string, creatorUserId as string, newRecipient
 		userIdMap.set(userId, userId)
 	}
 	var userIds = userIdMap.getKeys()
-	assert userIds && SIZE(userIds) > 0:
+	assert userIds && sizeof userIds > 0:
 		callback(Error.instance("invalid_recipient_count", "Cannot have recipient size less than one"))
 	insertRecipients(channelId, creatorUserId, DynamicVector.forStringVector(userIds), callback)
 }
@@ -292,8 +328,26 @@ func getMessageById(messageId as string, callback as function<void, Message, Err
 	})
 }
 
-func getChannelForExternalId(externalId as string, callback as function<void, Channel>) static:
-	Channel.getChannelForExternalId(externalId, callback)
+func getChannelForExternalId(externalId as string, callback as function<void, Channel>) static
+{
+	var db = assert getDb():
+		callback(null)
+	assert String.isNotEmpty(externalId):
+		callback(null)
+	db.querySingleRow(db.prepare("SELECT * FROM " .. DataManager.CHAT_CHANNELS .. " WHERE externalId = ?;").addParamString(externalId), func(v as DynamicMap) {
+		assert v:
+			callback(null)
+		callback(Channel.forDynamicMap(v))
+	})
+}
+
+func onPreInsertChannel(channel as Channel) private static
+{
+	assert channel
+	channel.setTimeStampCreated(SystemClock.asUTCSeconds())
+	channel.setTimeStampLastUpdated(channel.getTimeStampCreated())
+	channel.setChannelId(generateCode(hashText(channel.getChannelCreatorUserId() .. String.forLongInteger(channel.getTimeStampCreated())), 20))
+}
 
 func insertChannelForExternalId(externalId as string, channelCreatorUserId as string, title as string, callback as function<void, Channel, Error>) static
 {
@@ -305,6 +359,7 @@ func insertChannelForExternalId(externalId as string, channelCreatorUserId as st
 	channel.setExternalId(externalId)
 	channel.setTitle(title)
 	channel.setChannelCreatorUserId(channelCreatorUserId)
+	onPreInsertChannel(channel)
 	Channel.SQL.insert(db, CHAT_CHANNELS, channel, func(success as bool) {
 		assert success:
 			callback(null, Error.instance("internal_error", "Internal error"))
@@ -319,6 +374,7 @@ func insertChannel(channelCreatorUserId as string, title as string, callback as 
 	var channel = new Channel()
 	channel.setChannelCreatorUserId(channelCreatorUserId)
 	channel.setTitle(title)
+	onPreInsertChannel(channel)
 	Channel.SQL.insert(db, CHAT_CHANNELS, channel, func(success as bool) {
 		assert success:
 			callback(null, Error.instance("internal_error", "Internal error"))
@@ -362,7 +418,7 @@ func insertRecipients(channelId as string, channelCreatorUserId as string, recip
 	if cdata:
 		count = cdata.getInteger("count")
 	var userIds = userIdMap.getKeys()
-	assert userIds && SIZE(userIds) > 0:
+	assert userIds && sizeof userIds > 0:
 		callback(Error.instance("invalid_recipient_count", "Cannot have recipient size less than one"))
 	var sb = new StringBuilder()
 	sb.append("INSERT INTO " .. CHAT_RECIPIENTS .. " (channelId, userId, timeStampCreated, timeStampLastUpdated, readIndex) VALUES ")

@@ -17,9 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class #webapi:
+import jk.sql
+import jk.server.common
 
-import capex.data
+class #webapi:
 
 prop db as SQLDatabase
 
@@ -57,13 +58,13 @@ macro INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST
 POST "getOwnProfile"
 {
 	INIT_SYMPATHY_APIGWY_AUTHORIZED_REQUEST()
-	var stmt = assert db.prepareSelectStatement("profile", new DynamicMap().set("userid", userid)):
+	var stmt = assert db.prepareSelectStatement("profile", new DynamicMap().setString("userid", userid)):
 		req.sendJSONError(ServerError.internalError())
 	db.querySingleRow(stmt, func(v as DynamicMap) {
 		var vv = v
 		if not vv:
 			vv = new DynamicMap()
-		vv.set("userid", userid)
+		vv.setString("userid", userid)
 		req.sendJSONOK(vv)
 	})
 }
@@ -79,10 +80,10 @@ POST "updateOwnProfile"
 		assert validateProfileDataField(key, params.getString(key)):
 			req.sendJSONError(ServerError.invalidRequest())
 	}
-	var criteria = new DynamicMap().set("userid", userid)
+	var criteria = new DynamicMap().setString("userid", userid)
 	db.executeUpdateDelete(db.prepareUpdateStatement("profile", criteria, params), func(rows as int) {
 		if rows < 1 {
-			params.set("userid", userid)
+			params.setString("userid", userid)
 			db.executeUpdateDelete(db.prepareInsertStatement("profile", params), func(rows as int) {
 				assert rows > 0:
 					req.sendJSONError(ServerError.failedToSave())

@@ -17,9 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class abstract:
+import jk.template
 
-import capex.text
+class abstract:
 
 func getCategories(callback as function<void,vector<Category>>) abstract
 func getArticleCount(category as string, callback as function<void,int>) abstract

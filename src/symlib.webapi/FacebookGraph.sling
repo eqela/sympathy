@@ -17,9 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.json
+import jk.web.json
 
-import capex.web
+class:
 
 var client static private as JSONAPIClient
 
@@ -47,9 +48,9 @@ func getUserProfile(fbUserId as string, fbAccessToken as string, fields as Dynam
 			if String.isEmpty(v):
 				continue
 			if not first:
-				sb.append(',')
+				sb.appendCharacter(',')
 			first = false
-			sb.append(v)
+			sb.appendString(v)
 		}
 		f = sb.toString()
 	}
@@ -96,8 +97,8 @@ func replaceUnicodeChars(response as string) static as string
 {
 	var str = response
 	if String.contains(response, "\\u0040"):
-		str = String.replace(response, "\\u0040", "@")
+		str = String.replaceString(response, "\\u0040", "@")
 	if String.contains(response, "\\u00f1"):
-		str = String.replace(str, "\\u00f1", "ñ")
+		str = String.replaceString(str, "\\u00f1", "ñ")
 	return str
 }

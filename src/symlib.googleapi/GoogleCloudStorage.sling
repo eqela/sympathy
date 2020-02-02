@@ -17,10 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.json
+import jk.web.json
 
-import capex.crypto
-import capex.web
+class:
 
 func getInstance static as this
 {

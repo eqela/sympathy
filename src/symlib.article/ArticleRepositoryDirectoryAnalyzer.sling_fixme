@@ -19,11 +19,6 @@
 
 class:
 
-import cape
-import capex.console
-import capex.text
-import capex.util
-
 func addToCategory(id as string, category as string, categories as DynamicMap) static
 {
 	var list = categories.getDynamicVector(category)

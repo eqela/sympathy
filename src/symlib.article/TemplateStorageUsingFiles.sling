@@ -17,4 +17,42 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-preFilters += "@cape"
+import jk.fs
+
+class is TemplateStorage:
+
+func forDirectory(dir as File) static as this
+{
+	var v = new this()
+	v.setDirectory(dir)
+	return v
+}
+
+func forHTMLTemplateDirectory(dir as File) static as this
+{
+	var v = new this()
+	v.setDirectory(dir)
+	v.setSuffix(".html.t")
+	return v
+}
+
+prop directory as File
+prop suffix as string
+
+ctor:
+	suffix = ".txt"
+
+func getTemplate(id as string, callback as function<void,string>)
+{
+	assert callback
+	if directory == null || String.isEmpty(id) || String.getIndexOfCharacter(id, '/') >= 0 || String.getIndexOfCharacter(id, '\\') >= 0 {
+		callback(null)
+		return
+	}
+	var ff = directory.entry(id .. suffix)
+	if ff.isFile() == false {
+		callback(null)
+		return
+	}
+	callback(ff.getContentsUTF8())
+}

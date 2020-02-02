@@ -17,7 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is NavigationWidget imports cape imports cave imports cave.ui #widget:
+import jk.widget.common
+
+class is NavigationWidget #widget:
 
 prop api as APIClient
 
@@ -32,7 +34,7 @@ func createMainWidget override as Widget
 	var logo = ImageWidget.forImageResource(context, "sympathy_logo")
 	logo.setWidgetImageScaleMethod(ImageWidget.FIT)
 	logo.setWidgetImageWidth(context.getHeightValue("100mm"))
-	return(AlignWidget.forWidget(context, logo, 0.5, 0.5))
+	return AlignWidget.forWidget(context, logo, 0.5, 0.5)
 }
 
 func createSidebarWidget override as Widget

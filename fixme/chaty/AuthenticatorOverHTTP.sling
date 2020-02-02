@@ -17,9 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is JSONAPIClient is Authenticator:
+import jk.web.json
 
-import capex.web
+class is JSONAPIClient is Authenticator:
 
 macro CHECK_SESSION(sessionId, callback)
 {

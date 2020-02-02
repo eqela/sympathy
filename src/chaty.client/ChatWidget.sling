@@ -17,7 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is LayerWidget abstract imports cape imports cave imports cave.ui:
+import jk.ui
+import jk.widget
+import jk.widget.common
+import jk.log
+
+class is LayerWidget abstract:
 
 ctor(context as GuiApplicationContext)
 {
@@ -53,7 +58,7 @@ func initializeWidget override
 
 func computeWidgetLayout(widthConstraint as int #notLiteral) override
 {
-	if(widthConstraint > context.getWidthValue("200mm")) {
+	if widthConstraint > context.getWidthValue("200mm") {
 		wideScreenContainer = createChatContainerforWideScreen()
 		assert wideScreenContainer
 		if navi:
@@ -99,9 +104,8 @@ func onMessageReceived(message as ChatMessage)
 	var ccw = conversationMap.get(channelId) as ChatConversationItemWidget
 	if not ccw {
 		ccw = createChatConversationItemWidgetObject()
-		assert ccw {
+		assert ccw:
 			Log.error(context, "ChatWidget: Failed to create ChatConversationWidget object!")
-		}
 		ccw.setChannelId(channelId)
 		ccw.setRecipients(recipients)
 		var ccwf final = ccw
@@ -109,7 +113,7 @@ func onMessageReceived(message as ChatMessage)
 			onChatConversationWidgetClicked(ccwf)
 		})
 		conversationList.addWidget(ccw)
-		conversationMap.set(channelId, ccw)
+		conversationMap.setObject(channelId, ccw)
 	}
 	if currentConversationWidget {
 		currentConversationWidget.onMessageReceived(message)

@@ -37,7 +37,7 @@ class FormulaUtil public
 	func formulaToTableName(formula as string) static as string
 	{
 		var fq = assert formulaToFieldQualifier(formula)
-		var idx = String.getIndexOf(fq, '.')
+		var idx = String.getIndexOfCharacter(fq, '.')
 		if idx > 0:
 			return String.getSubString(fq, 0, idx)
 		return fq
@@ -46,9 +46,9 @@ class FormulaUtil public
 	func formulaToFieldName(formula as string) static as string
 	{
 		var fq = assert formulaToFieldQualifier(formula)
-		var idx = String.getLastIndexOf(fq, '.')
+		var idx = String.getLastIndexOfCharacter(fq, '.')
 		if idx > 0:
-			return String.getSubString(fq, idx+1)
+			return String.getEndOfString(fq, idx+1)
 		return fq
 	}
 }

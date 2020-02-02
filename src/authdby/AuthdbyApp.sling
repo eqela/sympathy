@@ -17,11 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServerWithDatabase:
-
-import sympathy
-import sympathy.dbapp
+import jk.fs
+import jk.log
+import jk.server.web.db
+import jk.http.server
+import jk.util.smtp
 import symlib.auth
+
+class is WebServerWithDatabase:
 
 var smtpServer as string
 var validationEmailTemplateFile as File

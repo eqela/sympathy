@@ -17,9 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.fs
+import jk.io
+import jk.log
+import jk.console
+import jk.process
+import jk.thread
 
-import capex.console
+class:
 
 prop process as Process
 prop configurationFile as File
@@ -53,7 +58,7 @@ func printUsage(stdout as PrintWriter)
 		[ "debug", "Display debug information" ],
 		[ "h|help", "Usage information" ]
 	]
-	ConsoleApplication.printUsage(stdout, null, parameters, flags, null)
+	ConsoleApplicationUtil.printUsage(stdout, null, parameters, flags, null)
 }
 
 func captureSignals private
@@ -121,7 +126,7 @@ func readConfigurationFile(file as File) private as Configuration
 		if String.startsWith(line, "#"):
 			continue
 		if String.startsWith(line, "repository ") {
-			var rep = String.getSubString(line, 11)
+			var rep = String.getEndOfString(line, 11)
 			if String.isNotEmpty(rep):
 				v.addToRepositories(rep)
 			continue
@@ -149,7 +154,7 @@ func readConfigurationFile(file as File) private as Configuration
 			continue
 		}
 		if String.startsWith(line, "workdir ") {
-			v.setWorkdir(File.forPath(String.getSubString(line, 8)))
+			v.setWorkdir(File.forPath(String.getEndOfString(line, 8)))
 			continue
 		}
 		Log.error(ctx, "Unsupported configuration line: `" .. line .. "'")
@@ -235,7 +240,7 @@ func execute(args as array<string>) as bool
 	var showHelp = false
 	var command as string
 	var commandArgs as vector<string>
-	foreach arg in ConsoleApplication.parseCommandLineArguments(args) {
+	foreach arg in ConsoleApplicationUtil.parseCommandLineArguments(args) {
 		if acceptFlags {
 			if arg.isFlag("help") || arg.isFlag("h") {
 				showHelp = true
@@ -267,7 +272,7 @@ func execute(args as array<string>) as bool
 		}
 	}
 	if command == null || showHelp {
-		ConsoleApplication.PRINT_HEADER(stdout, null)
+		ConsoleApplicationUtil.printHeader(Stdout.instance(), VALUE "sling_project_title", VALUE "sling_project_version", VALUE "sling_project_copyright", VALUE "sling_project_license", VALUE "target_platform")
 		printUsage(stdout)
 		return true
 	}

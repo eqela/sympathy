@@ -17,10 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is HTTPServerRequestHandler:
+import jk.io
+import jk.log
+import jk.web
+import jk.http.server
+import jk.server.common
 
-import sympathy
-import capex.web
+class is HTTPServerRequestHandler:
 
 prop ctx as LoggingContext
 prop auth as AuthApi

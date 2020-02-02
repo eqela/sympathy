@@ -17,9 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is JSONAPIClient is NotificationForwarder:
+import jk.web.json
+import jk.json
 
-import capex.web
+class is JSONAPIClient is NotificationForwarder:
 
 func forConfiguration(notificationForwarderConfig as DynamicMap) static as this
 {
@@ -57,7 +58,7 @@ func getFullURL(api as string) override as string
 	}
 	if String.endsWith(url, "/") {
 		if String.startsWith(api, "/"):
-			return url .. String.getSubString(api, 1)
+			return url .. String.getEndOfString(api, 1)
 		return url .. api
 	}
 	if String.startsWith(api, "/"):

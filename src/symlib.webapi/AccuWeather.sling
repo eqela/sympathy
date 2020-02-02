@@ -17,9 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.json
+import jk.http.client
 
-import capex.http
+class:
 
 class MyHTTPClientListener is HTTPClientListener
 {

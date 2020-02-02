@@ -17,7 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class imports cape imports capex.net:
+import jk.json
+
+class:
 
 prop channelId as string
 prop senderId as string
@@ -28,12 +30,12 @@ prop recipients as DynamicVector
 func toDynamicMap as DynamicMap
 {
 	var v = new DynamicMap()
-	v.set("type", 1)
-	v.set("channelId", channelId)
-	v.set("senderId", senderId)
-	v.set("timestamp", timestamp)
-	v.set("message", message)
-	v.set("recipients", recipients)
+	v.setInteger("type", 1)
+	v.setString("channelId", channelId)
+	v.setString("senderId", senderId)
+	v.setLong("timestamp", timestamp)
+	v.setString("message", message)
+	v.setObject("recipients", recipients)
 	return v
 }
 

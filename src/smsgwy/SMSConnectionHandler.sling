@@ -17,10 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WSServerConnectionHandler:
+import jk.ws.server
 
-import capex.console
-import sympathy
+class is WSServerConnectionHandler:
 
 prop authenticated as bool
 prop engine as SMSEngine

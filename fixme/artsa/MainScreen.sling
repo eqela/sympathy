@@ -17,4 +17,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-preFilters += "@cape"
+import jk.widget
+import jk.widget.common
+
+class is ScreenForWidget #screen #main:
+
+func initialize override
+{
+	base.initialize()
+	var navi = new NavigationWidget(context)
+	navi.setWidgetEnableActionBar(false)
+	setWidget(navi)
+	navi.pushWidget(new LoginWidget(context))
+}

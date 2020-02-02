@@ -17,10 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class #webapi:
-
-import capex.data
+import jk.fs
+import jk.sql
+import jk.log
 import symlib.report
+
+class #webapi:
 
 prop db as SQLDatabase
 prop reportDir as File
@@ -29,15 +31,13 @@ prop ctx as LoggingContext
 func validateReportName(name as string) as bool
 {
 	assert name
-	assert String.indexOf(name, '/') < 0
-	assert String.indexOf(name, '\\') < 0
+	assert String.getIndexOfCharacter(name, '/') < 0
+	assert String.getIndexOfCharacter(name, '\\') < 0
 	return true
 }
 
-func getDataSource as ReportDataSource
-{
+func getDataSource as ReportDataSource:
 	return SQLDataSource.forDatabase(db)
-}
 
 GET "pdf"
 {

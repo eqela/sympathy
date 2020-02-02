@@ -17,7 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class imports cape imports capex.net:
+import jk.log
+import jk.ws.client
+import jk.json
+
+class:
 
 prop ctx as LoggingContext
 prop onOpenCallback as function<void>
@@ -56,15 +60,13 @@ func connect(url as string, data as buffer)
 	var authData final = data
 	assert authData {
 		logError("No 'authData' specified.")
-		assert onErrorCallback {
+		assert onErrorCallback:
 			logWarning("No 'onErrorCallback' configured. Ignoring error event.")
-		}
 		onErrorCallback()
 	}
 	socket = WSSocket.create()
-	assert socket {
+	assert socket:
 		logError("Failed to create WSSocket instance!")
-	}
 	socket.setOnOpenCallback(func {
 		socket.send(WSMessage.forData(authData))
 		// FIXME: We should send an authentication data by this time
@@ -74,26 +76,23 @@ func connect(url as string, data as buffer)
 		onWSMessageReceived(message)
 	})
 	socket.setOnErrorCallback(func {
-		assert onErrorCallback {
+		assert onErrorCallback:
 			logWarning("No 'onErrorCallback' configured. Ignoring error event.")
-		}
 		onErrorCallback()
 	})
 	socket.setOnCloseCallback(func(e as WSCloseEvent) {
-		assert onCloseCallback {
+		assert onCloseCallback:
 			logWarning("No 'onCloseCallback' configured. Ignoring close event.")
-		}
 		onCloseCallback()
 	})
-	socket.connect(url, "no sub-protocols")
+	socket.connect(url)
 }
 
 func onWSMessageReceived(message as WSMessage) private
 {
 	assert message
-	assert onMessageCallback {
+	assert onMessageCallback:
 		logWarning("No 'onMessageCallback' configured. Ignoring message received.")
-	}
 	var v = JSONParser.parse(message.getData()) as DynamicMap
 	assert v {
 		logWarning("Invalid message received from server. Closing the connection.")
@@ -101,15 +100,15 @@ func onWSMessageReceived(message as WSMessage) private
 	}
 	var type = v.getInteger("type")
 	switch type {
-		case 2: {
+		case 2 {
 			onCommandMessageReceived(v)
 			break
 		}
-		case 1: {
+		case 1 {
 			onDataMessageReceived(v)
 			break
 		}
-		default: {
+		default {
 			close()
 		}
 	}
@@ -120,10 +119,9 @@ func onCommandMessageReceived(data as DynamicMap) private
 	assert data
 	var command = data.getInteger("command")
 	switch command {
-		case 1: {
-			assert onOpenCallback {
+		case 1 {
+			assert onOpenCallback:
 				logWarning("No 'onOpenCallback' configured. Ignoring open event.")
-			}
 			senderId = data.getString("userId")
 			assert senderId {
 				logWarning("No 'userId' included in the open command. Closing the connection.")
@@ -132,7 +130,7 @@ func onCommandMessageReceived(data as DynamicMap) private
 			onOpenCallback()
 			break
 		}
-		default: {
+		default {
 			close()
 		}
 	}
@@ -151,17 +149,15 @@ func onDataMessageReceived(data as DynamicMap) private
 
 func close
 {
-	assert socket {
+	assert socket:
 		logError("No active connection to close!")
-	}
 	socket.close(1000, "Sample reason for closing")
 }
 
 func sendMessage(message as ChatMessage)
 {
-	assert socket {
+	assert socket:
 		logError("No active connection to send to!")
-	}
 	assert message
 	message.setSenderId(senderId)
 	socket.send(WSMessage.forStringData(message.toDynamicMapString()))

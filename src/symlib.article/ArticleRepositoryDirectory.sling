@@ -17,8 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import capex.util
-import capex.text
+import jk.log
+import jk.fs
+import jk.io
+import jk.json
+import jk.mime
 
 class is ArticleRepository:
 
@@ -297,7 +300,7 @@ func doReadArticleFile(file as File) private as MyArticle
 			line = line .. nl
 		}
 		if String.startsWith(line, "include ") {
-			var toinclude = String.getSubString(line, 8)
+			var toinclude = String.getEndOfString(line, 8)
 			if String.isEmpty(toinclude) {
 				Log.warning(context, "Empty include directive: `" .. line .. "'")
 				continue
@@ -333,7 +336,7 @@ func doReadArticleFile(file as File) private as MyArticle
 			}
 			continue
 		}
-		if String.indexOf(line, ':') > 0 {
+		if String.getIndexOfCharacter(line, ':') > 0 {
 			var comps = String.split(line, ':', 2)
 			var key = String.strip(Vector.get(comps, 0))
 			var value = String.strip(Vector.get(comps, 1))
@@ -421,8 +424,8 @@ func doReadArticleFile(file as File) private as MyArticle
 		if not line:
 			break
 		if sb.count() > 0:
-			sb.append('\n')
-		sb.append(line)
+			sb.appendCharacter('\n')
+		sb.appendString(line)
 	}
 	v.setContentMarkup(sb.toString())
 	Log.debug(context, "DONE reading article file: `" .. file.getPath() .. "'.")

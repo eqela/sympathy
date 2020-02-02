@@ -17,12 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class #widget #main:
-
-import cape
-import cave
-import cave.ui
+import jk.ui
+import jk.widget.common
 import chaty.client
+
+class #widget #main:
 
 class MyChatConversationWidget is ChatConversationWidget #widget
 {
@@ -125,8 +124,8 @@ func initializeWidget override
 	main.addWidget(message)
 	main.addWidget(TextButtonWidget.forText(context, "Send", func {
 		var r = new DynamicVector()
-		r.append("dwight")
-		r.append("steven")
+		r.appendObject("John")
+		r.appendObject("Doe")
 		var m = new ChatMessage()
 		m.setRecipients(r)
 		m.setMessage(message.getWidgetText())

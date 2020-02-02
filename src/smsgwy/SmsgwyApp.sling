@@ -17,11 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServer:
+import jk.fs
+import jk.log
+import jk.json
+import jk.server.web
+import jk.http.server
+import jk.ws.server
+import jk.socket.io
 
-import capex.net
-import sympathy
-import sympathy.app
+class is WebServer:
 
 var secretKey as string
 var enginePort = 8081
@@ -58,24 +62,24 @@ func initializeServer(server as HTTPServer) override as bool
 	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
 		if req.isPOST() {
 			var data = assert req.getBodyJSONMap():
-				req.sendJSONObject(JSONResponse.forMissingData())
+				req.sendJSONObject(HTTPServerJSONResponse.forMissingData())
 			var type = data.getInteger("type")
 			assert type == SMSMessage.UNKNOWN_TYPE || type == SMSMessage.DATA_TYPE:
-				req.sendJSONObject(JSONResponse.forErrorMessage("Invalid type"))
+				req.sendJSONObject(HTTPServerJSONResponse.forErrorMessage("Invalid type"))
 			var priority = data.getInteger("priority", -1)
 			assert priority > 0:
-				req.sendJSONObject(JSONResponse.forErrorMessage("Invalid priority"))
+				req.sendJSONObject(HTTPServerJSONResponse.forErrorMessage("Invalid priority"))
 			var message = data.getString("message")
 			assert String.isNotEmpty(message):
-				req.sendJSONObject(JSONResponse.forErrorMessage("Invalid or empty message"))
+				req.sendJSONObject(HTTPServerJSONResponse.forErrorMessage("Invalid or empty message"))
 			var recipients = assert data.getDynamicVector("recipients"):
-				req.sendJSONObject(JSONResponse.forErrorMessage("Invalid or no recipients"))
+				req.sendJSONObject(HTTPServerJSONResponse.forErrorMessage("Invalid or no recipients"))
 			var smsMessage = new SMSMessage()
 			smsMessage.setData(data)
 			assert smsMessage.initialize():
-				req.sendJSONObject(JSONResponse.forInvalidData())
+				req.sendJSONObject(HTTPServerJSONResponse.forInvalidData())
 			smsEngine.sendMessage(smsMessage)
-			req.sendJSONObject(JSONResponse.forOk())
+			req.sendJSONObject(HTTPServerJSONResponse.forOk())
 			return
 		}
 		next()
@@ -95,7 +99,5 @@ func initializeWithIOManager(ioManager as IOManager, ctx as LoggingContext) over
 	return true
 }
 
-main
-{
+main:
 	return new this().executeMain(args)
-}

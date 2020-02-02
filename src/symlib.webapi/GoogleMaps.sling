@@ -17,9 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.web
+import jk.url
+import jk.json
 
-import capex.web
+class:
 
 func getTravelDetails(apiKey as string, origin as string, destination as string, callback as function<void,DynamicMap,Error>) static
 {

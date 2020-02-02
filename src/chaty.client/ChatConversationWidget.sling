@@ -17,7 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is LayerWidget is KeyListener abstract imports cape imports cave imports cave.ui:
+import jk.ui
+import jk.widget
+import jk.widget.common
+import jk.widget.file
+import jk.log
+
+class is LayerWidget is KeyListener abstract:
 
 ctor(context as GuiApplicationContext)
 {
@@ -89,9 +95,8 @@ func initializeWidget override
 	if footer:
 		vbox.addWidget(footer)
 	addWidget(vbox)
-	foreach(message as ChatMessage in messages.toVector()) {
+	foreach message as ChatMessage in messages.toVector():
 		initializeMessageWidget(message)
-	}
 }
 
 func createHeaderWidget private as Widget
@@ -121,7 +126,7 @@ func createHeaderWidget private as Widget
 
 func onKeyEvent(event as KeyEvent) virtual
 {
-	if(event.isKeyPress(KeyEvent.KEY_BACK)) {
+	if event.isKeyPress(KeyEvent.KEY_BACK) {
 		event.consume()
 		onBackWidgetClicked()
 	}
@@ -202,8 +207,7 @@ func onAttachmentWidgetClicked
 {
 	var thisWidget final = this
 	var ftype = "*/*"
-	var fs = new FileSelectorWidget(context)
-	fs.openFileDialog(thisWidget, ftype, func(buff as buffer, ff as string, mimeType as string, err as Error) {
+	FileSelector.openFileDialog(thisWidget, ftype, func(buff as buffer, ff as string, mimeType as string, err as Error) {
 		fileName = ff
 		var pa = previewAttachment()
 		if pa {

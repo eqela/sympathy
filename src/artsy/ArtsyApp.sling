@@ -17,12 +17,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import cape
-import capex.text
-import capex.console
-import sympathy
+import jk.fs
+import jk.io
+import jk.log
+import jk.server.web
+import jk.http.server
+import jk.http.server.fs
+import jk.console
+import jk.json
+import jk.template
 import symlib.article
-import sympathy.app
 
 class is WebServer:
 
@@ -103,7 +107,7 @@ func getNotFoundHtml(ctx as LoggingContext) as string
 	dirs += themeDirectory
 	var tt = assert TextTemplate.forHTMLString(str, dirs, null, ctx)
 	var dd = new DynamicMap()
-	dd.set("site", siteData)
+	dd.setObject("site", siteData)
 	return tt.execute(dd)
 }
 
@@ -147,8 +151,8 @@ func initializeServer(server as HTTPServer) override as bool
 		Log.error(ctx, "Failed to create article repository for data directory: `" .. dataDirectory.getPath() .. "'")
 	if serverMode == "web" {
 		var templateData = new DynamicMap()
-		templateData.set("urlPrefix", urlPrefix)
-		templateData.set("site", siteData)
+		templateData.setString("urlPrefix", urlPrefix)
+		templateData.setObject("site", siteData)
 		var handler = ArticleWebHandler.forRepository(repository)
 		handler.setDefaultCategory(defaultCategory)
 		handler.setCategoryPathSuffix(categoryPathSuffix)

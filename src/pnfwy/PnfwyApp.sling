@@ -17,20 +17,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServer:
-
-import capex.console
-import capex.net
-import sympathy
-import sympathy.app
+import jk.fs
+import jk.log
+import jk.server.web
+import jk.http.server
 import symlib.webapi
+
+class is WebServer:
 
 var fcmServerKey as string
 
-main
-{
+main:
 	return new this().executeMain(args)
-}
 
 func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
 {
@@ -50,23 +48,23 @@ func initializeServer(server as HTTPServer) override as bool
 	server.pushRequestHandler(func(req as HTTPServerRequest, next as function) {
 		if req.isPOST() {
 			var body = assert req.getBodyJSONMap():
-				req.sendJSONObject(JSONResponse.forInvalidRequest())
+				req.sendJSONObject(HTTPServerJSONResponse.forInvalidRequest())
 			var registrationIds = body.getDynamicVector("registrationIds")
 			if not registrationIds || registrationIds.getSize() < 1 {
 				var registrationId = body.getString("registrationId")
 				assert String.isNotEmpty(registrationId):
-					req.sendJSONObject(JSONResponse.forError(Error.instance("noRegistrationId", "No registration id(s) specified.")))
+					req.sendJSONObject(HTTPServerJSONResponse.forError(Error.instance("noRegistrationId", "No registration id(s) specified.")))
 				registrationIds = new DynamicVector()
-				registrationIds.append(registrationId)
+				registrationIds.appendObject(registrationId)
 			}
 			var notification = body.getDynamicMap("notification")
 			var data = body.getDynamicMap("data")
 			assert notification || data:
-				req.sendJSONObject(JSONResponse.forInvalidRequest())
+				req.sendJSONObject(HTTPServerJSONResponse.forInvalidRequest())
 			FirebaseCloudMessaging.send(fcmServerKey, registrationIds, notification, data, func(r as DynamicMap, e as Error) {
 				assert not e:
-					req.sendJSONObject(JSONResponse.forError(e))
-				req.sendJSONObject(JSONResponse.forOk())
+					req.sendJSONObject(HTTPServerJSONResponse.forError(e))
+				req.sendJSONObject(HTTPServerJSONResponse.forOk())
 			})
 			return
 		}

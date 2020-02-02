@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-interface:
+import jk.http.server
 
-import sympathy
+interface:
 
 func handleAuthenticatedRequest(req as HTTPServerRequest, handler as function<void,string,string,HTTPServerRequest>)

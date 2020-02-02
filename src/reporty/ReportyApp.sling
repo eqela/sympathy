@@ -17,11 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServerWithDatabase:
+import jk.fs
+import jk.log
+import jk.http.server
+import jk.server.web.db
 
-import sympathy
-import sympathy.dbapp
-import capex.data
+class is WebServerWithDatabase:
 
 var reportDir as File
 

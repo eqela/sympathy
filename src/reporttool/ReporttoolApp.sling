@@ -17,10 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is ConsoleApplicationMain:
-
-import capex.console
+import jk.fs
+import jk.log
+import jk.console
 import symlib.report
+
+class is ConsoleApplicationMain:
 
 main:
 	return executeMain(new this(), args)

@@ -17,11 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServer:
+import jk.fs
+import jk.log
+import jk.env
+import jk.server.web
+import jk.http.server
 
-import capex.console
-import sympathy
-import sympathy.app
+class is WebServer:
 
 var phantomJSExecPath as string
 
@@ -43,7 +45,7 @@ func initializeServer(server as HTTPServer) override as bool
 		phantomJSExec = File.forPath(phantomJSExecPath)
 	}
 	else {
-		phantomJSExec = Environment.findCommand("phantomjs")
+		phantomJSExec = ExternalCommand.findInPath("phantomjs")
 	}
 	if not phantomJSExec || phantomJSExec.isFile() == false {
 		Log.error(ctx, "Failed to find phantomjs")
@@ -57,7 +59,5 @@ func initializeServer(server as HTTPServer) override as bool
 	return true
 }
 
-main
-{
+main:
 	return new this().executeMain(args)
-}

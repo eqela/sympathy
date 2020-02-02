@@ -17,12 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is LayerWidget abstract imports cape imports cave imports cave.ui:
+import jk.ui
+import jk.widget
 
-ctor(context as GuiApplicationContext)
-{
+class is LayerWidget abstract:
+
+ctor(context as GuiApplicationContext):
 	base(context)
-}
 
 prop message as ChatMessage
 

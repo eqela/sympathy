@@ -17,11 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is ChatEngine:
-
+import jk.sql
+import jk.log
+import jk.ws.server
 import symlib.chat
-import capex.data
-import sympathy
+
+class is ChatEngine:
 
 prop authenticator as Authenticator
 prop eventForwarder as ChatEventForwarderOverHTTP

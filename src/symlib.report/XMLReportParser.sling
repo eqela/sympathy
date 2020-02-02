@@ -17,9 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is XMLParserAdapter:
+import jk.fs
+import jk.log
+import jk.xml
 
-import capex.text
+class is XMLParserAdapter:
 
 func parseFile(ctx as LoggingContext, file as File) static as ReportDefinition
 {

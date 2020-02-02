@@ -17,10 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is AuthApi:
+import jk.web.json
+import jk.http.server
+import jk.server.common
 
-import sympathy
-import capex.web
+class is AuthApi:
 
 prop authServerUrl as string
 var apiClient as JSONAPIClient
@@ -44,7 +45,7 @@ func sessionidToUserid(sessionid as string, callback as function<void,string>)
 	var api = assert getApiClient():
 		callback(null)
 	var params = new DynamicMap()
-	params.set("sessionid", sessionid)
+	params.setString("sessionid", sessionid)
 	api.postWithStatus("checkSession", params, null, func(v as DynamicMap, error as Error) {
 		assert error == null && v:
 			callback(null)

@@ -17,10 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.log
+import jk.json
 
-import capex.data
-import capex.crypto
+class:
 
 class ConnectionManager
 {
@@ -39,20 +39,20 @@ class ConnectionManager
 	{
 		assert connection
 		Vector.append(connections, connection)
-		op.logDebug("New connection. Now: (" .. String.forInteger(SIZE connections) .. ") connected")
+		op.logDebug("New connection. Now: (" .. String.forInteger(sizeof connections) .. ") connected")
 	}
 
 	func remove(connection as SMSConnectionHandler)
 	{
 		assert connection
 		Vector.removeValue(connections, connection)
-		op.logDebug("Connection closed. Now: (" .. String.forInteger(SIZE connections) .. ") connected")
+		op.logDebug("Connection closed. Now: (" .. String.forInteger(sizeof connections) .. ") connected")
 	}
 
 	func sendMessage(message as buffer) as bool
 	{
 		var sent as bool
-		var s = SIZE connections
+		var s = sizeof connections
 		var c = 0
 		loop {
 			if c >= s:
@@ -136,7 +136,7 @@ func onMessageReceived(data as DynamicMap)
 	assert data
 	logDebug("New message received: " .. String.asString(data))
 	if messageReceivedCallback:
-		messageReceivedCallback(String.toUTF8Buffer(JSONEncoder.encode(data)))
+		messageReceivedCallback(SMSMessage.forDataBuffer(String.toUTF8Buffer(JSONEncoder.encode(data))))
 }
 
 func onAuthenticateConnection(data as buffer, connection as SMSConnectionHandler)
@@ -153,8 +153,8 @@ func onAuthenticateConnection(data as buffer, connection as SMSConnectionHandler
 	// FIXME: Including a userId since the SMS Manager App requires it but doesn't really use it.
 
 	var v = new DynamicMap()
-	v.set("type", 2)
-	v.set("userId", "someuserid")
+	v.setInteger("type", 2)
+	v.setString("userId", "someuserid")
 	var m = assert String.toUTF8Buffer(JSONEncoder.encode(v)) {
 		logError("Failed to create authentication message")
 		connection.close()

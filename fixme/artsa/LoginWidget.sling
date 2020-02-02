@@ -17,6 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import jk.widget.common
+
 class #widget:
 
 ui LayerWidget
@@ -53,10 +55,11 @@ ui LayerWidget
 						clickHandler = func {
 							var url = serverUrl.getWidgetText()
 							var secret = serverSecret.getWidgetText()
-							if(String.isEmpty(url)) {
+							if String.isEmpty(url) {
 								context.showErrorDialog("Server URL must be supplied.")
 								return
 							}
+							var thisWidget = this
 							var api = new APIClient()
 							api.setContext(context)
 							api.setParentWidget(thisWidget)

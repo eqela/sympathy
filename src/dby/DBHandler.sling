@@ -17,62 +17,65 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is HTTPServerRequestHandlerAdapter imports cape imports sympathy imports capex.data:
+import jk.sql
+import jk.http.server
+
+class is HTTPServerRequestHandlerAdapter:
 
 prop db as SQLDatabase
 
 func onPOST(req as HTTPServerRequest) override as bool
 {
 	var tableName = req.popResource()
-	if(tableName == null) {
+	if tableName == null {
 		req.sendInternalError("Creating tables: Not implemented")
-		return(true)
+		return true
 	}
-	if(req.hasMoreResources()) {
+	if req.hasMoreResources() {
 		req.sendInvalidRequest()
-		return(true)
+		return true
 	}
 	var data = req.getBodyJSONMap()
-	if(data == null) {
+	if data == null {
 		req.sendInvalidRequest()
-		return(true)
+		return true
 	}
 	db.execute(db.prepareInsertStatement(tableName, data), func(status as bool) {
-		if(status == false) {
+		if status == false {
 			req.sendInternalError()
 		}
 		else {
-			req.sendJSONObject(JSONResponse.forOk())
+			req.sendJSONObject(HTTPServerJSONResponse.forOk())
 		}
 	})
-	return(true)
+	return true
 }
 
 func onGET(req as HTTPServerRequest) override as bool
 {
 	var tableName = req.popResource()
-	if(tableName == null) {
+	if tableName == null {
 		db.queryAllTableNames(func(data as vector) {
-			if(data == null) {
+			if data == null {
 				req.sendNotFound()
 			}
 			else {
 				req.sendJSONObject(data)
 			}
 		})
-		return(true)
+		return true
 	}
-	if(req.hasMoreResources()) {
+	if req.hasMoreResources() {
 		req.sendInvalidRequest()
-		return(true)
+		return true
 	}
 	db.query(db.prepareQueryAllStatement(tableName), func(data as SQLResultSetIterator) {
-		if(data == null) {
+		if data == null {
 			req.sendNotFound()
 		}
 		else {
 			req.sendJSONString(data.toVectorListJSON())
 		}
 	})
-	return(true)
+	return true
 }

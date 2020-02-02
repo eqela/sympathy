@@ -17,9 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is AuthApi:
+import jk.http.server
+import jk.server.common
 
-import sympathy
+class is AuthApi:
 
 func handleAuthenticatedRequest(req as HTTPServerRequest, handler as function<void,string,string,HTTPServerRequest>)
 {

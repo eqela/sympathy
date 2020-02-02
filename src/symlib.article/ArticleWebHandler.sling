@@ -17,10 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is HTTPServerRequestHandlerAdapter is RichTextDocumentReferenceResolver:
+import jk.fs
+import jk.log
+import jk.http.server
+import jk.template
+import jk.time.format
 
-import sympathy
-import capex.text
+class is HTTPServerRequestHandlerAdapter is RichTextDocumentReferenceResolver:
 
 func forRepository(repository as ArticleRepository) static as this
 {
@@ -94,12 +97,12 @@ func onGETCategoryList(req as HTTPServerRequest, next as function)
 {
 	repository.getCategories(func(results as vector<Category>) {
 		assert results:
-			sendResponse(req, "error", JSONResponse.forErrorCode("queryFailed"))
+			sendResponse(req, "error", HTTPServerJSONResponse.forErrorCode("queryFailed"))
 		var v = new vector
 		foreach result in results:
 			v += result.toJsonObject()
 		var data = new DynamicMap()
-		data.set("categories", v)
+		data.setObject("categories", v)
 		sendResponse(req, "categorylist", data)
 	})
 }
@@ -110,9 +113,9 @@ func processTimeStamp(values as DynamicMap)
 	if timeStamp > 0 {
 		var date = VerboseDateTimeString.getDateStringForDateTime(DateTime.forSeconds(timeStamp))
 		var time = VerboseDateTimeString.getTimeStringForDateTime(DateTime.forSeconds(timeStamp))
-		values.set("date", date)
-		values.set("time", time)
-		values.set("dateTime", date .. " " .. time)
+		values.setString("date", date)
+		values.setString("time", time)
+		values.setString("dateTime", date .. " " .. time)
 	}
 }
 
@@ -153,7 +156,7 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 			pages = 1
 		repository.getArticles(catId, pp * articlesPerPage, articlesPerPage, func(category as Category, results as vector<Article>) {
 			assert results:
-				sendResponse(req, "error", JSONResponse.forErrorCode("queryFailed"))
+				sendResponse(req, "error", HTTPServerJSONResponse.forErrorCode("queryFailed"))
 			var v = new vector
 			var resultCount = Vector.getSize(results)
 			var doSendResponse = func {
@@ -167,16 +170,16 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 				var intro = cat.getIntro()
 				if intro == null:
 					intro = ""
-				data.set("intro", intro)
-				data.set("description", intro)
-				data.set("articles", v)
-				data.set("category", cat.toJsonObject())
+				data.setString("intro", intro)
+				data.setString("description", intro)
+				data.setObject("articles", v)
+				data.setObject("category", cat.toJsonObject())
 				if pp > 0:
-					data.set("previousPage", pp)
+					data.setInteger("previousPage", pp)
 				if pp+2 <= pages:
-					data.set("nextPage", pp+2)
-				data.set("currentPage", pp+1)
-				data.set("pageCount", pages)
+					data.setInteger("nextPage", pp+2)
+				data.setInteger("currentPage", pp+1)
+				data.setInteger("pageCount", pages)
 				sendResponse(req, "articlelist", data)
 			}
 			if resultCount < 1 {
@@ -196,7 +199,7 @@ func onGETCategoryArticles(req as HTTPServerRequest, next as function)
 				processTimeStamp(map)
 				v += map
 				var html = repository.getIntroHtml(result, myObject)
-				map.set("introHtml", html)
+				map.setString("introHtml", html)
 				onIntroHtmlRetrieved()
 			}
 		})
@@ -210,8 +213,8 @@ func getBreadcrumbs(article as Article) as vector
 	assert String.isNotEmpty(parent)
 	var v = new vector
 	var o = new DynamicMap()
-	o.set("reference", parent)
-	o.set("text", repository.getArticleTitleSync(parent))
+	o.setObject("reference", parent)
+	o.setString("text", repository.getArticleTitleSync(parent))
 	v += o
 	return v
 }
@@ -259,12 +262,12 @@ func onGETArticle(req as HTTPServerRequest, next as function)
 		if not map:
 			map = new DynamicMap()
 		if String.isEmpty(map.getString("shareDescription")):
-			map.set("shareDescription", map.getString("slogan"))
+			map.setString("shareDescription", map.getString("slogan"))
 		var introHtml = repository.getIntroHtml(article, myObject)
-		map.set("introHtml", introHtml)
+		map.setString("introHtml", introHtml)
 		var contentHtml = repository.getContentHtml(article, myObject)
-		map.set("contentHtml", contentHtml)
-		map.set("breadcrumbs", getBreadcrumbs(article))
+		map.setString("contentHtml", contentHtml)
+		map.setObject("breadcrumbs", getBreadcrumbs(article))
 		processTimeStamp(map)
 		sendResponse(req, "article", map)
 	})
@@ -273,11 +276,11 @@ func onGETArticle(req as HTTPServerRequest, next as function)
 func sendResponse(req as HTTPServerRequest, type as string, content as object)
 {
 	var rdata = new DynamicMap()
-	rdata.set("type", type)
-	rdata.set("content", content)
+	rdata.setString("type", type)
+	rdata.setObject("content", content)
 	var rq = new DynamicMap()
-	rq.set("path", req.getURLPath())
-	rdata.set("request", rq)
+	rq.setString("path", req.getURLPath())
+	rdata.setObject("request", rq)
 	if templateData:
 		rdata.mergeFrom(templateData)
 	if isResponseHTML(req) {
@@ -326,7 +329,7 @@ func onGET(req as HTTPServerRequest, next as function) override
 	}
 	var resource = req.peekResource()
 	if resource == "articles" {
-		var path = String.getSubString(req.getURLPath(), 9)
+		var path = String.getEndOfString(req.getURLPath(), 9)
 		if String.isEmpty(path):
 			path = "/"
 		req.sendRedirect(path)

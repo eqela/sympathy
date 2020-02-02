@@ -17,19 +17,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is ListItemWidget imports cape imports cave imports cave.ui #widget:
+import jk.widget.list
+import jk.widget.common
+
+class is ListItemWidget #widget:
 
 prop api as APIClient
 
-ctor(context as GuiApplicationContext)
-{
+ctor(context as GuiApplicationContext):
 	base(context)
-}
 
-func getWidgetTitle override as string
-{
-	return("Articles")
-}
+func getWidgetTitle override as string:
+	return "Articles"
 
 func createWidgetForRecord(record as DynamicMap) override as Widget
 {
@@ -45,7 +44,7 @@ func createWidgetForRecord(record as DynamicMap) override as Widget
 	Widget.setWidgetClickHandler(v, func {
 		NavigationWidget.pushToContainer(thisWidget, new ArticleEditorFormWidget(context).setArticleId(record.getString("id")).setApi(api))
 	})
-	return(v)
+	return v
 }
 
 func startDataQuery(callback as function<void,vector<DynamicMap>>) override

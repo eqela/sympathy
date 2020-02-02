@@ -17,11 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is WebServer:
+import jk.fs
+import jk.web
+import jk.server.web
+import jk.http.server
 
-import sympathy
-import sympathy.app
-import capex.web
+class is WebServer:
 
 var auth as AuthApi = new AuthApiForDummy()
 var endpoints = new map<string,Endpoint>
@@ -46,7 +47,7 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 	}
 	var epswa = "api.endpoint.auth."
 	if String.startsWith(key, epswa) {
-		var method = String.getSubString(key, String.getLength(epswa))
+		var method = String.getEndOfString(key, String.getLength(epswa))
 		var target = value
 		if String.isNotEmpty(method) && String.isNotEmpty(target):
 			endpoints[method] = new Endpoint(method, target, true)
@@ -54,7 +55,7 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 	}
 	var epsna = "api.endpoint.noauth."
 	if String.startsWith(key, epsna) {
-		var method = String.getSubString(key, String.getLength(epsna))
+		var method = String.getEndOfString(key, String.getLength(epsna))
 		var target = value
 		if String.isNotEmpty(method) && String.isNotEmpty(target):
 			endpoints[method] = new Endpoint(method, target, false)

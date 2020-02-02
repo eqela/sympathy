@@ -17,10 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class #dataModel:
+import jk.sql
 
-import cape
-import capex.data
+class #dataModel:
 
 prop messageId as string #dataField #primary
 prop channelId as string #dataField #index
@@ -87,7 +86,7 @@ func getMessages(channelId as string, page as int, limit as int, callback as fun
 			callback(new DynamicVector(), 0, 0)
 		var count = dvector.getSize()
 		var pageCount = count / limit
-		if((count % limit) > 0):
+		if (count % limit) > 0:
 			pageCount++
 		callback(itr.toVectorOfMaps(), pageCount, count)
 	})

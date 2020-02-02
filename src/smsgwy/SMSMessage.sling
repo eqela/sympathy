@@ -17,9 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.random
+import jk.json
+import jk.time
+import jk.md5
 
-import capex.crypto
+class:
 
 const UNKNOWN_TYPE = 0
 const DATA_TYPE = 1
@@ -43,8 +46,8 @@ var type private as int
 func generateId as string
 {
 	var sb = new StringBuilder()
-	sb.append(new Random().nextInt())
-	sb.append(SystemClock.asSeconds())
+	sb.appendInteger(new Random().nextInt())
+	sb.appendLong(SystemClock.asSeconds())
 	return "SMS-" .. MD5Encoder.encode(sb.toString())
 }
 
@@ -79,10 +82,10 @@ func getType as int:
 func toBuffer as buffer
 {
 	assert dataMap
-	dataMap.set("smsId", smsId)
-	dataMap.set("recipients", recipients)
-	dataMap.set("timestamp", timestamp)
-	dataMap.set("type", type)
-	dataMap.set("priority", priority)
+	dataMap.setString("smsId", smsId)
+	dataMap.setObject("recipients", recipients)
+	dataMap.setLong("timestamp", timestamp)
+	dataMap.setInteger("type", type)
+	dataMap.setInteger("priority", priority)
 	return String.toUTF8Buffer(JSONEncoder.encode(dataMap))
 }

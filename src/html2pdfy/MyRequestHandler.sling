@@ -17,10 +17,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class #webapi:
+import jk.fs
+import jk.io
+import jk.log
+import jk.env
+import jk.template
+import jk.http.server
+import jk.process
+import jk.mime
 
-import capex.util
-import capex.text
+class #webapi:
 
 prop ctx as LoggingContext
 prop filename as string
@@ -30,10 +36,10 @@ POST "forHtml"
 {
 	var content = req.getBodyString()
 	assert String.isNotEmpty(content):
-		req.sendJSONObject(JSONResponse.forMissingData())
+		req.sendJSONObject(HTTPServerJSONResponse.forMissingData())
 	var data = new DynamicMap()
-	data.set("useUrl", false)
-	data.set("contentStrings", DynamicVector.forStringVector(toJSNormalMultiLineString(content)))
+	data.setBoolean("useUrl", false)
+	data.setObject("contentStrings", DynamicVector.forStringVector(toJSNormalMultiLineString(content)))
 	processResponse(req, data)
 }
 
@@ -41,10 +47,10 @@ GET "forUrl"
 {
 	var url = req.getQueryParameter("url")
 	assert String.isNotEmpty(url):
-		req.sendJSONObject(JSONResponse.forMissingData("url in query parameters"))
+		req.sendJSONObject(HTTPServerJSONResponse.forMissingData("url in query parameters"))
 	var data = new DynamicMap()
-	data.set("useUrl", true)
-	data.set("url", url)
+	data.setBoolean("useUrl", true)
+	data.setString("url", url)
 	processResponse(req, data)
 }
 
@@ -55,38 +61,38 @@ func processResponse(req as HTTPServerRequest, data as DynamicMap)
 		Log.error(ctx, "Failed to get query parameters: " .. error.getMessage())
 	})
 	var template = assert TextTemplate.forString(TEXTFILE "PhantomJSTemplate.js.t", "<%", "%>") {
-		req.sendJSONObject(JSONResponse.forInternalError("Failed to parse template"))
+		req.sendJSONObject(HTTPServerJSONResponse.forInternalError("Failed to parse template"))
 		Log.error(ctx, "Failed to parse phantomjs template file")
 	}
 	var outDir = assert TemporaryDirectory.create() {
-		req.sendJSONObject(JSONResponse.forInternalError())
+		req.sendJSONObject(HTTPServerJSONResponse.forInternalError())
 		Log.error(ctx, "Failed to create temporary directory")
 	}
 	var pdfFileName = filename .. ".pdf"
-	data.set("destination", escapeBackslashes(outDir, pdfFileName))
+	data.setString("destination", escapeBackslashes(outDir, pdfFileName))
 	var phantomJSContent = template.execute(data)
 	assert String.isNotEmpty(phantomJSContent) {
-		req.sendJSONObject(JSONResponse.forInternalError("Failed to generate content"))
+		req.sendJSONObject(HTTPServerJSONResponse.forInternalError("Failed to generate content"))
 		Log.error(ctx, "Failed to generate content for phantomjs js file")
 	}
 	var phantomJSFile = outDir.entry(filename .. ".js")
 	assert phantomJSFile.setContentsUTF8(phantomJSContent) {
-		req.sendJSONObject(JSONResponse.forInternalError("Failed to write to file"))
+		req.sendJSONObject(HTTPServerJSONResponse.forInternalError("Failed to write to file"))
 		Log.error(ctx, "Failed to write: `" .. phantomJSFile.getPath() .. "'")
 	}
 	var pl = ProcessLauncher.forFile(phantomJSExec, [ phantomJSFile.getPath() ])
 	var r = pl.execute()
 	assert r == 0 {
-		req.sendJSONObject(JSONResponse.forInternalError())
-		Log.error(ctx, phantomJSExec.getPath() .. " returned an error status: " .. String.asString(r))
+		req.sendJSONObject(HTTPServerJSONResponse.forInternalError())
+		Log.error(ctx, phantomJSExec.getPath() .. " returned an error status: " .. String.forInteger(r))
 	}
 	var pdf = outDir.entry(pdfFileName)
 	assert pdf.isFile() {
-		req.sendJSONObject(JSONResponse.forInternalError())
+		req.sendJSONObject(HTTPServerJSONResponse.forInternalError())
 		Log.error(ctx, "Failed to get pdf file after phantomjs execution")
 	}
 	var buf = assert pdf.getContentsBuffer() {
-		req.sendJSONObject(JSONResponse.forInternalError())
+		req.sendJSONObject(HTTPServerJSONResponse.forInternalError())
 		Log.error(ctx, "Failed to get content buffer of `" .. pdf.getPath() .. "'")
 	}
 	req.sendBuffer(buf, MimeTypeRegistry.determineTypeForFile(pdf))
@@ -108,7 +114,7 @@ func getQueryParametersTo(req as HTTPServerRequest, data as DynamicMap, callback
 		callback(Error.forMessage("Invalid orientation `" .. orientation .. "'"))
 		return false
 	}
-	data.set("paperOrientation", orientation)
+	data.setString("paperOrientation", orientation)
 	return true
 }
 
@@ -147,14 +153,14 @@ func getActualPaperSizeTo(size as string, data as DynamicMap) private as bool
 	else {
 		return false
 	}
-	data.set("paperWidth", w .. "in")
-	data.set("paperHeight", h .. "in")
+	data.setString("paperWidth", w .. "in")
+	data.setString("paperHeight", h .. "in")
 	return true
 }
 
 func escapeBackslashes(tempDir as File, filename as string) private as string
 {
-	var tp = tempDir.getPath() .. String.asString(Environment.getPathSeparator()) .. filename
+	var tp = tempDir.getPath() .. String.forCharacter(PathInfo.getPathSeparator()) .. filename
 	return escapeCharacters(tp, CharacterSet.forCharacters(new char[] { '\\' }))
 }
 
@@ -183,8 +189,8 @@ func escapeCharacters(str as string, chars as CharacterSet) private as string
 		if c < 1:
 			break
 		if chars.contains(c):
-			sb.append('\\')
-		sb.append(c)
+			sb.appendCharacter('\\')
+		sb.appendCharacter(c)
 	}
 	return sb.toString()
 }

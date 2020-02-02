@@ -17,16 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import jk.fs
+import jk.sql
+import jk.http.server
+import jk.server.web.db
+
 class is WebServerWithDatabase:
 
-import sympathy
-import sympathy.dbapp
-import capex.data
-
-func configure(key as string, value as string, relativeTo as File, error as Error) override as bool
-{
+func configure(key as string, value as string, relativeTo as File, error as Error) override as bool:
 	return base.configure(key, value, relativeTo, error)
-}
 
 func initializeDatabase as bool
 {

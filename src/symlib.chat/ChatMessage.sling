@@ -17,9 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.json
 
-import cape
+class:
 
 const COMMAND_TYPE = 1
 const DATA_TYPE = 2
@@ -30,28 +30,28 @@ func forMessageSavedCommand(message as this, channel as ChatChannel) static as t
 	var v = new this()
 	v.setMessageType(COMMAND_TYPE)
 	var data = new DynamicMap()
-	data.set("command", "message_saved")
-	data.set("status", "ok")
-	data.set("sendId", message.getSendId())
-	data.set("messageId", message.getMessageId())
-	data.set("message", message.getMessage())
-	data.set("attachmentFileName", message.getAttachmentFileName())
-	data.set("attachmentURL", message.getAttachmentURL())
-	data.set("creatorUserId", message.getCreatorUserId())
-	data.set("timeStampCreated", message.getTimeStampCreated())
-	data.set("timeStampLastUpdated", message.getTimeStampLastUpdated())
-	data.set("channelCreatorUserId", channel.getChannelCreatorUserId())
-	data.set("title", channel.getTitle())
-	data.set("channelId", channel.getChannelId())
-	data.set("externalId", channel.getExternalId())
-	data.set("recipients", message.getRecipients())
+	data.setString("command", "message_saved")
+	data.setString("status", "ok")
+	data.setString("sendId", message.getSendId())
+	data.setString("messageId", message.getMessageId())
+	data.setString("message", message.getMessage())
+	data.setString("attachmentFileName", message.getAttachmentFileName())
+	data.setString("attachmentURL", message.getAttachmentURL())
+	data.setString("creatorUserId", message.getCreatorUserId())
+	data.setLong("timeStampCreated", message.getTimeStampCreated())
+	data.setLong("timeStampLastUpdated", message.getTimeStampLastUpdated())
+	data.setString("channelCreatorUserId", channel.getChannelCreatorUserId())
+	data.setString("title", channel.getTitle())
+	data.setString("channelId", channel.getChannelId())
+	data.setString("externalId", channel.getExternalId())
+	data.setObject("recipients", message.getRecipients())
 	v.setData(JSONEncoder.encode(data))
 	return v
 }
 
 func forBuffer(data as buffer) static as this
 {
-	assert data && SIZE(data) > 0
+	assert data && sizeof data > 0
 	var m = assert JSONParser.parse(String.forUTF8Buffer(data)) as DynamicMap
 	var t = m.getInteger("messageType")
 	assert t == COMMAND_TYPE || t == DATA_TYPE
@@ -167,7 +167,7 @@ func addRecipient(userId as string)
 	if not recipientMap:
 		recipientMap = new DynamicMap()
 	assert not recipientMap.containsKey(userId)
-	recipientMap.set(userId, userId)
+	recipientMap.setString(userId, userId)
 }
 
 func removeRecipient(userId as string)
@@ -185,35 +185,35 @@ func getRecipients as DynamicVector
 func toBuffer as buffer
 {
 	var v = new DynamicMap()
-	v.set("messageType", messageType)
+	v.setInteger("messageType", messageType)
 	var d = JSONParser.parse(data) as DynamicMap
 	if not d:
 		d = new DynamicMap()
 	if String.isNotEmpty(title):
-		d.set("title", title)
+		d.setString("title", title)
 	if String.isNotEmpty(channelCreatorUserId):
-		d.set("channelCreatorUserId", channelCreatorUserId)
+		d.setString("channelCreatorUserId", channelCreatorUserId)
 	if String.isNotEmpty(creatorUserId):
-		d.set("creatorUserId", creatorUserId)
+		d.setString("creatorUserId", creatorUserId)
 	if String.isNotEmpty(messageId):
-		d.set("messageId", messageId)
+		d.setString("messageId", messageId)
 	if String.isNotEmpty(channelId):
-		d.set("channelId", channelId)
+		d.setString("channelId", channelId)
 	if String.isNotEmpty(externalId):
-		d.set("externalId", externalId)
+		d.setString("externalId", externalId)
 	if String.isNotEmpty(attachmentFileName):
-		d.set("attachmentFileName", attachmentFileName)
+		d.setString("attachmentFileName", attachmentFileName)
 	if String.isNotEmpty(attachmentURL):
-		d.set("attachmentURL", attachmentURL)
+		d.setString("attachmentURL", attachmentURL)
 	var recipients = getRecipients()
 	if recipients:
-		d.set("recipients", recipients)
+		d.setObject("recipients", recipients)
 	if timeStampCreated > 0:
-		d.set("timeStampCreated", timeStampCreated)
+		d.setLong("timeStampCreated", timeStampCreated)
 	if timeStampLastUpdated > 0:
-		d.set("timeStampLastUpdated", timeStampLastUpdated)
+		d.setLong("timeStampLastUpdated", timeStampLastUpdated)
 	if unreadCount > 0:
-		d.set("unreadCount", unreadCount)
-	v.set("data", JSONEncoder.encode(d))
+		d.setInteger("unreadCount", unreadCount)
+	v.setString("data", JSONEncoder.encode(d))
 	return String.toUTF8Buffer(json.execute(v))
 }

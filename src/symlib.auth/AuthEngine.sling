@@ -17,11 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
+import jk.log
+import jk.sql
+import jk.util.smtp
+import jk.sha
+import jk.time
+import jk.random
+import jk.server.common
 
-import sympathy
-import capex.data
-import capex.crypto
+class:
 
 model RecoveryModel
 {
@@ -154,7 +158,7 @@ func getUserById(id as string, cb as function<void,UserModel>) private
 {
 	assert String.isNotEmpty(id):
 		cb(null)
-	var stmt = assert db.prepareSelectStatement("auth_user", new DynamicMap().set("id", id)):
+	var stmt = assert db.prepareSelectStatement("auth_user", new DynamicMap().setString("id", id)):
 		cb(null)
 	db.querySingleRow(stmt, func(v as DynamicMap) {
 		var user = assert UserModel.forJsonObject(v):
@@ -224,7 +228,7 @@ func createSession(userid as string, cb as function<void,string>) private
 
 func getSession(sessionid as string, cb as function<void,SessionModel>) private
 {
-	var stmt = assert db.prepareSelectStatement("auth_session", new DynamicMap().set("id", sessionid)):
+	var stmt = assert db.prepareSelectStatement("auth_session", new DynamicMap().setString("id", sessionid)):
 		cb(null)
 	db.querySingleRow(stmt, func(v as DynamicMap) {
 		var session = assert SessionModel.forJsonObject(v):
@@ -244,7 +248,7 @@ func getSessionUser(sessionid as string, cb as function<void,string>)
 
 func deleteSession(sessionid as string, cb as function<void,bool>)
 {
-	var stmt = assert db.prepareDeleteStatement("auth_session", new DynamicMap().set("id", sessionid)):
+	var stmt = assert db.prepareDeleteStatement("auth_session", new DynamicMap().setString("id", sessionid)):
 		cb(false)
 	db.execute(stmt, func(v as bool) {
 		cb(v)
@@ -256,16 +260,16 @@ func generateValidationSecret private as string
 	var rnd = Random.getSharedInstance()
 	var sb = new StringBuilder()
 	for(var n=0; n<4; n++):
-		sb.append(String.forInteger(rnd.nextInt(10)))
+		sb.appendString(String.forInteger(rnd.nextInt(10)))
 	return sb.toString()
 }
 
 func isAddressFormatValid(address as string) private as bool
 {
 	assert String.isNotEmpty(address)
-	var at = String.getIndexOf(address, '@')
+	var at = String.getIndexOfCharacter(address, '@')
 	assert at > 0
-	var rdot = String.getLastIndexOf(address, '.')
+	var rdot = String.getLastIndexOfCharacter(address, '.')
 	assert rdot > 0
 	assert rdot > at
 	return true
@@ -278,7 +282,7 @@ func sendValidationSecret(secret as string, address as string) private as bool
 	assert secret
 	assert address
 	var data = new DynamicMap()
-	data.set("secret", secret)
+	data.setString("secret", secret)
 	var msg = SMTPMessage.forTemplate(validationEmailTemplate, data)
 	msg.addTo(address)
 	smtpSender.send(msg, null)
@@ -292,7 +296,7 @@ func sendRecoverySecret(secret as string, address as string) private as bool
 	assert secret
 	assert address
 	var data = new DynamicMap()
-	data.set("secret", secret)
+	data.setString("secret", secret)
 	var msg = SMTPMessage.forTemplate(recoveryEmailTemplate, data)
 	msg.addTo(address)
 	smtpSender.send(msg, null)
@@ -303,7 +307,7 @@ func getValidationModel(address as string, secret as string, cb as function<void
 {
 	assert String.isNotEmpty(address) && String.isNotEmpty(secret):
 		cb(null)
-	var stmt = assert db.prepareSelectStatement("auth_validation", new DynamicMap().set("address", address).set("secret", secret)):
+	var stmt = assert db.prepareSelectStatement("auth_validation", new DynamicMap().setString("address", address).setString("secret", secret)):
 		cb(null)
 	db.querySingleRow(stmt, func(v as DynamicMap) {
 		var validation = assert ValidationModel.forJsonObject(v):
@@ -314,7 +318,7 @@ func getValidationModel(address as string, secret as string, cb as function<void
 
 func checkAddressAvailability(address as string, cb as function<void,bool>) private
 {
-	var stmt = assert db.prepareSelectStatement("auth_user_address", new DynamicMap().set("address", address)):
+	var stmt = assert db.prepareSelectStatement("auth_user_address", new DynamicMap().setString("address", address)):
 		cb(false)
 	db.querySingleRow(stmt, func(v as DynamicMap) {
 		if v {
@@ -349,7 +353,7 @@ func createNewUserRecordSync private as UserModel
 func deleteUserRecordSync(userid as string) private as bool
 {
 	assert userid
-	var stmt = assert db.prepareDeleteStatement("auth_user", new DynamicMap().set("id", userid))
+	var stmt = assert db.prepareDeleteStatement("auth_user", new DynamicMap().setString("id", userid))
 	return db.execute(stmt)
 }
 
@@ -388,7 +392,7 @@ func addAddressToUser(userid as string, address as string, cb as function<void,b
 
 func getAllUserAddresses(userid as string, cb as function<void, vector<UserAddressModel>>) private
 {
-	var stmt = assert db.prepareSelectStatement("auth_user_address", new DynamicMap().set("userid", userid)):
+	var stmt = assert db.prepareSelectStatement("auth_user_address", new DynamicMap().setString("userid", userid)):
 		cb(null)
 	db.query(stmt, func(rs as SQLResultSetIterator) {
 		var v = new vector<UserAddressModel>
@@ -433,7 +437,7 @@ func getRecoveryUserid(address as string, secret as string, cb as function<void,
 {
 	assert address && secret:
 		cb(null)
-	var criteria = new DynamicMap().set("address", address).set("secret", secret)
+	var criteria = new DynamicMap().setString("address", address).setString("secret", secret)
 	var stmt = assert db.prepareSelectStatement("auth_recovery", criteria):
 		cb(null)
 	db.querySingleRow(stmt, func(v as DynamicMap) {
@@ -565,7 +569,7 @@ func deleteUserAddressForSession(sessionid as string, address as string, cb as f
 		canDeleteUserAddress(userid, address, func(canDelete as bool) {
 			assert canDelete:
 				cb(ServerError.notAllowed())
-			var stmt = assert db.prepareDeleteStatement("auth_user_address", new DynamicMap().set("userid", userid).set("address", address)):
+			var stmt = assert db.prepareDeleteStatement("auth_user_address", new DynamicMap().setString("userid", userid).setString("address", address)):
 				cb(ServerError.internalError())
 			db.executeUpdateDelete(stmt, func(v as int) {
 				if v < 1 {
@@ -594,14 +598,14 @@ func changePasswordForSession(sessionid as string, oldPassword as string, newPas
 				cb(ServerError.invalidSession())
 			var actualPassword = user.getPassword()
 			if String.isEmpty(oldPassword) && String.isEmpty(actualPassword) {
-				; // this is ok
+				nop // this is ok
 			}
 			else {
 				assert String.equals(hashPassword(oldPassword), actualPassword):
 					cb(ServerError.invalidCredentials())
 			}
-			var criteria = new DynamicMap().set("id", userid)
-			var data = new DynamicMap().set("password", hashPassword(newPassword))
+			var criteria = new DynamicMap().setString("id", userid)
+			var data = new DynamicMap().setString("password", hashPassword(newPassword))
 			var stmt = assert db.prepareUpdateStatement("auth_user", criteria, data):
 				cb(ServerError.internalError())
 			db.executeUpdateDelete(stmt, func(v as int) {
@@ -651,14 +655,14 @@ func resetPassword(address as string, secret as string, newPassword as string, c
 	getRecoveryUserid(address, secret, func(userid as string) {
 		assert userid:
 			cb(ServerError.invalidCredentials())
-		var todelete = new DynamicMap().set("address", address).set("secret", secret)
+		var todelete = new DynamicMap().setString("address", address).setString("secret", secret)
 		var stmt = assert db.prepareDeleteStatement("auth_recovery", todelete):
 			cb(ServerError.internalError())
 		db.executeUpdateDelete(stmt, func(records as int) {
 			assert records > 0:
 				cb(ServerError.invalidCredentials())
-			var criteria = new DynamicMap().set("id", userid)
-			var data = new DynamicMap().set("password", hashPassword(newPassword))
+			var criteria = new DynamicMap().setString("id", userid)
+			var data = new DynamicMap().setString("password", hashPassword(newPassword))
 			var stmt = assert db.prepareUpdateStatement("auth_user", criteria, data):
 				cb(ServerError.internalError())
 			db.executeUpdateDelete(stmt, func(v as int) {

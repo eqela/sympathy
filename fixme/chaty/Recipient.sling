@@ -19,9 +19,6 @@
 
 class #dataModel:
 
-import cape
-import capex.data
-
 prop channelId as string #dataField #index
 prop userId as string #dataField #index
 prop timeStampCreated as long #dataField #index
@@ -69,7 +66,7 @@ func getChannelIdForRecipients(recipients as DynamicVector, creatorUserId as str
 
 	// To make it simple, let's just retrieve channels for individual chat for now.
 
-	assert userIds && SIZE(userIds) == 2
+	assert userIds && sizeof userIds == 2
 	var sb = new StringBuilder()
 	sb.append("SELECT channelId FROM " .. DataManager.CHAT_RECIPIENTS .. " WHERE channelId IN (SELECT channelId FROM " .. DataManager.CHAT_CHANNELS .. " WHERE (TRIM(title) IS NULL OR TRIM(title) = '') AND (TRIM(externalId) IS NULL OR TRIM(externalId) = '')) AND userId IN (")
 	var first = true
@@ -103,7 +100,7 @@ func getChannelIdForRecipients(recipients as DynamicVector, creatorUserId as str
 			stmt.addParamString(userId)
 		i ++
 	}
-	stmt.addParamInteger(SIZE(userIds))
+	stmt.addParamInteger(sizeof userIds)
 	var v = assert db.querySingleRow(stmt)
 	return v.getString("channelId")
 }

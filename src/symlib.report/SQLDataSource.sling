@@ -17,9 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class is ReportDataSource:
+import jk.sql
 
-import capex.data
+class is ReportDataSource:
 
 func forDatabase(db as SQLDatabase) static as this
 {

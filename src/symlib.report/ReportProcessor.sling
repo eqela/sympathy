@@ -17,13 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-class:
-
+import jk.fs
+import jk.log
+import jk.util.pdf
+import jk.gfx
+import jk.time.format
 import jk.time
-import capex.pdf.maker
-import cave
-import capex.text
-import capex.util
+import jk.env
+
+class:
 
 prop ctx as LoggingContext
 prop report as ReportDefinition
@@ -85,7 +87,7 @@ func getSqlQuery as string
 {
 	var mainTable = assert report.getMainTable()
 	var sb = new StringBuilder()
-	sb.append("SELECT ")
+	sb.appendString("SELECT ")
 	var first = true
 	foreach table in report.getDatabaseTables() {
 		var fields = table.getFields()
@@ -93,26 +95,26 @@ func getSqlQuery as string
 			continue
 		foreach field in fields {
 			if not first:
-				sb.append(", ")
+				sb.appendString(", ")
 			first = false
-			sb.append(field.getLongName())
-			sb.append(" AS [")
-			sb.append(field.getLongName())
-			sb.append("]")
+			sb.appendString(field.getLongName())
+			sb.appendString(" AS [")
+			sb.appendString(field.getLongName())
+			sb.appendString("]")
 		}
 	}
-	sb.append(" FROM ")
-	sb.append(mainTable.getNameToUse())
+	sb.appendString(" FROM ")
+	sb.appendString(mainTable.getNameToUse())
 	foreach link in report.getTableLinks() {
 		var jt = link.getJoinType()
 		if jt == "LeftOuter" {
-			sb.append(" LEFT JOIN ")
+			sb.appendString(" LEFT JOIN ")
 		}
 		else if jt == "RightOuter" {
-			sb.append(" RIGHT JOIN ")
+			sb.appendString(" RIGHT JOIN ")
 		}
 		else if jt == "Equal" {
-			sb.append(" INNER JOIN ")
+			sb.appendString(" INNER JOIN ")
 		}
 		else {
 			ON_ERROR("Unsupported table link join type: `" .. jt .. "'")
@@ -120,7 +122,7 @@ func getSqlQuery as string
 		var table = link.getDestinationTableName()
 		if not table:
 			ON_ERROR("Failed to determine destination table from table link")
-		sb.append(table)
+		sb.appendString(table)
 		var sfs = link.getSourceFields()
 		var dfs = link.getDestinationFields()
 		var max = Vector.getSize(sfs)
@@ -134,34 +136,34 @@ func getSqlQuery as string
 			if String.isEmpty(sf) || String.isEmpty(df):
 				ON_ERROR("Empty field in table link relationship data")
 			if n == 0 {
-				sb.append(" ON ")
+				sb.appendString(" ON ")
 			}
 			else {
-				sb.append(" AND ")
+				sb.appendString(" AND ")
 			}
-			sb.append(ReportDefinition.FormulaUtil.formulaToFieldQualifier(sf))
-			sb.append(" = ")
-			sb.append(ReportDefinition.FormulaUtil.formulaToFieldQualifier(df))
+			sb.appendString(ReportDefinition.FormulaUtil.formulaToFieldQualifier(sf))
+			sb.appendString(" = ")
+			sb.appendString(ReportDefinition.FormulaUtil.formulaToFieldQualifier(df))
 		}
 	}
 	var sorts = report.getSortFields()
 	if sorts && Vector.getSize(sorts) > 0 {
-		sb.append(" ORDER BY ")
+		sb.appendString(" ORDER BY ")
 		var first = true
 		foreach sort in sorts {
 			if not first:
-				sb.append(", ")
+				sb.appendString(", ")
 			first = false
 			var sf = sanitizeSortField(sort)
 			if not sf:
 				ON_ERROR("Failed to sanitize sort field: `" .. sort.getField() .. "'")
-			sb.append(sf)
+			sb.appendString(sf)
 			var dir = sort.getSortDirection()
 			if dir == "AscendingOrder" {
-				sb.append(" ASC")
+				sb.appendString(" ASC")
 			}
 			else if dir == "DescendingOrder" {
-				sb.append(" DESC")
+				sb.appendString(" DESC")
 			}
 		}
 	}
@@ -171,7 +173,7 @@ func getSqlQuery as string
 func isFunctionCall(string as string, function as string) as bool
 {
 	assert string && function
-	if((String.startsWith(string, function .. "(") || String.startsWith(string, function .. " (")) && String.endsWith(string, ")")):
+	if (String.startsWith(string, function .. "(") || String.startsWith(string, function .. " (")) && String.endsWith(string, ")"):
 		return true
 	return false
 }
@@ -179,9 +181,9 @@ func isFunctionCall(string as string, function as string) as bool
 func getFunctionCallParameter(string as string) as string
 {
 	assert string
-	var idx = String.indexOf(string, '(')
+	var idx = String.getIndexOfCharacter(string, '(')
 	assert idx >= 0
-	var end = String.indexOf(string, ')', idx)
+	var end = String.getIndexOfCharacter(string, ')', idx)
 	assert end >= 0
 	return String.getSubString(string, idx + 1, end - idx - 1)
 }
@@ -292,7 +294,7 @@ func finalizePages
 {
 	var opage = page
 	var onumber = currentPageNumber
-	for(var n = 0; n < SIZE pages ; n++) {
+	for(var n = 0; n < sizeof pages ; n++) {
 		page = Vector.get(pages, n)
 		currentPageNumber = n + 1
 		renderPageHeader()
@@ -382,23 +384,23 @@ func substituteVariable(variable as string) as string
 
 func substituteContentString(text as string) as string
 {
-	var ob = String.getIndexOf(text, '{')
+	var ob = String.getIndexOfCharacter(text, '{')
 	if ob < 0:
 		return text
 	var sb = new StringBuilder()
 	var ss = 0
 	loop {
 		if ob > ss:
-			sb.append(String.getSubString(text, ss, ob-ss))
-		var end = String.getIndexOf(text, '}', ob)
+			sb.appendString(String.getSubString(text, ss, ob-ss))
+		var end = String.getIndexOfCharacter(text, '}', ob)
 		if end < 0:
 			break
 		var variable = String.getSubString(text, ob, end-ob + 1)
-		sb.append(substituteVariable(variable))
+		sb.appendString(substituteVariable(variable))
 		ss = end + 1
-		ob = String.getIndexOf(text, '{', ss)
+		ob = String.getIndexOfCharacter(text, '{', ss)
 		if ob < 0 {
-			sb.append(String.getSubString(text, ss))
+			sb.appendString(String.getEndOfString(text, ss))
 			break
 		}
 	}
@@ -588,7 +590,7 @@ func processToPdfFile(file as File) as bool
 		doProcessToPdfFile(file)
 		return true
 	}
-	catch {
+	catch e as exception {
 		Log.error(ctx, String.asString(e))
 	}
 	return false

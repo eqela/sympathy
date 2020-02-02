@@ -17,6 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+import jk.fs
+import jk.log
+import jk.process
+import jk.env
+
 class:
 
 func forDefault static as this
@@ -32,9 +37,9 @@ prop ctx as LoggingContext
 
 func initializeDefault
 {
-	eqelaCommand = Environment.getVariable("EQELA_COMMAND")
+	eqelaCommand = EnvironmentVariable.get("EQELA_COMMAND")
 	if String.isEmpty(eqelaCommand) {
-		var eqf = Environment.findCommand("eqela")
+		var eqf = ExternalCommand.findInPath("eqela")
 		if eqf:
 			eqelaCommand = eqf.getPath()
 	}

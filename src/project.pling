@@ -17,4 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-preFilters += "@cape"
+title = "Sympathy"
+description = "Dynamic web service and application platform"
+copyright = "Copyright (c) 2018 Eqela Oy"
+license = "Licensed under AGPLv3 (see LICENSE for details)"
+vendorId = "eqela"
+projectId = "sympathy"
+url = "http://sympathy.ws"
