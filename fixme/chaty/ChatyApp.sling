@@ -40,6 +40,7 @@ var eventForwarder private as ChatEventForwarderOverHTTP
 var forwarder private as NotificationForwarder
 var engine private as ChatyEngine
 var dbConfig private as DynamicMap
+var certFile private as File
 
 ctor
 {
@@ -89,6 +90,10 @@ func configure(key as string, value as string, relativeTo as File, error as Erro
 		dbConfig = JSONParser.parse(value) as DynamicMap
 		return true
 	}
+	if key == "certFile" {
+		certFile = File.forRelativePath(value, relativeTo)
+		return true
+	}
 	return base.configure(key, value, relativeTo, error)
 }
 
@@ -97,58 +102,55 @@ func getENVValue(key as string) as string:
 
 func validateConfigs as bool
 {
-	if not dbConfig {
-		dbConfig = new DynamicMap()
-		dbConfig.set("type", getENVValue("DB_TYPE"))
-		dbConfig.set("serverAddress", getENVValue("DB_ADDRESS"))
-		dbConfig.set("username", getENVValue("DB_USERNAME"))
-		dbConfig.set("password", getENVValue("DB_PASSWORD"))
-		dbConfig.set("database", getENVValue("CHATY_DB_DATABASE"))
-		dbConfig.set("protocol", getENVValue("DB_PROTOCOL"))
-	}
-	assert dbConfig:
-		Log.error(ctx, "Please configure the database setting.")
-	if not notificationForwarderConfig:
-		notificationForwarderConfig = JSONParser.parse(getENVValue("NOTIFICATION_FORWARDER_CONFIG")) as DynamicMap
-	assert notificationForwarderConfig:
-		Log.error(ctx, "Please configure notification forwarder service with .config properety 'notificationForwarderConfig' or environment variable 'NOTIFICATION_FORWARDER_CONFIG'.")
-	if not authConfig:
-		authConfig = JSONParser.parse(getENVValue("AUTH_CONFIG")) as DynamicMap
-	assert authConfig:
-		Log.error(ctx, "Please configure authentication service with .config properety 'authConfig' or environment variable 'AUTH_CONFIG'.")
-	if not chatEventConfig:
-		chatEventConfig = JSONParser.parse(getENVValue("CHAT_EVENT_CONFIG")) as DynamicMap
+	dbConfig = new DynamicMap()
+	dbConfig.set("type", getENVValue("DB_TYPE"))
+	dbConfig.set("serverAddress", getENVValue("DB_ADDRESS"))
+	dbConfig.set("username", getENVValue("DB_USERNAME"))
+	dbConfig.set("password", getENVValue("DB_PASSWORD"))
+	dbConfig.set("database", getENVValue("CHATY_DB_DATABASE"))
+	dbConfig.set("protocol", getENVValue("DB_PROTOCOL"))
+	notificationForwarderConfig = JSONParser.parse(getENVValue("NOTIFICATION_FORWARDER_CONFIG")) as DynamicMap
+	authConfig = JSONParser.parse(getENVValue("AUTH_CONFIG")) as DynamicMap
+	chatEventConfig = JSONParser.parse(getENVValue("CHAT_EVENT_CONFIG")) as DynamicMap
 	var atd = LongInteger.asLong(getENVValue("AUTH_TIME_DELAY"))
 	if atd > 0:
 		authTimeoutDelay = atd
 	var mtd = LongInteger.asLong(getENVValue("MAINTENANCE_TIMER_DELAY"))
 	if mtd > 0:
 		setMaintenanceTimerDelay(mtd)
-	if not getEnableDebugMessages():
-		setEnableDebugMessages(Boolean.asBoolean(getENVValue("DEBUG")))
+	setEnableDebugMessages(Boolean.asBoolean(getENVValue("DEBUG")))
 	var wp = String.toInteger(getENVValue("WS_PORT"))
 	if wp > 0:
 		wsPort = wp
 	var hcp = String.toInteger(getENVValue("HTTP_CONTROL_PORT"))
 	if hcp > 0:
 		httpControlPort = hcp
-	if String.isNotEmpty(getENVValue("HTTP_CONTROL_SECRET")):
-		httpControlSecret = getENVValue("HTTP_CONTROL_SECRET")
-	if not getAlsoPrintOnConsole():
-		setAlsoPrintOnConsole(Boolean.asBoolean(getENVValue("PRINT_ON_CONSOLE")))
+	httpControlSecret = getENVValue("HTTP_CONTROL_SECRET")
+	setAlsoPrintOnConsole(Boolean.asBoolean(getENVValue("PRINT_ON_CONSOLE")))
+	var cf = getENVValue("CERT_FILE")
+	if String.isNotEmpty(cf) {
+		var pfile = Environment.getAppDirectory()
+		certFile = File.forRelativePath(cf, pfile)
+	}
 	return true
 }
 
 func initializeApplication override as bool
 {
 	assert base.initializeApplication()
+	assert dbConfig:
+		Log.error(ctx, "Please configure the database setting.")
 	assert db = initializeSQLDatabase(dbConfig):
 		Log.error(ctx, "Unable to connect to database: `" .. String.asString(dbConfig) .. "'")
+	assert authConfig:
+		Log.error(ctx, "Please configure authentication service with .config properety 'authConfig' or environment variable 'AUTH_CONFIG'.")
 	authenticator = AuthenticatorOverHTTP.forConfiguration(authConfig)
 	assert authenticator:
 		Log.error(ctx, "Failed to initialize authenticator. Please check your authentication service configuration.")
 	if chatEventConfig:
 		eventForwarder = ChatEventForwarderOverHTTP.forConfiguration(chatEventConfig)
+	assert notificationForwarderConfig:
+		Log.error(ctx, "Please configure notification forwarder service with .config properety 'notificationForwarderConfig' or environment variable 'NOTIFICATION_FORWARDER_CONFIG'.")
 	forwarder = NotificationForwarderOverHTTP.forConfiguration(notificationForwarderConfig)
 	assert forwarder:
 		Log.error(ctx, "Failed to initialize notification forwarder. Please check your notification forwarder service configuration.")
@@ -161,8 +163,6 @@ func initializeServer(server as HTTPServer) override as bool
 		Log.error(ctx, "Failed to initialize HTTP server")
 	assert getListenPort() != wsPort:
 		Log.error(ctx, "WebSocket port should not be the same with HTTP port.")
-	assert wsPort > 1023 && wsPort < 65536:
-		Log.error(ctx, "WebSocket port should be between 1024 and 65535.")
 	engine = ChatyEngine.create(wsPort, getDb(), authenticator, eventForwarder, forwarder, ctx)
 	assert engine:
 		Log.error(ctx, "Failed to create chat engine instance.")
@@ -185,6 +185,9 @@ func initializeServer(server as HTTPServer) override as bool
 func initializeWithIOManager(ioManager as IOManager, ctx as LoggingContext) override as bool
 {
 	assert engine.initializeEngine(ioManager)
+	var wsserver = engine.getServer()
+	if wsserver && certFile:
+		wsserver.setCertFile(certFile)
 	return true
 }
 
