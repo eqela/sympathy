@@ -132,7 +132,7 @@ func validateConfigs as bool
 		httpControlPort = hcp
 	if String.isEmpty(httpControlSecret):
 		httpControlSecret = getENVValue("HTTP_CONTROL_SECRET")
-	if not getAlsoPrintOnConsole();
+	if not getAlsoPrintOnConsole():
 		setAlsoPrintOnConsole(Boolean.asBoolean(getENVValue("PRINT_ON_CONSOLE")))
 	var cf = getENVValue("CERT_FILE")
 	if String.isNotEmpty(cf) {
