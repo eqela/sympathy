@@ -24,3 +24,6 @@ license = "Licensed under AGPLv3 (see LICENSE for details)"
 vendorId = "eqela"
 projectId = "sympathy"
 url = "http://sympathy.ws"
+libraries = [
+    "eqela:jkop:20200210"
+]
