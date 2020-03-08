@@ -25,5 +25,5 @@ vendorId = "eqela"
 projectId = "sympathy"
 url = "http://sympathy.ws"
 libraries = [
-    "eqela:jkop:20200210"
+    "eqela:jkop:20200307"
 ]

@@ -24,6 +24,7 @@ import jk.sql.factory
 import jk.time
 import jk.time.format
 import jk.console
+import jk.text
 
 class is ConsoleApplicationMain:
 
@@ -57,7 +58,7 @@ func startOperation(name as string)
 
 func endOperation
 {
-	var diff = String.formatLongInteger(TimeValue.diff(SystemClock.asTimeValue(), operationStartTime), ',')
+	var diff = StringUtil.formatLongInteger(TimeValue.diff(SystemClock.asTimeValue(), operationStartTime), ',')
 	trace("End operation: " .. currentOperation .. ". Duration=" .. diff)
 	operationStartTime = null
 	currentOperation = null
@@ -156,7 +157,7 @@ func execute override as bool
 	var v = false
 	if listTables {
 		startOperation("Retrieve database tables")
-		var tabs = db.queryAllTableNames()
+		var tabs = db.queryAllTableNamesSync()
 		endOperation()
 		startOperation("Sorting table array")
 		var da = DynamicVector.forObjectVector(tabs)
@@ -175,14 +176,14 @@ func execute override as bool
 			foreach tab as string in tabs {
 				if count {
 					startOperation("Counting records in " .. tab)
-					var sv = db.querySingleRow(db.prepare("SELECT COUNT(*) as count FROM \"" .. tab .. "\";"))
+					var sv = db.querySingleRowSync(db.prepareSync("SELECT COUNT(*) as count FROM \"" .. tab .. "\";"))
 					endOperation()
 					var count = "unknown"
 					if sv:
 						count = sv.getString("count")
 					if count != "unknown":
-						count = String.formatNumberString(count, ',')
-					stdout.println(String.padToLength(tab, longestName) .. " : " .. String.padToLength(count, 20, 1))
+						count = StringUtil.formatNumberString(count, ',')
+					stdout.println(StringUtil.padToLength(tab, longestName) .. " : " .. StringUtil.padToLength(count, 20, 1))
 				}
 				else {
 					stdout.println(tab)
@@ -193,7 +194,7 @@ func execute override as bool
 	}
 	else if sqlQuery {
 		startOperation("Preparing SQL query")
-		var stmt = db.prepare(sqlQuery)
+		var stmt = db.prepareSync(sqlQuery)
 		addParamsToStatement(stmt)
 		endOperation()
 		if not stmt {
@@ -201,7 +202,7 @@ func execute override as bool
 		}
 		else {
 			startOperation("Executing SQL query")
-			var sv = db.query(stmt)
+			var sv = db.querySync(stmt)
 			endOperation()
 			if not sv {
 				Log.error(ctx, "SQL query failed: `" .. sqlQuery .. "'")
@@ -231,7 +232,7 @@ func execute override as bool
 					startOperation("Reading results as JSON")
 					var jsondata = sv.toVectorListJSON()
 					endOperation()
-					trace("JSON String length: " .. String.formatInteger(String.getLength(jsondata), ',') .. " bytes")
+					trace("JSON String length: " .. StringUtil.formatInteger(String.getLength(jsondata), ',') .. " bytes")
 					if not nodata {
 						startOperation("Printing results on the console")
 						stdout.print(jsondata)
@@ -247,7 +248,7 @@ func execute override as bool
 	}
 	else if sqlExecute {
 		startOperation("Preparing SQL query")
-		var stmt = db.prepare(sqlExecute)
+		var stmt = db.prepareSync(sqlExecute)
 		addParamsToStatement(stmt)
 		endOperation()
 		if not stmt {
@@ -255,7 +256,7 @@ func execute override as bool
 		}
 		else {
 			startOperation("Executing SQL query")
-			var sv = db.execute(stmt)
+			var sv = db.executeSync(stmt)
 			endOperation()
 			startOperation("Closing prepared statement")
 			stmt.close()
@@ -274,9 +275,9 @@ func execute override as bool
 		v = false
 	}
 	startOperation("Closing database connection")
-	db.close()
+	db.closeSync()
 	endOperation()
 	var tdiff = TimeValue.diff(SystemClock.asTimeValue(), start)
-	trace("Operation ended: Total execution time: " .. String.formatLongInteger(tdiff, ',') .. " us")
+	trace("Operation ended: Total execution time: " .. StringUtil.formatLongInteger(tdiff, ',') .. " us")
 	return v
 }
