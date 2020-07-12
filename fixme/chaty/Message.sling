@@ -54,6 +54,20 @@ func insert(message as this, callback as function<void, Error>) static
 	})
 }
 
+func updateMessage(message as this, callback as function<void, Error>) static
+{
+	assert message:
+		callback(Error.instance("no_message", "No message"))
+	message.setTimeStampLastUpdated(SystemClock.asUTCSeconds())
+	var db = assert DataManager.getDb():
+		callback(Error.instance("no_database", "No database configured"))
+	SQL.update(db, DataManager.CHAT_MESSAGES, message, func(success as bool) {
+		assert success:
+			callback(Error.instance("internal_error", "Internal error"))
+		callback(null)
+	})
+}
+
 func getMessageById(messageId as string, callback as function<void, this>) static
 {
 	var db = assert DataManager.getDb():
