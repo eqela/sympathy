@@ -843,6 +843,58 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 			callback(reply, null)
 		})
 	}
+	else if "update_message" == command {
+		var nmessage = Message.forDynamicMap(commandMap)
+		DataManager.getMessageById(nmessage.getMessageId(), func(message as Message, error as Error) {
+			assert not error:
+				callback(null, error)
+			assert message:
+				callback(null, Error.forCode("invalidMessageId"))
+			nmessage.setChannelId(message.getChannelId())
+			nmessage.setCreatorUserId(message.getCreatorUserId())
+			nmessage.setTimeStampCreated(message.getTimeStampCreated())
+			DataManager.updateMessage(nmessage, func(msg as Message, err as Error) {
+				assert not err:
+					callback(null, err)
+				var data = new DynamicMap()
+				data.set("command", "update_message")
+				data.set("message", msg.toDynamicMap())
+				var v = new DynamicMap()
+				v.set("messageType", ChatMessage.COMMAND_TYPE)
+				v.set("data", data)
+				var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+				callback(reply, null)
+			})
+		})
+	}
+	else if "delete_message" == command {
+		var messageId = commandMap.getString("messageId")
+		DataManager.deleteMessage(messageId, creatorUserId, func(error as Error) {
+			assert not error {
+				logError("Delete message error: '" .. error.toString() .. "'.")
+				var data = new DynamicMap()
+				data.set("command", "delete_message")
+				data.set("messageId", messageId)
+				data.set("status", "error")
+				data.set("code", error.getCode())
+				data.set("message", error.getMessage())
+				var v = new DynamicMap()
+				v.set("messageType", ChatMessage.COMMAND_TYPE)
+				v.set("data", data)
+				var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+				callback(reply, null)
+			}
+			var data = new DynamicMap()
+			data.set("command", "delete_message")
+			data.set("messageId", messageId)
+			data.set("status", "ok")
+			var v = new DynamicMap()
+			v.set("messageType", ChatMessage.COMMAND_TYPE)
+			v.set("data", data)
+			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+			callback(reply, null)
+		})
+	}
 	else {
 		logError("Unknown command: '" .. command .. "'")
 	}
