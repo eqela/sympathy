@@ -850,6 +850,8 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 				callback(null, error)
 			assert message:
 				callback(null, Error.forCode("invalidMessageId"))
+			assert String.equals(message.getCreatorUserId(), creatorUserId):
+				callback(null, Error.instance("not_allowed", "Not allowed"))
 			nmessage.setChannelId(message.getChannelId())
 			nmessage.setCreatorUserId(message.getCreatorUserId())
 			nmessage.setTimeStampCreated(message.getTimeStampCreated())
