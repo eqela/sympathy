@@ -82,6 +82,20 @@ func getMessageCount(channelId as string) static as long
 	return v.getLongInteger("size")
 }
 
+func getRecentMessages(channelId as string, page as int, limit as int) static as DynamicVector
+{
+	var offset = page - 1
+	if offset < 0:
+		offset = 0
+	var db = assert DataManager.getDb():
+		return new DynamicVector()
+	var itr = assert db.query(db.prepare(createQueryString(false)).addParamString(channelId).addParamInteger(limit).addParamInteger(offset * limit)):
+		return new DynamicVector()
+	var dvector = assert itr.toVectorOfMaps():
+		return new DynamicVector()
+	return dvector
+}
+
 func getMessages(channelId as string, page as int, limit as int, callback as function<void, DynamicVector, int, int>) static
 {
 	if limit <= 0:
