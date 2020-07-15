@@ -178,6 +178,9 @@ func getMessages(channelId as string, page as int, limit as int, callback as fun
 func getRecentMessage(channelId as string) static as DynamicMap:
 	return Message.getRecentMessage(channelId)
 
+func getRecentMessages(channelId as string, page as int, limit as int) static as DynamicVector:
+	return Message.getRecentMessages(channelId, page, limit)
+
 func getChannelIdForRecipients(recipients as DynamicVector, creatorUserId as string) static as string:
 	return Recipient.getChannelIdForRecipients(recipients, creatorUserId)
 
