@@ -290,11 +290,17 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 				channel.set("message", DataManager.getRecentMessages(channelId, 1, messageLimit))
 				if rsm:
 					channel.set("unreadCount", rsm.getLongInteger(channelId))
-				if commandMap.getBoolean("includeRecipientsData") {
-					eventForwarder.getChatChannelRecipientsData(user.getSessionId(), recipients, func(data as DynamicVector, err as Error) {
+				if commandMap.getBoolean("includeRecipientAndExternalData") {
+					eventForwarder.getChannelRecipientAndExternalData(user.getSessionId(), recipients, channel.getString("externalId"), func(data as DynamicMap, err as Error) {
 						assert not err:
 							logError("Error: '" .. err.toString() .. "'.")
-						channel.set("recipientsData", data)
+						if data {
+							channel.remove("recipients")
+							channel.set("recipientsData", data.getDynamicVector("recipientsData"))
+							var externalData = data.getDynamicMap("externalData")
+							if externalData:
+								channel.set("externalData", externalData)
+						}
 					})
 				}
 			}
