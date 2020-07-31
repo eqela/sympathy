@@ -287,7 +287,50 @@ func onProcessNewCommandMessage(command as string, creator as ChatUser, message 
 				assert String.isNotEmpty(channelId)
 				var recipients = getRecipientIdsForChannelId(channelId)
 				channel.set("recipients", recipients)
-				channel.set("message", DataManager.getRecentMessages(channelId, 1, messageLimit))
+				channel.set("message", DataManager.getRecentMessage(channelId))
+				if rsm:
+					channel.set("unreadCount", rsm.getLongInteger(channelId))
+				if commandMap.getBoolean("includeRecipientAndExternalData") {
+					eventForwarder.getChannelRecipientAndExternalData(user.getSessionId(), recipients, channel.getString("externalId"), func(data as DynamicMap, err as Error) {
+						assert not err:
+							logError("Error: '" .. err.toString() .. "'.")
+						if data {
+							channel.remove("recipients")
+							channel.set("recipientsData", data.getDynamicVector("recipientsData"))
+							var externalData = data.getDynamicMap("externalData")
+							if externalData:
+								channel.set("externalData", externalData)
+						}
+					})
+				}
+			}
+			var data = new DynamicMap()
+			data.set("command", "get_channels")
+			data.set("channels", channels)
+			data.set("currentPage", page)
+			data.set("totalPages", pageCount)
+			data.set("totalRecords", totalRecords)
+			var v = new DynamicMap()
+			v.set("messageType", ChatMessage.COMMAND_TYPE)
+			v.set("data", data)
+			var reply = assert createMessage(String.toUTF8Buffer(json.execute(v)))
+			callback(reply, null)
+		})
+	}
+	else if "get_channels_2" == command {
+		var page = commandMap.getInteger("page", 1)
+		var externalIdPattern = commandMap.getString("externalIdPattern")
+		var messageLimit = commandMap.getInteger("messageLimit")
+		if messageLimit <= 0:
+			messageLimit = 1
+		DataManager.getChannels(creatorUserId, externalIdPattern, page, commandMap.getInteger("limit"), func(channels as DynamicVector, pageCount as int, totalRecords as int) {
+			var rsm = getReadStatusAsMapForUserId(creatorUserId)
+			foreach channel in channels.toVectorOfDynamicMaps() {
+				var channelId = channel.getString("channelId")
+				assert String.isNotEmpty(channelId)
+				var recipients = getRecipientIdsForChannelId(channelId)
+				channel.set("recipients", recipients)
+				channel.set("messages", DataManager.getRecentMessages(channelId, 1, messageLimit))
 				if rsm:
 					channel.set("unreadCount", rsm.getLongInteger(channelId))
 				if commandMap.getBoolean("includeRecipientAndExternalData") {
