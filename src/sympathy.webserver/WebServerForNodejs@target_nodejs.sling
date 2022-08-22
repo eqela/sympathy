@@ -1,0 +1,200 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.nodejs
+
+class is WebServer:
+
+class WebServerRequestForNodejs is WebServerRequest
+{
+	prop req as dynamic
+	prop res as dynamic
+
+	ctor(req as dynamic, res as dynamic)
+	{
+		this.req = req
+		this.res = res
+	}
+
+	func getMethod as string:
+		return req.method as! string
+
+	func getPath as string:
+		return req.url as! string
+
+	func getHeaders as vector<KeyValuePair<string,string>>
+	{
+		var v = new vector<KeyValuePair<string,string>>
+		var hdrs = req.headers
+		lang "js" {{{
+			for(var key in hdrs) {
+				var val = hdrs[key]
+				}}}
+				var kvp = new KeyValuePair<string,string>()
+				kvp.key = lang "js" string {{{ key }}}
+				kvp.value = lang "js" string {{{ val }}}
+				v += kvp
+				lang "js" {{{
+			}
+		}}}
+		return v
+	}
+
+	func getHeader(key as string) as string
+	{
+		var hdrs = req.headers
+		return lang "js" string {{{ hdrs[key.toLowerCase()] }}}
+	}
+
+	func readBodyChunk async as promise<buffer>
+	{
+		return new promise<buffer> {
+			var ondata as function<void,buffer>
+			var onend as function
+			ondata = func(data as buffer) {
+				req.removeListener("data", ondata)
+				req.removeListener("end", onend)
+				resolve data
+			}
+			onend = func {
+				req.removeListener("data", ondata)
+				req.removeListener("end", onend)
+				resolve null
+			}
+			req.on("data", ondata)
+			req.on("end", onend)
+		}
+	}
+
+	func readBodyAsBuffer async as buffer
+	{
+		var bb = new BufferBuilder()
+		loop {
+			var chunk = await readBodyChunk()
+			if not chunk:
+				break
+			bb.appendBuffer(chunk)
+		}
+		return bb.toBuffer()
+	}
+
+	func readBodyAsString async as string
+	{
+		var buffer = await readBodyAsBuffer()
+		assert buffer
+		return String.forUTF8Buffer(buffer)
+	}
+
+	func setResponseHeader(key as string, value as string):
+		res.setHeader(key, value)
+
+	func setResponseHeaderList(headers as KeyValueList<string,string>)
+	{
+		assert headers
+		var it = headers.iterate()
+		while it {
+			var pair = it.next()
+			if not pair:
+				break
+			setResponseHeader(pair.key, pair.value)
+		}
+	}
+
+	func setResponseHeaders(headers as dynamic)
+	{
+		foreach name in DynamicObject.getPropertyNames(headers):
+			setResponseHeader(name, String.asString(DynamicObject.getPropertyValue(headers, name)))
+	}
+
+	func setResponseStatus(code as int):
+		res.statusCode = code
+
+	func writeResponseData(data as buffer) async as promise
+	{
+		return new promise {
+			res.write(data, null, func {
+				resolve
+			})
+		}
+	}
+
+	func endResponse async as promise
+	{
+		return new promise {
+			res.end(null, null, func {
+				resolve
+			})
+		}
+	}
+}
+
+var middlewares = new vector<WebServerMiddleware>
+prop server as dynamic
+
+func initialize override
+{
+	var http = NodeModule.require("http")
+	server = http.createServer(func(req, res) async {
+		var rq = new WebServerRequestForNodejs(req, res)
+		var state = {}
+		state.index = 0
+		var nextf as function<promise>
+		nextf = func async {
+			var mw = Vector.get(middlewares, state.index as int)
+			if mw {
+				state.index ++
+				await mw.handleRequest(rq, nextf)
+			}
+			else {
+				res.writeHead(404)
+				res.end()
+			}
+		}
+		await nextf()
+	})
+}
+
+func use(middleware as WebServerMiddleware) override
+{
+	if middleware {
+		middleware.server = this
+		middlewares += middleware
+	}
+}
+
+func stop async override:
+	server.close()
+
+func execute(port as int) async override
+{
+	await server.listen(port)
+	Log.info(ctx, "Node.JS HTTP server listening on port " .. String.forInteger(port))
+	await new promise<void> {
+		server.on("close", func {
+			resolve
+		})
+	}
+	Log.info(ctx, "Node.JS HTTP server ended.")
+}

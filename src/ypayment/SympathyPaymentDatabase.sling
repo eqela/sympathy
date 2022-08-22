@@ -1,0 +1,145 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.time
+import jk.json
+import jk.data.sql
+import sympathy.db
+import sympathy.util
+
+class is ApplicationDatabase:
+
+const TABLE_TRANSACTION = "transaction"
+const TABLE_TRANSACTION_PRODUCT = "transaction_product"
+const TRANSACTION_STATE_NEW = 0
+const TRANSACTION_STATE_PAID = 1
+const TRANSACTION_STATE_CANCELLED = 2
+
+model Transaction #dynamic
+{
+	id as string #key
+	state as int
+	timeCreated as int
+	timePaid as int
+	timeCancelled as int
+	customerType as string
+	customerId as string
+	customerName as string
+	customerAddress as string
+	paymentType as string
+	paymentId as string
+}
+
+model TransactionProduct #dynamic
+{
+	id as string #key
+	transactionId as string
+	productId as string
+	productName as string
+	currency as string
+	quantity as int
+	unitPrice as int
+	taxAmount as int
+	totalPrice as int
+}
+
+func getTableDefinitions(tables as vector<SQLTableInfo>) override
+{
+	tables += SQLTableInfo.forDynamicModel(TABLE_TRANSACTION, new Transaction())
+	tables += SQLTableInfo.forDynamicModel(TABLE_TRANSACTION_PRODUCT, new TransactionProduct())
+}
+
+func addTransaction(tran as DynamicMap) async as Transaction
+{
+	var transaction = Transaction.forData(tran)
+	assert transaction
+	var transactionId = UniqueHash.generate()
+	transaction.timeCreated = SystemClock.asUTCSeconds() as int
+	transaction.id = transactionId
+	if transaction.state == TRANSACTION_STATE_PAID:
+		transaction.timePaid = SystemClock.asUTCSeconds() as int
+	else if transaction.state == TRANSACTION_STATE_CANCELLED:
+		transaction.timeCancelled = SystemClock.asUTCSeconds() as int
+	assert await db.executeStatement(await db.prepareInsertStatement(TABLE_TRANSACTION, transaction.toDynamicMap()))
+	return transaction
+}
+
+func addTransactionProduct(prod as DynamicMap) async as TransactionProduct
+{
+	var product = TransactionProduct.forData(prod)
+	assert product
+	product.id = UniqueHash.generate()
+	assert await db.executeStatement(await db.prepareInsertStatement(TABLE_TRANSACTION_PRODUCT, product.toDynamicMap()))
+	return product
+}
+
+func updateTransactionStateByCustomerId(customerId as string, state as int) async as Transaction
+{
+	var criteria = new DynamicMap()
+	criteria.setString("customerId", customerId)
+	criteria.setInteger("state", TRANSACTION_STATE_NEW)
+	var transaction = new Transaction()
+	transaction.state = state
+	if state == TRANSACTION_STATE_PAID:
+		transaction.timePaid = SystemClock.asUTCSeconds() as int
+	else if state == TRANSACTION_STATE_CANCELLED:
+		transaction.timeCancelled = SystemClock.asUTCSeconds() as int
+	assert await db.executeStatement(await db.prepareUpdateStatement(TABLE_TRANSACTION, criteria, transaction.toDynamicMap()))
+	return transaction
+}
+
+func updateTransactionStateById(id as string, state as int) async as Transaction
+{
+	var criteria = new DynamicMap()
+	criteria.setString("id", id)
+	var transaction = new Transaction()
+	transaction.state = state
+	if state == TRANSACTION_STATE_PAID:
+		transaction.timePaid = SystemClock.asUTCSeconds() as int
+	else if state == TRANSACTION_STATE_CANCELLED:
+		transaction.timeCancelled = SystemClock.asUTCSeconds() as int
+	assert await db.executeStatement(await db.prepareUpdateStatement(TABLE_TRANSACTION, criteria, transaction.toDynamicMap()))
+	return transaction
+}
+
+func getTransactionRecord(id as string) async as Transaction
+{
+	var criteria = new DynamicMap()
+	criteria.setString("id", id)
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_TRANSACTION, criteria))
+	var transaction = assert Transaction.forData(v)
+	return transaction
+}
+
+func getTransactionProducts(transactionId as string) async as TransactionProduct[]
+{
+	var criteria = new DynamicMap()
+	criteria.setString("transactionId", transactionId)
+	var v = assert await db.executeQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_TRANSACTION_PRODUCT, criteria))
+	var vm = v.toVectorOfMaps()
+	var result = new vector<TransactionProduct>
+	foreach product in vm.toVectorOfDynamicMaps():
+		result += TransactionProduct.forData(product)
+	return result
+}

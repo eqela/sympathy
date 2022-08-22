@@ -1,0 +1,98 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.json
+import jk.webclient.json
+import sympathy.util
+
+class:
+
+var client private as JSONAPIClient
+
+func getClient private as JSONAPIClient
+{
+	if not client {
+		client = new JSONAPIClient()
+		client.apiUrl = "https://graph.facebook.com/"
+		client.redirectionEnabled = true
+	}
+	return client
+}
+
+func getUserProfile(fbUserId as string, fbAccessToken as string, fields as DynamicVector) async as DynamicMap
+{
+	var f as string
+	if fields && fields.getSize() > 0 {
+		var sb = new StringBuilder()
+		var first = true
+		foreach field in fields.toVectorOfStrings() {
+			var v = String.strip(field)
+			if String.isEmpty(v):
+				continue
+			if not first:
+				sb.appendCharacter(',')
+			first = false
+			sb.appendString(v)
+		}
+		f = sb.toString()
+	}
+	if String.isEmpty(f):
+		f = "id,address,about,birthday,email,gender,education,first_name,last_name"
+	var client = getClient()
+	var response = await client.doSendRequest("GET", client.getFullURL(fbUserId .. "?fields=" .. f .. "&access_token=" .. fbAccessToken), null, null, 0)
+	var json = JSONParser.parse(DataValidator.toValidJSONString(replaceUnicodeChars(String.forUTF8Buffer(response.body)))) as DynamicMap
+	if not json:
+		Error.throw("invalidResponse", client.apiUrl)
+	var error = json.getDynamicMap("error")
+	if error:
+		Error.throw(error.getString("code"), error.getString("fbtrace_id"))
+	return json
+}
+
+func getUserPhoto(fbUserId as string, width as int, height as int) async as buffer
+{
+	if String.isEmpty(fbUserId):
+		Error.throw("noFbUserId", null)
+	var w = width
+	if w < 100:
+		w = 100
+	var h = height
+	if h < 100:
+		h = 100
+	var client = getClient()
+	var response = await client.doGetFile(fbUserId .. "/picture?height=" .. String.forInteger(h) .. "&width=" .. String.forInteger(w))
+	if Buffer.getSize(response) < 1:
+		Error.throw("invalidResponse", client.apiUrl)
+	return response
+}
+
+func replaceUnicodeChars(response as string) static as string
+{
+	var str = response
+	if String.contains(response, "\\u0040"):
+		str = String.replaceString(response, "\\u0040", "@")
+	if String.contains(response, "\\u00f1"):
+		str = String.replaceString(str, "\\u00f1", "ñ")
+	return str
+}

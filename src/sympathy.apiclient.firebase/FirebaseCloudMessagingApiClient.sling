@@ -1,0 +1,75 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.json
+import sympathy.apiclient.common
+
+class is RestApiClient:
+
+func forFcmServerKey(ctx as LoggingContext, fcmServerKey as string) static as this
+{
+	var v = new this(ctx)
+	v.fcmServerKey = fcmServerKey
+	return v
+}
+
+prop fcmServerKey as string
+
+func send(registrationIds as DynamicVector, notification as DynamicMap, data as DynamicMap) async as DynamicMap
+{
+	assert String.isNotEmpty(fcmServerKey):
+		throw ExceptionWithError.forCode("missingFCMServerKey", "Missing FCM server key")
+	var sz = registrationIds.getSize()
+	var body = new DynamicMap()
+	assert sz > 0:
+		throw ExceptionWithError.forCode("missingRegistrationId", "Missing registration ID")
+	if sz == 1 {
+		body.setString("to", String.asString(registrationIds.get(0)))
+	}
+	else if sz > 1 {
+		body.setObject("registration_ids", registrationIds)
+	}
+	body.setString("priority", "high")
+	body.setBoolean("content_available", true)
+	if notification:
+		body.setObject("notification", notification)
+	if data:
+		body.setObject("data", data)
+	var v = new JSONEncoder()
+	v.setNiceFormatting(false)
+	var json = v.execute(body)
+	assert String.isNotEmpty(json):
+		throw ExceptionWithError.forCode("jsonEncodingFailed", "JSON encoding failed")
+	var headers = new KeyValueList<string,string>()
+	headers.add("Content-Type", "application/json")
+	headers.add("Authorization", "key=" .. fcmServerKey)
+	var resp = await request("POST", "https://fcm.googleapis.com/fcm/send", headers, String.toUTF8Buffer(json))
+	assert resp
+	Log.info(ctx, resp.statusCode .. " : " .. resp.statusMessage)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	return JSONParser.parse(resp.body) as DynamicMap
+}

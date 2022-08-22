@@ -1,0 +1,133 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.env
+import jk.json
+import jk.thread
+import jk.console
+import jk.webclient
+import sympathy.event
+
+class:
+
+func forHandler(handler as BufferEventHandler) static as this
+{
+	var v = new this()
+	v.handler = handler
+	return v
+}
+
+prop handler as BufferEventHandler
+prop ctx as LoggingContext = new ConsoleApplicationContext()
+
+func getBaseUrl as string
+{
+	var api = EnvironmentVariable.get("AWS_LAMBDA_RUNTIME_API")
+	if String.isEmpty(api):
+		Error.throw("environmentVariableMissing", "AWS_LAMBDA_RUNTIME_API")
+	return "http://" .. api
+}
+
+func getInvocationUrl as string:
+	return getBaseUrl() .. "/2018-06-01/runtime/invocation/next"
+
+func getResponseUrl(requestId as string) as string:
+	return getBaseUrl() .. "/2018-06-01/runtime/invocation/" .. requestId .. "/response"
+
+func getErrorUrl(requestId as string) as string:
+	return getBaseUrl() .. "/2018-06-01/runtime/invocation/" .. requestId .. "/error"
+
+func getRequestId(headers as KeyValueList<string,string>) as string
+{
+	foreach pair in headers.asVector() {
+		if String.equalsIgnoreCase(pair.key, "Lambda-Runtime-Aws-Request-Id"):
+			return pair.value
+	}
+	return null
+}
+
+func responseToBuffer(response as object) as buffer
+{
+	assert response
+	if response is buffer:
+		return response as! buffer
+	if response is string:
+		return String.toUTF8Buffer(response as! string)
+	var str = JSONEncoder.toString(response)
+	if str:
+		return String.toUTF8Buffer(str)
+	return null
+}
+
+func execute async
+{
+	var webClient = WebClient.instance()
+	loop {
+		var invocationUrl = getInvocationUrl()
+		var reqq = await webClient.executeQuery(ctx, "GET", invocationUrl, null, null)
+		if reqq == null || String.isEmpty(reqq.statusCode) {
+			Log.warning(ctx, "No response from Lambda runtime API: `" .. invocationUrl .. "'. Trying again in one second..")
+			CurrentThread.sleepSeconds(1)
+			continue
+		}
+		if reqq.body == null {
+			Log.warning(ctx, "Null body received from Lambda runtime API: `" .. invocationUrl .. "'. Trying again in one second..")
+			CurrentThread.sleepSeconds(1)
+			continue
+		}
+		var requestId = getRequestId(reqq.headers)
+		if String.isEmpty(requestId) {
+			Log.error(ctx, "No request ID received from Lambda runtime API: `" .. invocationUrl .. "'. Using a bogus value.")
+			requestId = "invalidRequestId"
+		}
+		Log.debug(ctx, "Handling request with ID: `" .. requestId .. "'")
+		if String.startsWith(reqq.statusCode, "2") == false:
+			Log.warning(ctx, "Error status from Lambda runtime API: `" .. reqq.statusCode .. "'. Ignoring it.")
+		try {
+			var response = handler.handleBufferEvent(reqq.body)
+			if not response:
+				Error.throw("noResponseFromHandler", null)
+			var rb = responseToBuffer(response)
+			if not rb:
+				Error.throw("noResponseBuffer", null)
+			await webClient.executeQuery(ctx, "POST", getResponseUrl(requestId), null, rb)
+		}
+		catch e {
+			var eo = new DynamicMap()
+			if e is ExceptionWithError {
+				var ewe = e as! ExceptionWithError
+				eo.setString("errorType", ewe.getErrorCode())
+				eo.setString("errorMessage", String.asString(ewe.getErrorDetail()))
+			}
+			else {
+				eo.setString("errorType", "unknownError")
+				eo.setString("errorMessage", String.asString(e))
+			}
+			var errorJson = JSONEncoder.toString(eo)
+			Log.error(ctx, errorJson)
+			await webClient.executeQuery(ctx, "POST", getErrorUrl(requestId), null, String.toUTF8Buffer(errorJson))
+		}
+	}
+}

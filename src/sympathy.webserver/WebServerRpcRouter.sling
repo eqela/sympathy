@@ -1,0 +1,67 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.json
+
+class is WebServerRouter:
+
+ctor:
+	addHealthCheckRoute()
+
+func addFunction(name as string, handler as function<promise<dynamic>,DynamicMap>)
+{
+	addRoute("POST", "/func/" .. name, func(req as WebServerRequest, vars as DynamicMap) async {
+		try {
+			var body = await req.readBodyAsBuffer()
+			var data = JSONParser.parse(body) as DynamicMap
+			if not data {
+				if ctx && ctx.isInDebugMode():
+					Log.debug(ctx, "Invalid body: `" .. String.asString(data) .. "'")
+				Error.throw("invalidBody", null)
+			}
+			var v = await handler(data)
+			var rdata = String.toUTF8Buffer(JSONEncoder.toString(new map {
+				status "ok"
+				data v
+			}))
+			req.setResponseStatus(200)
+			req.setResponseHeader("Content-Type", "application/json")
+			await req.writeResponseData(rdata)
+			await req.endResponse()
+		}
+		catch e {
+			Log.error(ctx, String.asString(e))
+			var rdata = String.toUTF8Buffer(JSONEncoder.toString(new map {
+				status "error"
+				errorCode e.getErrorCode()
+				errorDetail String.asString(e.getErrorDetail())
+			}))
+			req.setResponseStatus(500)
+			req.setResponseHeader("Content-Type", "application/json")
+			await req.writeResponseData(rdata)
+			await req.endResponse()
+		}
+	})
+}

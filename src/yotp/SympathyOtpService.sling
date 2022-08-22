@@ -1,0 +1,121 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.env
+import jk.json
+import jk.console
+import jk.webclient.rpc
+import sympathy.config
+import sympathy.webserver
+
+class is WebServerRpcRouter:
+
+prop database as SympathyOtpDatabase
+
+var messageServiceUrl = ServerConfig.require("MESSAGE_SERVICE_URL")
+
+ctor
+{
+	addFunction("sendOtp", func(params as DynamicMap) async as dynamic {
+		return sendOtp(params.getString("recipient"))
+	})
+	addFunction("verifyOtpCode", func(params as DynamicMap) async as dynamic {
+		return verifyOtpCode(params.getString("code"), params.getString("mobileNumber"))
+	})
+	addFunction("checkMobileNumberValidationAttempts", func(params as DynamicMap) async as dynamic {
+		return checkMobileNumberValidationAttempts(params.getString("mobileNumber"))
+	})
+	addFunction("getOtpById", func(params as DynamicMap) async as dynamic {
+		return getOtpById(params.getString("otpId"))
+	})
+}
+
+func doSendOtp(otp as string, recipient as string) async
+{
+	assert String.isNotEmpty(otp):
+		Error.throw("otpGenerationFailed", otp)
+	await HTTPRPCClient.forBaseUrl(messageServiceUrl).callRemoteFunction("sendMessage", DynamicMap.forMap(new map {
+		rcpt recipient
+		message new map {
+			template "otp"
+			parameters new map {
+				otp otp
+			}
+		}
+	}))
+}
+
+func sendOtp(recipient as string) async as dynamic
+{
+	if await database.hasExistingValidOTP(recipient) {
+		var otp = await database.updateExpirationAndGetOtp(recipient)
+		doSendOtp(otp, recipient)
+		Log.debug(ctx, "Sending updated OTP `" .. otp .. "'")
+		return otp
+	}
+	await database.deleteExistingExpiredOtp(recipient)
+	var otp = await database.generateOtp(recipient)
+	if String.isEmpty(otp):
+		Error.throw("otpGenerationFailed", otp)
+	await doSendOtp(otp, recipient)
+	Log.debug(ctx, "Sending OTP `" .. otp .. "'")
+	return otp
+}
+
+func verifyOtpCode(code as string, mobileNumber as string) async as dynamic
+{
+	if await database.isMaximumNumberOfTries(mobileNumber):
+		Error.throw("maximumNumberOfTries", mobileNumber)
+	if await database.isOtpCodeExpired(mobileNumber, code):
+		Error.throw("otpExpired", code)
+	if not await database.verifyOtpCode(mobileNumber, code) {
+		database.updateAttempt(mobileNumber)
+		Error.throw("otpVerificationFailed", code)
+	}
+	return null
+}
+
+func checkMobileNumberValidationAttempts(mobileNumber as string) async as dynamic
+{
+	if not mobileNumber:
+		Error.throw("invalidRequest", mobileNumber)
+	if await database.isMaximumNumberOfTries(mobileNumber):
+		Error.throw("maximumNumberOfTries", mobileNumber)
+	return null
+}
+
+func getOtpById(otpId as string) async as dynamic:
+	return await database.getOtpById(otpId)
+
+main
+{
+	return await WebServerMain.execute(args, func(server as WebServer) async {
+		var db = new SympathyOtpDatabase(server.ctx)
+		await db.updateTables()
+		server.use(new this() {
+			database db
+		})
+	})
+}

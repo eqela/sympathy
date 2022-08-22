@@ -1,0 +1,150 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.json
+import jk.url
+import jk.webclient
+import sympathy.geo
+
+class:
+
+func forApiKey(apiKey as string) static as this
+{
+	var v = new this()
+	v.apiKey = apiKey
+	return v
+}
+
+prop ctx as LoggingContext
+prop host as string = "https://maps.googleapis.com/maps/api/geocode/json"
+prop apiKey as string
+
+func queryAddress(latitude as double, longitude as double) async as PhysicalAddress
+{
+	var client = WebClient.instance()
+	var url = host .. "?key=" .. URLEncoder.encode(String.safeString(apiKey)) .. "&latlng=" .. URLEncoder.encode(String.forDouble(latitude) .. "," .. String.forDouble(longitude))
+	var response = await client.executeQuery(ctx, "GET", url, null, null)
+	var data = JSONParser.parseBuffer(response.body) as DynamicMap
+	if not data:
+		Error.throw("invalidResponseFromGoogleMapsAPI", null)
+	var results = data.getDynamicVector("results")
+	if not results || results.getSize() < 1:
+		Error.throw("noResultFoundFromGoogleMapsAPI", data)
+	var v as PhysicalAddress
+	foreach result as DynamicMap in results.toVector() {
+		if not result:
+			continue
+		var addressComponents = result.getDynamicVector("address_components")
+		if not addressComponents || addressComponents.getSize() < 1:
+			Error.throw("noAddressComponentsFoundFromGoogleMapsAPI", result)
+		v = new PhysicalAddress()
+		foreach addressComponent as DynamicMap in addressComponents.toVector() {
+			if not addressComponent:
+				continue
+			var types = addressComponent.getDynamicVector("types")
+			if not types || types.getSize() < 1:
+				continue
+			foreach type as string in types.toVector() {
+				if not type:
+					continue
+				if String.equals("street_number", type) {
+					v.streetAddressDetail = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("route", type) {
+					v.streetAddress = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("locality", type) {
+					v.locality = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("sublocality", type) {
+					v.subLocality = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("administrative_area_level_2", type) {
+					v.subAdministrativeArea = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("administrative_area_level_1", type) {
+					v.administrativeArea = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("country", type) {
+					v.country = addressComponent.getString("long_name")
+					v.countryCode = addressComponent.getString("short_name")
+					break
+				}
+				if String.equals("postal_code", type) {
+					v.postalCode = addressComponent.getString("long_name")
+					break
+				}
+			}
+		}
+		v.completeAddress = result.getString("formatted_address")
+		var geometry = result.getDynamicMap("geometry")
+		if not geometry:
+			continue
+		var location = geometry.getDynamicMap("location")
+		if not location:
+			continue
+		v.latitude = location.getDouble("lat")
+		v.longitude = location.getDouble("lng")
+		break
+	}
+	if not v:
+		Error.throw("invalidResultFromGoogleMapsAPI", null)
+	return v
+}
+
+func queryLocation(address as string) async as vector<GeoLocation>
+{
+	var client = WebClient.instance()
+	var url = host .. "?key=" .. URLEncoder.encode(String.safeString(apiKey)) .. "&address=" .. URLEncoder.encode(address)
+	var response = await client.executeQuery(ctx, "GET", url, null, null)
+	var data = JSONParser.parseBuffer(response.body) as DynamicMap
+	if not data:
+		Error.throw("invalidResponseFromGoogleMapsAPI", host)
+	var results = data.getDynamicVector("results")
+	if not results || results.getSize() < 1:
+		Error.throw("noResultsFoundFromGoogleMapsAPI", host)
+	var v = new vector<GeoLocation>
+	foreach result as DynamicMap in results.toVector() {
+		if not result:
+			continue
+		var geometry = result.getDynamicMap("geometry")
+		if not geometry:
+			continue
+		var location = geometry.getDynamicMap("location")
+		if not location:
+			continue
+		v += new GeoLocation() {
+			latitude location.getDouble("lat")
+			longitude location.getDouble("lng")
+		}
+	}
+	return v
+}

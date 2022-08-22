@@ -1,0 +1,101 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import sympathy.client
+import sympathy.geo
+
+class is MicroServiceClient:
+
+ctor:
+	baseUrl = requireConfigValue("GEOLOCATION_SERVICE_URL")
+
+func stringToGeoLocation(location as string) async as GeoLocation
+{
+	var params = new map {
+		location location
+	}
+	return GeoLocation.forData(await queryMap("stringToGeoLocation", params))
+}
+
+func getTravelDuration(origin as Address, destination as GeoLocation) async as string
+{
+	var params = new map {
+		origin origin
+		destination destination
+	}
+	return await queryString("getTravelDuration", params)
+}
+
+func getDistanceForAddresses(origin as Address, destination as Address) async as double
+{
+	var params = new map {
+		origin origin
+		destination destination
+	}
+	var v = await queryObject("getDistanceForAddresses", params)
+	if v is DoubleObject:
+		return (v as! DoubleObject).toDouble()
+	return 0.0
+}
+
+func computeDistanceForAddresses(origin as Address, destination as Address) async as double
+{
+	var params = new map {
+		origin origin
+		destination destination
+	}
+	var v = await queryObject("computeDistanceForAddresses", params)
+	if v is DoubleObject:
+		return (v as! DoubleObject).toDouble()
+	return 0.0
+}
+
+func getDistances(origin as string, destination as string) async as DynamicVector
+{
+	var params = new map {
+		origin origin
+		destination destination
+	}
+	return await queryVector("getDistances", params)
+}
+
+func computeChargeForAddresses(vehicleBasePrice as long, from as Address, to as Address, routes as vector<Address>, charge as int) async as DynamicVector
+{
+	var params = new map {
+		vehicleBasePrice LongInteger.asObject(vehicleBasePrice)
+		from from
+		to to
+		routes routes
+		charge Integer.asObject(charge)
+	}
+	return await queryVector("computeChargeForAddresses", params)
+}
+
+func addressToLatLonString(address as Address) async as string
+{
+	var params = new map {
+		address address
+	}
+	return await queryString("addressToLatLonString", params)
+}

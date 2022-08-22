@@ -1,0 +1,166 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.url
+import jk.json
+
+class is TwilioApiClient:
+
+meta {
+	description [[
+		SOURCE :
+			https://www.twilio.com/docs/sms/api
+		FORMAT :
+			dateSent : YYYY-MM-DD
+	]]
+}
+
+model Message public
+{
+	from as string
+	to as string
+	body as string
+	account_sid as string
+	api_version as string
+	date_created as string
+	date_sent as string
+	date_updated as string
+	direction as string
+	error_code as string
+	error_message as string
+	messaging_service_sid as string
+	num_media as string
+	num_segments as string
+	price as string
+	price_unit as string
+	sid as string
+	status as string
+	subresource_uris as string
+	uri as string
+}
+
+model MessageList public
+{
+	uri as string
+	first_page_uri as string
+	next_page_uri as string
+	previous_page_uri as string
+	page as string
+	page_size as string
+	messages as Message[]
+}
+
+model Criteria public
+{
+	limit as int
+	to as string
+	from as string
+	dateSent as string
+	operator as string
+	fromDate as string
+	toDate as string
+}
+
+prop baseURL as string = "https://api.twilio.com/2010-04-01"
+
+func sendMessage(message as Message) async as Message
+{
+	meta {
+		description "To send a new outgoing message"
+	}
+	var headers = createHeaders()
+	var sb = new StringBuilder()
+	sb.appendString("To=")
+	sb.appendString(URLEncoder.encode(message.to))
+	sb.appendString("&From=")
+	sb.appendString(URLEncoder.encode(message.from))
+	sb.appendString("&Body=")
+	sb.appendString(URLEncoder.encode(message.body))
+	var resp = await request("POST", baseURL .. "/Accounts/" .. URLEncoder.encode(ssid) .. "/Messages.json", headers, String.toUTF8Buffer(sb.toString()))
+	var statusCode = resp.statusCode
+	if statusCode != "201" || statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	return Message.forData(JSONParser.parse(resp.body) as DynamicMap)
+}
+
+func getMessages(criteria as Criteria) async as MessageList
+{
+	meta {
+		description "Get all messages associated with your account"
+	}
+	var headers = createHeaders()
+	var url = URL.forString(baseURL .. "/Accounts/" .. URLEncoder.encode(ssid) .. "/Messages.json")
+	if not criteria.limit:
+		criteria.limit = 20
+	var spage = String.asString(criteria.limit)
+	url.addQueryParameter("PageSize", spage)
+	var to = criteria.to
+	if String.isNotEmpty(to):
+		url.addQueryParameter("To", to)
+	var from = criteria.from
+	if String.isNotEmpty(from):
+		url.addQueryParameter("From", from)
+	var fromDate = criteria.fromDate
+	var toDate = criteria.toDate
+	if String.isNotEmpty(fromDate) && String.isNotEmpty(toDate) {
+		url.addQueryParameter("DateSent", fromDate)
+		url.addQueryParameter("DateSent", toDate)
+	}
+	var dateSent = criteria.dateSent
+	if String.isNotEmpty(dateSent):
+		url.addQueryParameter("DateSent", dateSent)
+	var resp = await request("GET", url.toString(), headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "201" || statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	return MessageList.forData(JSONParser.parse(resp.body) as DynamicMap)
+}
+
+func updateMessage(sid as string) async as Message
+{
+	meta {
+		description "This action is primarily used to redact messages. This API will only replace the message Body into empty string"
+	}
+	var headers = createHeaders()
+	var sb = new StringBuilder()
+	sb.appendString("&Body=")
+	var resp = await request("POST", baseURL .. "/Accounts/" .. URLEncoder.encode(ssid) .. "/Messages/" .. URLEncoder.encode(sid) .. ".json", headers, String.toUTF8Buffer(sb.toString()))
+	var statusCode = resp.statusCode
+	if statusCode != "201" || statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	return Message.forData(JSONParser.parse(resp.body) as DynamicMap)
+}
+
+func deleteMessage(sid as string) async as bool
+{
+	meta {
+		description "Deletes a message record from your account. Once the record is deleted, it will no longer appear in the API and Account Portal logs."
+	}
+	var headers = createHeaders()
+	var resp = await request("DELETE", baseURL .. "/Accounts/" .. URLEncoder.encode(ssid) .. "/Messages/" .. URLEncoder.encode(sid) .. ".json", headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "204":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	return true
+}

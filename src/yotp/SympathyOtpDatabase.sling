@@ -1,0 +1,225 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.env
+import jk.log
+import jk.time
+import jk.random
+import jk.sha
+import jk.data.sql
+import jk.data.mysql
+import sympathy.db
+import sympathy.config
+
+class is ApplicationDatabase:
+
+const OTP = "otp"
+const MAXIMUM_NUMBER_OF_TRIES = 2
+const OTP_TTL = 60 * 60 * 24
+var otpLength = String.toInteger(ServerConfig.get("OTP_CODE_LENGTH", "5"))
+
+model Otp public #dynamic
+{
+	id as string #key
+	recipient as string
+	code as string
+	attempt as int
+	timeStampAdded as long
+	timeStampLastUpdated as long
+	timeStampExpiration as long
+}
+
+func getTableDefinitions(tables as vector<SQLTableInfo>) override:
+	tables += SQLTableInfo.forDynamicModel(OTP, new Otp())
+
+func hasExistingValidOTP(recipient as string) async as bool
+{
+	assert recipient
+	var criteria = new Otp()
+	criteria.recipient = recipient
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(OTP, criteria.toDynamicMap()))
+	var otp = assert Otp.forData(v)
+	return SystemClock.asUTCSeconds() < otp.timeStampExpiration
+}
+
+func updateExpirationAndGetOtp(recipient as string) async as string
+{
+	assert recipient
+	var now = SystemClock.asUTCSeconds()
+	var exp = now + OTP_TTL
+	var criteria = new Otp()
+	criteria.recipient = recipient
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(OTP, criteria.toDynamicMap()))
+	var vv = assert Otp.forData(v)
+	var otp = new Otp()
+	otp.timeStampLastUpdated = now
+	otp.timeStampExpiration = exp
+	assert await db.executeStatement(await db.prepareUpdateStatement(OTP, criteria.toDynamicMap(), otp.toDynamicMap()))
+	return vv.code
+}
+
+func deleteExistingExpiredOtp(recipient as string) async as bool
+{
+	assert recipient
+	var criteria = new Otp()
+	criteria.recipient = recipient
+	assert await db.executeStatement(await db.prepareDeleteStatement(OTP, criteria.toDynamicMap()))
+	return true
+}
+
+func generateOtpString(length as int, allDigits as bool, allCaps as bool) as string
+{
+	var random = new Random()
+	var sb = new StringBuilder()
+	var l = length
+	if l < 1:
+		l = 1
+	for(var i = 0; i < l; i++) {
+		if allDigits {
+			sb.appendCharacter(random.nextIntegerBetween(48, 58) as! char)
+		}
+		else {
+			if random.nextIntegerBetween(0, 2) == 0 {
+				sb.appendCharacter(random.nextIntegerBetween(48, 58) as! char)
+			}
+			else {
+				if allCaps {
+					sb.appendCharacter(Character.toUppercase(random.nextIntegerBetween(97, 123) as! char))
+				}
+				else {
+					if random.nextIntegerBetween(0, 2) == 0 {
+						sb.appendCharacter(Character.toUppercase(random.nextIntegerBetween(97, 123) as! char))
+					}
+					else {
+						sb.appendCharacter(random.nextIntegerBetween(97, 123) as! char)
+					}
+				}
+			}
+		}
+	}
+	return sb.toString()
+}
+
+func generateOtp(recipient as string) async as string
+{
+	assert recipient
+	var now = SystemClock.asUTCSeconds()
+	var exp = now + OTP_TTL
+	var otp = new Otp()
+	var code = await getUniqueOtpCode()
+	otp.code = code
+	otp.recipient = recipient
+	otp.attempt = 0
+	otp.timeStampAdded = now
+	otp.timeStampExpiration = exp
+	otp.id =  SHAEncoder.forSha256().getHashForString(code)
+	assert await db.executeStatement(await db.prepareInsertStatement(OTP, otp.toDynamicMap()))
+	return code
+}
+
+func getOtp(code as string) async as Otp
+{
+	assert String.isNotEmpty(code)
+	var crit = new Otp()
+	crit.code = code
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(OTP, crit.toDynamicMap()))
+	return Otp.forData(v)
+}
+
+func getUniqueOtpCode async as string
+{
+	var v as string
+	loop {
+		v = generateOtpString(otpLength, true, true)
+		var mod = await getOtp(v)
+		if not mod:
+			break
+	}
+	return v
+}
+
+func isMaximumNumberOfTries(recipient as string) async as bool
+{
+	assert recipient
+	var criteria = new Otp()
+	criteria.recipient = recipient
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(OTP, criteria.toDynamicMap()))
+	var otp = assert Otp.forData(v)
+	var attempt = otp.attempt
+	if (SystemClock.asUTCSeconds() < otp.timeStampExpiration) && (attempt >= MAXIMUM_NUMBER_OF_TRIES):
+		return true
+	return false
+}
+
+func isOtpCodeExpired(recipient as string, code as string) async as bool
+{
+	assert recipient
+	assert code
+	var criteria = new Otp()
+	criteria.recipient = recipient
+	criteria.code = code
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(OTP, criteria.toDynamicMap()))
+	var otp = assert Otp.forData(v)
+	if SystemClock.asUTCSeconds() > otp.timeStampExpiration {
+		assert await db.executeStatement(await db.prepareDeleteStatement(OTP, criteria.toDynamicMap()))
+		return true
+	}
+	return false
+}
+
+func verifyOtpCode(recipient as string, code as string) async as bool
+{
+	assert recipient
+	assert code
+	var criteria = new Otp()
+	criteria.recipient = recipient
+	criteria.code = code
+	assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(OTP, criteria.toDynamicMap()))
+	return await db.executeStatement(await db.prepareDeleteStatement(OTP, criteria.toDynamicMap()))
+}
+
+func updateAttempt(recipient as string) async as bool
+{
+	assert recipient
+	var criteria = new Otp()
+	criteria.recipient = recipient
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(OTP, criteria.toDynamicMap()))
+	var otp = assert Otp.forData(v)
+	var attempt = otp.attempt
+	var newData = new Otp()
+	if not attempt:
+		attempt = 0
+	newData.attempt = attempt + 1
+	assert await db.executeStatement(await db.prepareUpdateStatement(OTP, criteria.toDynamicMap(), newData.toDynamicMap()))
+	return true
+}
+
+func getOtpById(id as string) async as Otp
+{
+	assert String.isNotEmpty(id)
+	var crit = new Otp()
+	crit.id = id
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(OTP, crit.toDynamicMap()))
+	return Otp.forData(v)
+}

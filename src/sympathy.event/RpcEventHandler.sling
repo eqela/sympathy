@@ -1,0 +1,59 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class is DynamicMapEventHandler:
+
+var handlers = new map<string,function<object,DynamicMap>>
+
+func setHandler(functionName as string, handler as function<object,DynamicMap>) virtual
+{
+	assert String.isNotEmpty(functionName)
+	if handler {
+		Map.set(handlers, functionName, handler)
+	}
+	else {
+		Map.remove(handlers, functionName)
+	}
+}
+
+func handleRpcEvent(functionName as string, parameters as DynamicMap) virtual as object
+{
+	var handler = Map.get(handlers, functionName)
+	if not handler:
+		Error.throw("noSuchFunction", functionName)
+	return handler(parameters)
+}
+
+func handleDynamicMapEvent(data as DynamicMap) override as object
+{
+	if not data:
+		Error.throw("nullDynamicMap", null)
+	var fn = data.getString("function")
+	if String.isEmpty(fn):
+		Error.throw("noFunctionName", data)
+	var params = data.getDynamicMap("parameters")
+	if not params:
+		params = new DynamicMap()
+	return handleRpcEvent(fn, params)
+}

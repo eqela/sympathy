@@ -1,0 +1,10 @@
+{
+    "name": "@eqela/sympathy",
+    "scripts": {
+        "clean": "rm -rf node_modules dist src/.cache src/.build",
+        "build": "npx slingdev build src -o dist"
+    },
+    "devDependencies": {
+        "@eqela/slingdev": "3.4.0"
+    }
+}

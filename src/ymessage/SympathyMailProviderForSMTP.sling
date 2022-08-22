@@ -1,0 +1,90 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.env
+import jk.log
+import sympathy.apiclient.smtp
+
+class is SympathyMailProvider:
+
+prop serverType as string
+prop username as string
+prop password as string
+prop serverAddress as string
+prop port as string
+prop senderAddress as string
+prop senderName as string
+
+prop sender:senderValue as SMTPSender
+{
+	get {
+		if not senderValue {
+			var configMap = new DynamicMap()
+			configMap.setString("server_type", serverType)
+			configMap.setString("server_username", username)
+			configMap.setString("server_password", password)
+			configMap.setString("server_address", serverAddress)
+			configMap.setString("server_port", port)
+			configMap.setString("sender_address", senderAddress)
+			configMap.setString("sender_name", senderName)
+			senderValue = SMTPSender.forConfiguration(configMap, ctx)
+		}
+		return senderValue
+	}
+}
+
+var ctx as LoggingContext
+
+ctor(ctx as LoggingContext):
+	this.ctx = ctx
+
+func send(mail as SympathyMailContent) override async
+{
+	var sender = this.sender
+	if not sender:
+		Error.throw("noSmtpSenderObject", null)
+	var message = new SMTPMessage()
+	var rcpts = mail.recipients
+	if !rcpts:
+		Error.throw("noRecipientsObject", null)
+	foreach rcpt in rcpts:
+		message.setTo(rcpt.email)
+	message.setContentType(mail.contentType)
+	message.setSubject(mail.subject)
+	var senderinfo = mail.sender
+	message.setMyAddress(senderinfo.email)
+	message.setMyName(senderinfo.name)
+	message.setText(mail.content)
+	var transaction = sender.sendSync(message)
+	if not transaction:
+		Error.throw("failedToSendMessage", message)
+	if not transaction.getStatus() {
+		var transactions = transaction.getTransactions()
+		foreach rr as SMTPClientTransactionResult in transactions.toVector() {
+			if not rr.getStatus():
+				Log.error(ctx, "SMTP ERROR : " .. rr.getErrorMessage())
+		}
+		Error.throw("failedToSendMessage", message)
+	}
+}

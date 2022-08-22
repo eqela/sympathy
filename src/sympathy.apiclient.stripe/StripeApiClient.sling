@@ -1,0 +1,617 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.json
+import sympathy.apiclient.common
+import jk.url
+
+class is RestApiClient:
+
+model Metadata public
+{
+	key as string
+	value as string
+}
+
+model Customer public
+{
+	id as string
+	address as string
+	description as string
+	email as string
+	metadata as Metadata[]
+	name as string
+	timeStamp as int
+}
+
+model PaymentIntent public
+{
+	id as string
+	amount as string
+	clientSecret as string
+	currency as string
+	customer as string
+	status as int
+	setupFutureUsage as string
+	timeStamp as int
+}
+
+model SetupIntent public
+{
+	id as string
+	customer as string
+	clientSecret as string
+	status as int
+	usage as string
+	timeStamp as int
+}
+
+model Card public
+{
+	brand as string
+	country as string
+	expirationMonth as string
+	expirationYear as string
+	fingerprint as string
+	funding as string
+	last4 as string
+	secureUsage as bool
+}
+
+model PaymentMethod public
+{
+	id as string
+	customer as string
+	card as Card
+	type as string
+	default as bool
+	timeStamp as int
+}
+
+model Product public
+{
+	id as string
+	name as string
+	description as string
+	active as bool
+}
+
+model Price public
+{
+	id as string
+	currency as string
+	product as string
+	active as bool
+	unit_amount as string
+	recurring as Recurring
+}
+
+model Recurring public
+{
+	interval as string
+	interval_count as int
+}
+
+model Subscription public
+{
+	id as string
+	customer as string
+	items as SubscriptionItem[]
+	description as string
+}
+
+model SubscriptionItem public
+{
+	price as string
+	quantity as int
+}
+
+model SubscriptionCriteria public
+{
+	customer as string
+	status as string
+	price as string
+	limit as int
+}
+
+func forApiKey(ctx as LoggingContext, apiKey as string) static as this
+{
+	var v = new this(ctx)
+	v.apiKey = apiKey
+	return v
+}
+
+prop apiKey as string
+
+const PAYMENT_STATUS_REQUIRES_PAYMENT = 0
+const PAYMENT_STATUS_REQUIRES_CONFIRMATION = 1
+const PAYMENT_STATUS_REQUIRES_ACTION = 2
+const PAYMENT_STATUS_PROCESSING = 3
+const PAYMENT_STATUS_SUCCEEDED = 4
+const PAYMENT_STATUS_CANCELED = 5
+
+const SUBSCRIPTION_EVENT_CREATED = "SUBSCRIPTION_EVENT_CREATED"
+const SUBSCRIPTION_EVENT_DELETED = "SUBSCRIPTION_EVENT_DELETED"
+const SUBSCRIPTION_EVENT_UPDATED = "SUBSCRIPTION_EVENT_UPDATED"
+
+macro INITIALIZE_AUTHORIZATION
+{
+	if String.isEmpty(apiKey):
+		throw ExceptionWithError.forCode("noApiKey", "No Stripe API key configured")
+	var headers = new KeyValueList<string, string>()
+	headers.add("Authorization", "Bearer " .. apiKey)
+}
+
+func createCustomer(customer as Customer) async as Customer
+{
+	meta {
+		description "Creates a new customer"
+	}
+	INITIALIZE_AUTHORIZATION()
+	var meta = customer.metadata
+	customer.metadata = null
+	var data = customer.toDynamicMap()
+	foreach m as Metadata in meta:
+		data.setString("metadata[" .. m.key .. "]", m.value)
+	data.removeNullValues()
+	var resp = await request("POST", "https://api.stripe.com/v1/customers", headers, encodeBodyToBuffer(data))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var c = Customer.forData(JSONParser.parse(resp.body) as DynamicMap)
+	return c
+}
+
+func listCustomers async as vector<Customer>
+{
+	meta {
+		description "Retrieves a list of all customers"
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("GET", "https://api.stripe.com/v1/customers", headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	var data = assert bodyMap.getDynamicVector("data")
+	var v = new vector<Customer>
+	foreach c as DynamicMap in data.toVector():
+		v += Customer.forData(c)
+	return v
+}
+
+func createPaymentIntent(intent as PaymentIntent, setupFutureUsage as string = null) async as PaymentIntent
+{
+	meta {
+		description "Creates a payment intent given an amount and currency"
+	}
+	INITIALIZE_AUTHORIZATION()
+	var intentData = intent.toDynamicMap()
+	if setupFutureUsage:
+		intentData.setString("setup_future_usage", setupFutureUsage)
+	intentData.removeNullValues()
+	var resp = await request("POST", "https://api.stripe.com/v1/payment_intents", headers, encodeBodyToBuffer(intentData))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	var p = PaymentIntent.forData(bodyMap)
+	p.clientSecret = bodyMap.getString("client_secret")
+	p.setupFutureUsage = bodyMap.getString("setup_future_usage")
+	p.status = paymentStatusToInt(bodyMap.getString("status"))
+	p.timeStamp = bodyMap.getInteger("created")
+	return p
+}
+
+func createSetupIntent(customer as string) async as SetupIntent
+{
+	meta {
+		description "Creates a setup intent that collects customer's payment credentials for future usage"
+	}
+	INITIALIZE_AUTHORIZATION()
+	var v = new DynamicMap()
+	v.setString("customer", customer)
+	var resp = await request("POST", "https://api.stripe.com/v1/setup_intents", headers, encodeBodyToBuffer(v))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	var s = SetupIntent.forData(bodyMap)
+	s.clientSecret = bodyMap.getString("client_secret")
+	s.timeStamp = bodyMap.getInteger("created")
+	return s
+}
+
+func listPaymentMethods(customerId as string, type as string = "card") async as vector<PaymentMethod>
+{
+	meta {
+		description "Retrieve a list of payment methods for a given customer"
+	}
+	INITIALIZE_AUTHORIZATION()
+	var rb = new DynamicMap()
+	rb.setString("customer", customerId)
+	rb.setString("type", type)
+	var resp = await request("GET", "https://api.stripe.com/v1/payment_methods", headers, encodeBodyToBuffer(rb))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	var data = bodyMap.getDynamicVector("data")
+	var methods as vector<PaymentMethod>
+	foreach v as DynamicMap in data.toVector() {
+		var c = v.getDynamicMap("card")
+		if not c:
+			continue
+		var card = Card.forData(c)
+		card.expirationMonth = c.getString("exp_month")
+		card.expirationYear = c.getString("exp_year")
+		var isSupported = false
+		var sc = v.getDynamicMap("three_d_secure_usage")
+		if sc:
+			isSupported = sc.getBoolean("supported")
+		card.secureUsage = isSupported
+		var m = PaymentMethod.forData(v)
+		m.card = card
+		if not methods:
+			methods = new vector<PaymentMethod>
+		methods += m
+	}
+	return methods
+}
+
+func retrievePaymentMethod(id as string) async as PaymentMethod
+{
+	meta {
+		description "Retrieves the payment method details for the specified payment method"
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("GET", "https://api.stripe.com/v1/payment_methods/" .. id, headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	var c = assert bodyMap.getDynamicMap("card")
+	var card = Card.forData(c)
+	card.expirationMonth = c.getString("exp_month")
+	card.expirationYear = c.getString("exp_year")
+	var isSupported = false
+	var sc = bodyMap.getDynamicMap("three_d_secure_usage")
+	if sc:
+		isSupported = sc.getBoolean("supported")
+	card.secureUsage = isSupported
+	var m = PaymentMethod.forData(bodyMap)
+	m.card = card
+	m.timeStamp = bodyMap.getInteger("created")
+	return m
+}
+
+func attachPaymentMethod(id as string, customer as string) async as PaymentMethod
+{
+	INITIALIZE_AUTHORIZATION()
+	var data = new DynamicMap()
+	data.setString("customer", customer)
+	var resp = await request("GET", "https://api.stripe.com/v1/payment_methods/" .. id .. "/attach", headers, encodeBodyToBuffer(data))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return PaymentMethod.forData(bodyMap)
+}
+
+func detachPaymentMethod(id as string) async as PaymentMethod
+{
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("POST", "https://api.stripe.com/v1/payment_methods/" .. id .. "/detach", headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return PaymentMethod.forData(bodyMap)
+}
+
+func encodeBodyToBuffer(data as DynamicMap) private as buffer
+{
+	assert data
+	var sb = new StringBuilder()
+	var keys = data.iterateKeys()
+	var first = true
+	while keys {
+		var key = keys.next()
+		if not key:
+			break
+		var value = data.getDynamic(key)
+		if value is DynamicVector {
+			appendDynamicVectorToFormData(sb, key, value as DynamicVector)
+		}
+		else {
+			if not first:
+				sb.appendString("&")
+			sb.appendString(key)
+			sb.appendString("=")
+			sb.appendString(URLEncoder.encode(String.asString(value)))
+		}
+		first = false
+	}
+	return String.toUTF8Buffer(sb.toString())
+}
+
+func appendDynamicVectorToFormData(sb as StringBuilder, key as string, items as DynamicVector)
+{
+	assert items
+	foreach item in items.toVectorOfDynamicMaps() {
+		var index = 0
+		foreach ikey in item.getKeys() {
+			if sb.count() > 0:
+				sb.appendString("&")
+			sb.appendString(key)
+			sb.appendString("[")
+			sb.appendInteger(index)
+			sb.appendString("]")
+			sb.appendString("[")
+			sb.appendString(ikey)
+			sb.appendString("]")
+			sb.appendString("=")
+			sb.appendString(URLEncoder.encode(item.getString(ikey)))
+		}
+		index++
+	}
+}
+
+func paymentStatusToInt(status as string) as int
+{
+	if String.equals(status, "requires_payment_method"):
+		return PAYMENT_STATUS_REQUIRES_PAYMENT
+	if String.equals(status, "requires_confirmation"):
+		return PAYMENT_STATUS_REQUIRES_CONFIRMATION
+	if String.equals(status, "requires_action"):
+		return PAYMENT_STATUS_REQUIRES_ACTION
+	if String.equals(status, "requires_processing"):
+		return PAYMENT_STATUS_PROCESSING
+	if String.equals(status, "requires_succeeded"):
+		return PAYMENT_STATUS_SUCCEEDED
+	if String.equals(status, "requires_canceled"):
+		return PAYMENT_STATUS_CANCELED
+	return -1
+}
+
+func convertStripePaymentEvent(event as string) as string
+{
+	if String.equals(event, "customer.subscription.created"):
+		return SUBSCRIPTION_EVENT_CREATED
+	if String.equals(event, "customer.subscription.deleted"):
+		return SUBSCRIPTION_EVENT_DELETED
+	if String.equals(event, "customer.subscription.updated"):
+		return SUBSCRIPTION_EVENT_UPDATED
+	return null
+}
+
+// PRODUCT
+
+func createProduct(product as Product) async as Product
+{
+	meta {
+		description "Creates a new product object."
+	}
+	assert product
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("POST", "https://api.stripe.com/v1/products", headers, encodeBodyToBuffer(product.toDynamicMap()))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Product.forData(bodyMap)
+}
+
+func retrieveProduct(productId as string) async as Product
+{
+	meta {
+		description "Retrieves the details of an existing product. Supply the unique product ID from either a product creation request or the product list, and Stripe will return the corresponding product information."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("GET", "https://api.stripe.com/v1/products/" .. productId, headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Product.forData(bodyMap)
+}
+
+func updateProduct(productId as string, product as Product) async as Product
+{
+	meta {
+		description "Updates the specific product by setting the values of the parameters passed. Any parameters not provided will be left unchanged."
+	}
+	assert product
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("POST", "https://api.stripe.com/v1/products/" .. productId, headers, encodeBodyToBuffer(product.toDynamicMap()))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Product.forData(bodyMap)
+}
+
+func listProducts async as DynamicMap
+{
+	meta {
+		description "Returns a list of your products. The products are returned sorted by creation date, with the most recently created products appearing first."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("GET", "https://api.stripe.com/v1/products", headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return bodyMap
+}
+
+func deleteProduct(productId as string) async as bool
+{
+	meta {
+		description "Delete a product. Deleting a product is only possible if it has no prices associated with it."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("DELETE", "https://api.stripe.com/v1/products/" .. productId, headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return bodyMap.getBoolean("deleted")
+}
+
+// PRICE
+
+func createPrice(price as Price) async as Price
+{
+	meta {
+		description "Creates a new price for an existing product. The price can be recurring or one-time."
+	}
+	assert price
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("POST", "https://api.stripe.com/v1/prices", headers, encodeBodyToBuffer(price.toDynamicMap()))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Price.forData(bodyMap)
+}
+
+func retrievePrice(priceId as string) async as Price
+{
+	meta {
+		description "Retrieves the price with the given ID."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("GET", "https://api.stripe.com/v1/prices/" .. priceId, headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Price.forData(bodyMap)
+}
+
+func updatePrice(priceId as string, price as Price) async as Price
+{
+	meta {
+		description "Updates the specified price by setting the values of the parameters passed. Any parameters not provided are left unchanged."
+	}
+	assert price
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("POST", "https://api.stripe.com/v1/prices/" .. priceId, headers, encodeBodyToBuffer(price.toDynamicMap()))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Price.forData(bodyMap)
+}
+
+func listPrices async as DynamicMap
+{
+	meta {
+		description "Returns a list of your prices."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("GET", "https://api.stripe.com/v1/prices", headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return bodyMap
+}
+
+// SUBSCRIPTION
+
+func createSubscription(subscription as Subscription) async as Subscription
+{
+	meta {
+		description "Creates a new subscription on an existing customer. Each customer can have up to 500 active or scheduled subscriptions."
+	}
+	INITIALIZE_AUTHORIZATION()
+	assert subscription
+	var data = assert subscription.toDynamicMap()
+	var resp = await request("POST", "https://api.stripe.com/v1/subscriptions", headers, encodeBodyToBuffer(data))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Subscription.forData(bodyMap)
+}
+
+func retrieveSubscription(subscriptionId as string) async as Subscription
+{
+	meta {
+		description "Retrieves the subscription with the given ID."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("GET", "https://api.stripe.com/v1/subscriptions/" .. subscriptionId, headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Subscription.forData(bodyMap)
+}
+
+func updateSubscription(subscriptionId as string, subscription as Subscription) async as Subscription
+{
+	meta {
+		description "Updates an existing subscription to match the specified parameters. When changing prices or quantities, we will optionally prorate the price we charge next month to make up for any price changes."
+	}
+	INITIALIZE_AUTHORIZATION()
+	assert subscription
+	var resp = await request("POST", "https://api.stripe.com/v1/subscriptions/".. subscriptionId, headers, encodeBodyToBuffer(subscription.toDynamicMap()))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Subscription.forData(bodyMap)
+}
+
+func cancelSubscription(subscriptionId as string) async as Subscription
+{
+	meta {
+		description "Cancels a customer’s subscription immediately. The customer will not be charged again for the subscription."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("DELETE", "https://api.stripe.com/v1/subscriptions/" .. subscriptionId, headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return Subscription.forData(bodyMap)
+}
+
+func listSubscriptions(criteria as SubscriptionCriteria) async as DynamicMap
+{
+	meta {
+		description "By default, returns a list of subscriptions that have not been canceled."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("GET", "https://api.stripe.com/v1/subscriptions", headers, encodeBodyToBuffer(criteria.toDynamicMap()))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return bodyMap
+}

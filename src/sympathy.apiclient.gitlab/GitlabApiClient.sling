@@ -1,0 +1,87 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.json
+import sympathy.apiclient.common
+
+class is RestApiClient:
+
+model GitlabUserDetails
+{
+	id as string
+	name as string
+	username as string
+	avatar_url as string
+	email as string
+}
+
+model GitlabRepositoryDetails
+{
+	id as string
+	name as string
+	description as string
+	ssh_url_to_repo as string
+	http_url_to_repo as string
+	web_url as string
+}
+
+func forAccessToken(ctx as LoggingContext, accessToken as string) static as this
+{
+	var v = new this(ctx)
+	v.accessToken = accessToken
+	return v
+}
+
+prop accessToken as string
+
+func getUserDetails async as GitlabUserDetails
+{
+	assert accessToken
+	var hdrs = new KeyValueList<string,string>()
+	hdrs.add("Authorization", "Bearer " .. accessToken)
+	var response = await request("GET", "https://gitlab.com/api/v4/user", hdrs, null)
+	var data = response.getBodyAsDynamicMap()
+	if data.getString("error"):
+		Error.throw("inssuficientScope", data.getString("error_description"))
+	return GitlabUserDetails.forData(data)
+}
+
+func getUserRepositories(gitlabUserId as string) async as vector<GitlabRepositoryDetails>
+{
+	assert accessToken
+	assert gitlabUserId
+	var hdrs = new KeyValueList<string,string>()
+	hdrs.add("Authorization", "Bearer " .. accessToken)
+	var response = await request("GET", "https://gitlab.com/api/v4/users/" .. gitlabUserId .. "/projects", hdrs, null)
+	var body = response.getBodyAsBuffer()
+	var res = assert JSONParser.parseBuffer(body) as DynamicVector:
+		Error.throw("httpResponseIsNotJsonArray", "HTTP response is not a JSON array")
+	var v = new vector<GitlabRepositoryDetails>
+	foreach data as DynamicMap in (res as DynamicVector).toVector() {
+		var repo = GitlabRepositoryDetails.forData(data)
+		v += repo
+	}
+	return v
+}

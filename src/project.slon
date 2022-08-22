@@ -1,0 +1,14 @@
+{
+	vendorId "eqela"
+	projectId "sympathy"
+	title "Eqela Sympathy"
+	libraries [
+		{
+			vendor "eqela"
+			name "jkop"
+			version "4.3.0"
+			gitUrl "https://github.com/eqela/jkop.git"
+			gitRef "4.3.0"
+		}
+	]
+}

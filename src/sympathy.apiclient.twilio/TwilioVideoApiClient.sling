@@ -1,0 +1,168 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.url
+import jk.json
+
+class is TwilioApiClient:
+
+const TYPE_P2P = "peer-to-peer"
+const TYPE_GROUP_SMALL = "small-group"
+const TYPE_GROUP = "group"
+const CODECS_VP8 = "VP8"
+const CODECS_H264 = "H264"
+
+model Room public
+{
+	Type as string
+	UniqueName as string
+	StatusCallback as string
+	StatusCallbackMethod as string
+	MaxParticipants as string
+	RecordParticipantsOnConnect as string
+	VideoCodecs as string
+	MediaRegion as string
+}
+
+model RoomInfo public
+{
+	status as string
+	unique_name as string
+	date_updated as string
+	video_codecs as string[]
+	max_participants as string
+	record_participants_on_connect as bool
+	enable_turn as bool
+	account_sid as string
+	url as string
+	end_time as string
+	sid as string
+	duration as string
+	date_created as string
+	media_region as string
+	type as string
+	status_callback_method as string
+	status_callback as string
+	links as RoomLink
+}
+
+model RoomLink public
+{
+	recordings as string
+	participants as string
+}
+
+model RoomList public
+{
+	rooms as RoomInfo[]
+	meta as RoomMeta
+}
+
+model RoomMeta public
+{
+	page as int
+	page_size as int
+	first_page_url as string
+	previous_page_url as string
+	url as string
+	next_page_url as string
+	key as string
+}
+
+meta {
+	description "SOURCE : https://www.twilio.com/docs/video/api"
+}
+
+func createRoom(room as Room) async as RoomInfo
+{
+	meta {
+		description "Note: Rooms created via the REST API exist for five minutes to allow the first Participant to connect. If no Participants join within five minutes, the Room times out and a new Room must be created."
+	}
+	assert room
+	var headers = createHeaders()
+	var rdata = room.toJsonObject() as DynamicMap
+	var sb = new StringBuilder()
+	foreach key in rdata.getKeys() {
+		if sb.count() > 0:
+			sb.appendCharacter('&')
+		sb.appendString(key)
+		sb.appendCharacter('=')
+		sb.appendString(URLEncoder.encode(rdata.getString(key)))
+	}
+	var resp = await request("POST", "https://video.twilio.com/v1/Rooms", headers, String.toUTF8Buffer(sb.toString()))
+	var statusCode = resp.statusCode
+	if statusCode != "201" || statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	return RoomInfo.forData(JSONParser.parse(resp.body) as DynamicMap)
+}
+
+func getRoomList(room as Room, limit as int, page as int) async as RoomList
+{
+	meta {
+		description "Get room list with criteria. Page start from 0."
+	}
+	assert room
+	var headers = createHeaders()
+	var rdata = room.toJsonObject() as DynamicMap
+	var sb = new StringBuilder()
+	foreach key in rdata.getKeys() {
+		sb.appendCharacter('&')
+		sb.appendString(key)
+		sb.appendCharacter('=')
+		sb.appendString(URLEncoder.encode(rdata.getString(key)))
+	}
+	var resp = await request("GET", "https://video.twilio.com/v1/Rooms?PageSize=" .. String.forInteger(limit) .. "&Page=" .. String.forInteger(page) .. sb.toString(), headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "201" || statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	return RoomList.forData(JSONParser.parse(resp.body) as DynamicMap)
+}
+
+func getRoom(sid as string) async as RoomInfo
+{
+	meta {
+		description "This will return the room instance object for the room with provided SID."
+	}
+	var headers = createHeaders()
+	var resp = await request("GET", "https://video.twilio.com/v1/Rooms/" .. URLEncoder.encode(sid), headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "201" || statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	return RoomInfo.forData(JSONParser.parse(resp.body) as DynamicMap)
+}
+
+func completeRoom(sid as string) async as RoomInfo
+{
+	meta {
+		description "Update a Room's status to completed with the following request to end the Room. All connected Participants will be immediately disconnected from the Room."
+	}
+	var headers = createHeaders()
+	var sb = new StringBuilder()
+	sb.appendString("Status=completed")
+	var resp = await request("POST", "https://video.twilio.com/v1/Rooms/" .. URLEncoder.encode(sid), headers, String.toUTF8Buffer(sb.toString()))
+	var statusCode = resp.statusCode
+	if statusCode != "201" || statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	return RoomInfo.forData(JSONParser.parse(resp.body) as DynamicMap)
+}

@@ -1,0 +1,420 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.json
+import jk.nodejs
+import jk.console
+import sympathy.config
+import sympathy.apiclient.stripe
+import sympathy.webserver
+
+class is WebServerRpcRouter:
+
+IFDEF "target_nodejs" {
+	depend "npm:stripe:10.1.0"
+}
+
+model Transaction
+{
+	id as string
+	state as int
+	timeCreated as int
+	timePaid as int
+	timeCancelled as int
+	customerType as string
+	customerId as string
+	customerName as string
+	customerAddress as string
+	paymentType as string
+	paymentId as string
+}
+
+model TransactionProduct
+{
+	id as string
+	transactionId as string
+	productId as string
+	productName as string
+	currency as string
+	quantity as int
+	unitPrice as int
+	taxAmount as int
+	totalPrice as int
+}
+
+model StripeEvent
+{
+	id as string
+	customerId as string
+	description as string
+	planName as string
+	status as string
+	event as string
+}
+
+prop database as SympathyPaymentDatabase
+
+var paymentProvider = StripeApiClient.forApiKey(ctx, ServerConfig.require("STRIPE_API_KEY"))
+
+ctor:
+	initializeFunctions()
+
+func createTransaction(transaction as DynamicMap) async as object
+{
+	var tran = assert Transaction.forData(transaction):
+		Error.throw("missingTransactionData", null)
+	var result = assert await database.addTransaction(tran.toDynamicMap()):
+		Error.throw("failedToAddTransaction", null)
+	var products = transaction.getDynamicVector("products")
+	foreach product in products.toVectorOfDynamicMaps() {
+		var prod = assert TransactionProduct.forData(product):
+			Error.throw("missingTransactionProductData", null)
+		prod.transactionId = result.id
+		var product = assert await database.addTransactionProduct(prod.toDynamicMap()):
+			Error.throw("failedToAddTransactionProduct", null)
+	}
+	return result.toDynamicMap()
+}
+
+func updateTransactionStateById(id as string, state as int) async as object
+{
+	if !id:
+		Error.throw("missingTransactionId", null)
+	if !state || state < 0:
+		Error.throw("missingState", null)
+	var result = assert await database.updateTransactionStateById(id, state):
+		Error.throw("failedToUpdateTransaction", null)
+	return result.toDynamicMap()
+}
+
+func getTransaction(id as string) async as object
+{
+	if !id:
+		Error.throw("missingTransactionId", null)
+	var transaction = assert await database.getTransactionRecord(id):
+		Error.throw("transactionDoesNotExists", null)
+	var products = await database.getTransactionProducts(id)
+	var result = transaction.toDynamicMap()
+	if products:
+		result.setObject("products", products)
+	return result
+}
+
+func createTransactionPayment(transactionId as string) async as object
+{
+	var products = assert await database.getTransactionProducts(transactionId):
+		Error.throw("transactionProductsDoesNotExists", null)
+	var totalPrice as int
+	var currency as string
+	foreach product in products {
+		if not currency:
+			currency = product.currency
+		totalPrice += product.totalPrice
+	}
+	var payment = new StripeApiClient.PaymentIntent()
+	payment.amount = String.asString(totalPrice)
+	payment.currency = currency
+	return await paymentProvider.createPaymentIntent(payment, null)
+}
+
+func handleStripeEvents(body as buffer, signature as dynamic) async as StripeEvent
+{
+	IFDEF "target_nodejs" {
+		var stripe = NodeModule.require("stripe")
+		var stripeKey = ServerConfig.require("STRIPE_SECRET_KEY")
+		var stripeService as dynamic
+		lang "js" {{{
+			stripeService = new stripe(stripeKey, {
+				apiVersion: "2022-08-01"
+			})
+		}}}
+		var event as !"stripe.Event"
+		var stripeWebHookSecret = ServerConfig.require("STRIPE_WEBHOOK_SECRET")
+		try {
+			lang "js" {{{
+				const bbuf = Buffer.from(body)
+				event = stripeService.webhooks.constructEvent(bbuf, signature, stripeWebHookSecret)
+			}}}
+		}
+		catch err {
+			Error.throw(err.message, null)
+		}
+		if event.type == "customer.subscription.created" || event.type == "customer.subscription.deleted" || event.type == "customer.subscription.updated" {
+			var evesub = event.data.object
+			var stripeEvent = new StripeEvent()
+			stripeEvent.id = evesub.id
+			stripeEvent.customerId = evesub.customer
+			stripeEvent.description = evesub.description
+			stripeEvent.status = evesub.status
+			stripeEvent.event = paymentProvider.convertStripePaymentEvent(event.type)
+			var plan = evesub.plan
+			if plan {
+				var product = await paymentProvider.retrieveProduct(plan.product)
+				stripeEvent.planName = product.name
+			}
+			var price = evesub.price
+			if !stripeEvent.planName && price {
+				var product = await paymentProvider.retrieveProduct(price.product)
+				stripeEvent.planName = product.name
+			}
+			return stripeEvent
+		}
+		else {
+			println "Unhandled event type" .. event.type
+		}
+	}
+	ELSE {
+		ERROR "Not implemented."
+		return null
+	}
+	return null
+}
+
+func handlePaymentEvents(body as buffer, headers as vector<KeyValuePair<string,string>>) async as object
+{
+	assert body && headers
+	var stripeSignature = getHeaderValue("stripe-signature", headers)
+	if stripeSignature {
+		return await handleStripeEvents(body, stripeSignature)
+	}
+	else {
+		ERROR "Not handled payment service."
+		return null
+	}
+	return null
+}
+
+func getHeaderValue(key as string, headers as vector<KeyValuePair<string,string>>) as string
+{
+	assert headers
+	var itr = Vector.iterate(headers)
+	var value as string
+	loop {
+		var it = itr.next()
+		if not it:
+			break
+		if it.key == key {
+			value = it.value
+			break
+		}
+	}
+	return value
+}
+
+func initializeFunctions
+{
+	addFunction("createTransaction", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await createTransaction(params)
+	})
+	addFunction("updateTransactionStateById", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await updateTransactionStateById(params.getString("transactionId"), params.getInteger("state", -1))
+	})
+	addFunction("getTransaction", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await getTransaction(params.getString("transactionId"))
+	})
+	addFunction("createCustomer", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var customer = new StripeApiClient.Customer()
+		customer.fromDynamicMap(params)
+		return await paymentProvider.createCustomer(customer)
+	})
+	addFunction("listCustomers", func(params as DynamicMap) async as dynamic {
+		return await paymentProvider.listCustomers() 
+	})
+	addFunction("createPaymentIntent", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var payment = new StripeApiClient.PaymentIntent()
+		payment.fromDynamicMap(params)
+		return await paymentProvider.createPaymentIntent(payment, params.getString("setupFutureUsage", null))
+	})
+	addFunction("createTransactionPayment", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await createTransactionPayment(params.getString("transactionId"))
+	})
+	addFunction("updateTransactionStateByCustomerId", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.updateTransactionStateByCustomerId(params.getString("customerId"), params.getInteger("state"))
+	})
+	addFunction("createSetupIntent", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await paymentProvider.createSetupIntent(params.getString("customerId"))
+	})
+	addFunction("listPaymentMethods", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await paymentProvider.listPaymentMethods(params.getString("customerId"), params.getString("type", "card"))
+	})
+	addFunction("retrievePaymentMethod", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await paymentProvider.retrievePaymentMethod(params.getString("paymentMethodId"))
+	})
+	addFunction("attachPaymentMethod", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await paymentProvider.attachPaymentMethod(params.getString("paymentMethodId"), params.getString("customerId"))
+	})
+	addFunction("detachPaymentMethod", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await paymentProvider.detachPaymentMethod(params.getString("paymentMethodId"))
+	})
+	// PRODUCT
+	addFunction("createProduct", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var product = new StripeApiClient.Product()
+		product.fromDynamicMap(params)
+		return await paymentProvider.createProduct(product)
+	})
+	addFunction("retrieveProduct", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await paymentProvider.retrieveProduct(params.getString("productId"))
+	})
+	addFunction("updateProduct", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+			var product = new StripeApiClient.Product()
+		product.fromDynamicMap(params.getDynamicMap("product"))
+		return await paymentProvider.updateProduct(params.getString("productId"), product)
+	})
+	addFunction("listProducts", func(params as DynamicMap) async as dynamic {
+		return await paymentProvider.listProducts()
+	})
+	addFunction("deleteProduct", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return Boolean.asObject(await paymentProvider.deleteProduct(params.getString("productId")))
+	})
+	// PRICE
+	addFunction("createPrice", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var price = new StripeApiClient.Price()
+		price.fromDynamicMap(params)
+		return await paymentProvider.createPrice(price)
+	})
+	addFunction("retrievePrice", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await paymentProvider.retrievePrice(params.getString("priceId"))
+	})
+	addFunction("updatePrice", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+			var price = new StripeApiClient.Price()
+		price.fromDynamicMap(params.getDynamicMap("price"))
+		return await paymentProvider.updatePrice(params.getString("priceId"), price)
+	})
+	addFunction("listPrices", func(params as DynamicMap) async as dynamic {
+		return await paymentProvider.listPrices()
+	})
+	// SUBSCRIPTION
+	addFunction("createSubscription", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var subscription = new StripeApiClient.Subscription()
+		subscription.fromDynamicMap(params)
+		return await paymentProvider.createSubscription(subscription)
+	})
+	addFunction("retrieveSubscription", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await paymentProvider.retrieveSubscription(params.getString("subscriptionId"))
+	})
+	addFunction("updateSubscription", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var subscription = new StripeApiClient.Subscription()
+		subscription.fromDynamicMap(params.getDynamicMap("subscription"))
+		return await paymentProvider.updateSubscription(params.getString("subscriptionId"), subscription)
+	})
+	addFunction("cancelSubscription", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await paymentProvider.cancelSubscription(params.getString("subscriptionId"))
+	})
+	addFunction("listSubscriptions", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var crit = new StripeApiClient.SubscriptionCriteria()
+		crit.fromDynamicMap(params)
+		return await paymentProvider.listSubscriptions(crit)
+	})
+	addRoute("POST", "/func/handlePaymentEvents", func(req as WebServerRequest, vars as DynamicMap) async {
+		try {
+			var body = await req.readBodyAsBuffer()
+			if not body {
+				if ctx && ctx.isInDebugMode():
+					Log.debug(ctx, "Invalid body: `" .. String.asString(body) .. "'")
+				Error.throw("invalidBody", null)
+			}
+			var v = await handlePaymentEvents(body, req.getHeaders())
+			var rdata = String.toUTF8Buffer(JSONEncoder.toString(new map {
+				status "ok"
+				data v
+			}))
+			req.setResponseStatus(200)
+			req.setResponseHeader("Content-Type", "application/json")
+			await req.writeResponseData(rdata)
+			await req.endResponse()
+		}
+		catch e {
+			Log.error(ctx, String.asString(e))
+			var rdata = String.toUTF8Buffer(JSONEncoder.toString(new map {
+				status "error"
+				errorCode e.getErrorCode()
+				errorDetail String.asString(e.getErrorDetail())
+			}))
+			req.setResponseStatus(500)
+			req.setResponseHeader("Content-Type", "application/json")
+			await req.writeResponseData(rdata)
+			await req.endResponse()
+		}
+	})
+}
+
+main
+{
+	return await WebServerMain.execute(args, func(server as WebServer) async {
+		var db = new SympathyPaymentDatabase(server.ctx)
+		await db.updateTables()
+		server.use(new this() {
+			database db
+		})
+	})
+}

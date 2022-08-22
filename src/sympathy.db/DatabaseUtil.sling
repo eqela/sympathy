@@ -1,0 +1,79 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.data.sql
+
+class:
+
+func getRecordFromTable(db as SQLDatabase, tableName as string, crit as map) async static as DynamicMap
+{
+	if not db:
+		Error.throw("nullDb", null, StackTrace.generate())
+	if String.isEmpty(tableName):
+		Error.throw("noTableName", null, StackTrace.generate())
+	var stmt = await db.prepareSelectWithCriteriaStatement(tableName, DynamicMap.forMap(crit), 1)
+	if not stmt:
+		Error.throw("failedToPrepareGetRecordQueryForTable", tableName, StackTrace.generate())
+	return await db.executeSingleRowQueryStatement(stmt)
+}
+
+func insertToTable(db as SQLDatabase, tableName as string, data as DynamicMap) async static as bool
+{
+	if not db:
+		Error.throw("nullDb", null, StackTrace.generate())
+	if String.isEmpty(tableName):
+		Error.throw("noTableName", null, StackTrace.generate())
+	if not data:
+		Error.throw("noData", null, StackTrace.generate())
+	var stmt = await db.prepareInsertStatement(tableName, data)
+	if not stmt:
+		Error.throw("failedToPrepareInsertQueryForTable", tableName, StackTrace.generate())
+	return await db.executeStatement(stmt)
+}
+
+func updateRecordsInTable(db as SQLDatabase, tableName as string, criteria as DynamicMap, data as DynamicMap) async static as bool
+{
+	if not db:
+		Error.throw("nullDb", null, StackTrace.generate())
+	if String.isEmpty(tableName):
+		Error.throw("noTableName", null, StackTrace.generate())
+	if not data:
+		Error.throw("noData", null, StackTrace.generate())
+	var stmt = await db.prepareUpdateStatement(tableName, criteria, data)
+	if not stmt:
+		Error.throw("failedToPrepareUpdateQueryForTable", tableName, StackTrace.generate())
+	return await db.executeStatement(stmt)
+}
+
+func deleteRecordsFromTable(db as SQLDatabase, tableName as string, criteria as DynamicMap) async static as bool
+{
+	if not db:
+		Error.throw("nullDb", null, StackTrace.generate())
+	if String.isEmpty(tableName):
+		Error.throw("noTableName", null, StackTrace.generate())
+	var stmt = await db.prepareDeleteStatement(tableName, criteria)
+	if not stmt:
+		Error.throw("failedToPrepareDeleteQueryForTable", tableName, StackTrace.generate())
+	return await db.executeStatement(stmt)
+}

@@ -1,0 +1,71 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+class:
+
+import jk.log
+import jk.url
+import jk.json
+import jk.webclient
+
+func forApiKey(key as string) static as this
+{
+	var v = new this()
+	v.apiKey = key
+	return v
+}
+
+prop ctx as LoggingContext
+prop apiKey as string
+prop client as WebClient
+
+func getDistanceData(origin as string, destination as string) async as DynamicMap
+{
+	if String.isEmpty(origin):
+		Error.throw("noOriginSupplied", null)
+	if String.isEmpty(destination):
+		Error.throw("noDestinationSupplied", null)
+	if not client:
+		client = WebClient.instance()
+	var url = "https://maps.googleapis.com/maps/api/distancematrix/json"
+	var response = await client.executeQuery(ctx, "GET", url .. "?units=imperial&origins=" .. URLEncoder.encode(origin) .. "&destinations=" .. URLEncoder.encode(destination) .. "&key=" .. URLEncoder.encode(apiKey), null, null)
+	var data = JSONParser.parse(response.body) as DynamicMap
+	if not data:
+		Error.throw("invalidServerResponse", url)
+	if String.equals("INVALID_REQUEST", data.getString("status")):
+		Error.throw("invalidRequest", url)
+	return data
+}
+
+func getDistanceBetween2Points(origin as string, destination as string) async as double
+{
+	var data = await getDistanceData(origin, destination)
+	var dkm = GoogleMapsUtil.extractDurationAndDistance(data)
+	if not dkm:
+		Error.throw("failedToExtractDurationAndDistance", null)
+	var first = dkm.getMap(0)
+	if not first:
+		Error.throw("nullValueOnIndexZero", null)
+	return first.getDouble("distance")
+}

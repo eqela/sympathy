@@ -1,0 +1,555 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.json
+import jk.webclient
+import sympathy.apiclient.common
+
+class is RestApiClient:
+
+model ProductImage
+{
+	src as string
+	filename as string
+	attachment as buffer
+}
+
+model ProductVariant
+{
+	id as string
+	product_id as string
+	title as string
+	option1 as string
+	price as string
+	sku as string
+	inventory_item_id as string
+}
+
+model Product
+{
+	id as string
+	title as string
+	body_html as string
+	product_type as string
+	vendor as string
+	images as ProductImage[]
+	variants as ProductVariant[]
+	published as bool
+}
+
+model ScriptTag
+{
+	event as string
+	src as string
+}
+
+model Token
+{
+	access_token as string
+	scope as string
+}
+
+model Shop
+{
+	id as string
+	name as string
+	email as string
+	domain as string
+	province as string
+	country as string
+	address1 as string
+	zip as string
+	city as string
+	source as string
+	phone as string
+	latitude as string
+	longitude as string
+	primary_locale as string
+	address2 as string
+	country_code as string
+	country_name as string
+	currency as string
+	customer_email as string
+	shop_owner as string
+	myshopify_domain as string
+	enabled_presentment_currencies as string[]
+	taxes_included as bool
+	tax_shipping as bool
+	money_format as string
+	money_with_currency_format as string
+}
+
+model Webhook
+{
+	topic as string
+	format as string
+	address as string
+}
+
+model CustomCollection
+{
+	id as string
+	handle as string
+	title as string
+	updated_at as string
+	body_html as string
+	published_at as string
+	sort_order as string
+	template_suffix as string
+	published_scope as string
+}
+
+model RecurringApplicationCharge
+{
+	activated_on as string
+	billing_on as string
+	cancelled_on as string
+	capped_amount as string
+	confirmation_url as string
+	created_at as string
+	id as string
+	name as string
+	price as string
+	return_url as string
+	status as string
+	terms as string
+	test as bool
+	trial_days as string
+	trial_ends_on as string
+	updated_at as string
+}
+
+model UsageCharge
+{
+	created_at as string
+	description as string
+	id as string
+	price as string
+	recurring_application_charge_id as string
+	updated_at as string
+	billing_on as string
+	balance_used as string
+	balance_remaining as string
+	risk_level as int
+}
+
+model Currency
+{
+	currency as string
+	rate_updated_at as string
+	enabled as bool
+}
+
+model Country
+{
+	id as string
+	code as string
+	name as string
+	tax as double
+	tax_name as string
+}
+
+model InventoryItem
+{
+	cost as string
+	id as string
+	sku as string
+	tracked as bool
+	requires_shipping as bool
+	created_at as string
+	updated_at as string
+}
+
+model SmartCollectionRule
+{
+	column as string
+	relation as string
+	condition as string
+}
+
+model SmartCollection
+{
+	id as string
+	title as string
+	body_html as string
+	handle as string
+	rules as SmartCollectionRule[]
+	published_scope as string
+	published_at as string
+}
+
+// API Request
+
+model ShopTokenRequest
+{
+	client_id as string
+	client_secret as string
+	code as string
+}
+
+model ProductRequest
+{
+	product as Product
+}
+
+model ScriptTagRequest
+{
+	script_tag as ScriptTag
+}
+
+model WebhookRequest
+{
+	webhook as Webhook
+}
+
+model RecurringApplicationChargeRequest
+{
+	recurring_application_charge as RecurringApplicationCharge
+}
+
+model UsageChargeRequest
+{
+	usage_charge as UsageCharge
+}
+
+model InventoryItemRequest
+{
+	inventory_item as InventoryItem
+}
+
+model SmartCollectionRequest
+{
+	smart_collection as SmartCollection
+}
+
+func forClientIdAndSecret(ctx as LoggingContext, clientId as string, clientSecret) static as this
+{
+	var v = new this(ctx)
+	v.clientId = clientId
+	v.clientSecret = clientSecret
+	return v
+}
+
+prop clientId as string
+prop clientSecret as string
+prop apiVersion as string = "2021-01"
+
+func getFullURL(shop as string, path as string) private as string
+{
+	var sb = new StringBuilder()
+	sb.appendString("https://")
+	sb.appendString(shop)
+	sb.appendString("/admin/api/")
+	sb.appendString(apiVersion)
+	sb.appendString(path)
+	return sb.toString()
+}
+
+func toUTF8Buffer(data as DynamicMap) private as buffer:
+	return String.toUTF8Buffer(JSONEncoder.encode(data))
+
+func executeShopifyRequest(method as string, url as string, headers as KeyValueList<string,string>, body as buffer) async private as WebClient.Response
+{
+	var v = await request(method, url, headers, body)
+	var dm as DynamicMap
+	try {
+		dm = v.getBodyAsDynamicMap()
+	}
+	catch {
+		dm = null
+	}
+	Log.debug(ctx, "[Response] " .. JSONEncoder.encode(dm))
+	if dm {
+		var error = dm.getDynamicMap("error")
+		if error {
+			var code = error.getString("type")
+			var message = error.getString("message")
+			if String.isEmpty(code):
+				code = "shopifyError"
+			if String.isEmpty(message):
+				message = "Unknow Shopify error"
+			Error.throw(code, message)
+		}
+	}
+	return v
+}
+
+func requestShopToken(shop as string, code as string) async as Token
+{
+	var tokenRequest = new ShopTokenRequest()
+	tokenRequest.client_id = clientId
+	tokenRequest.client_secret = clientSecret
+	tokenRequest.code = code
+	var headers = new KeyValueList<string,string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	var url = "https://" .. shop .. "/admin/oauth/access_token"
+	var response = await executeShopifyRequest("POST", url, headers, toUTF8Buffer(tokenRequest.toDynamicMap()))
+	return Token.forData(response.getBodyAsDynamicMap())
+}
+
+func getShopDetails(shop as string, token as string) async as Shop
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var response = assert await executeShopifyRequest("GET", getFullURL(shop, "/shop.json"), headers, null)
+	var data = assert response.getBodyAsDynamicMap()
+	return Shop.forData(data.getDynamicMap("shop"))
+}
+
+func insertScriptTag(shop as string, token as string, tag as ScriptTag) async as ScriptTag
+{
+	var scriptRequest = new ScriptTagRequest()
+	scriptRequest.script_tag = tag
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var response = assert await executeShopifyRequest("POST", getFullURL(shop, "/script_tags.json"), headers, toUTF8Buffer(scriptRequest.toDynamicMap()))
+	var data = assert response.getBodyAsDynamicMap()
+	return ScriptTag.forData(data.getDynamicMap("script_tag"))
+}
+
+func insertProduct(shop as string, token as string, product as Product) async as Product
+{
+	var productRequest = new ProductRequest()
+	productRequest.product = product
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var response = assert await executeShopifyRequest("POST", getFullURL(shop, "/products.json"), headers, toUTF8Buffer(productRequest.toDynamicMap()))
+	var v = assert response.getBodyAsDynamicMap()
+	var productResponse = v.getDynamicMap("product")
+	return Product.forData(productResponse)
+}
+
+func getProducts(shop as string, collectionId as string, token as string) async as vector<Product>
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var url = "/products.json"
+	if String.isNotEmpty(collectionId):
+		url = url .. "?collection_id=" .. collectionId
+	var response = await executeShopifyRequest("GET", getFullURL(shop, url), headers, null)
+	var v = assert response.getBodyAsDynamicMap()
+	var vv = new vector<Product>
+	var productList = assert v.getDynamicVector("products")
+	foreach product as DynamicMap in productList.toVector():
+		vv += Product.forData(product)
+	return vv
+}
+
+func getProduct(productId as string, shop as string, token as string, fields as array<string>) async as Product
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var url = "/products/" .. productId .. ".json"
+	if fields {
+		var sb = new StringBuilder()
+		var first = true
+		foreach field as string in fields {
+			if not first:
+				sb.appendString(",")
+			sb.appendString(field)
+			first = false
+		}
+		url = url .. "?fields=" .. sb.toString()
+	}
+	var response = await executeShopifyRequest("GET", getFullURL(shop, url), headers, null)
+	return Product.forData(response.getBodyAsDynamicMap())
+}
+
+func registerWebhook(shop as string, token as string, webhook as Webhook) async as Webhook
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var webhookRequest = new WebhookRequest()
+	webhookRequest.webhook = webhook
+	var response = await executeShopifyRequest("POST", getFullURL(shop, "/webhooks.json"), headers, toUTF8Buffer(webhookRequest.toDynamicMap()))
+	var v = assert response.getBodyAsDynamicMap()
+	var webhookResponse = assert v.getDynamicMap("webhook")
+	return Webhook.forData(webhookResponse)
+}
+
+func getCustomCollections(shop as string, token as string) async as vector<CustomCollection>
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var response = await executeShopifyRequest("GET", getFullURL(shop, "/custom_collections.json"), headers, null)
+	var v = assert response.getBodyAsDynamicMap()
+	var collections = new vector<CustomCollection>
+	var list = assert v.getDynamicVector("custom_collections")
+	foreach collection as DynamicMap in list.toVector():
+		collections += CustomCollection.forData(collection)
+	return collections
+}
+
+func createRecurringCharge(shop as string, token as string, charge as RecurringApplicationCharge) async as RecurringApplicationCharge
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var chargeRequest = new RecurringApplicationChargeRequest()
+	chargeRequest.recurring_application_charge = charge
+	var response = assert await executeShopifyRequest("POST", getFullURL(shop, "/recurring_application_charges.json"), headers, toUTF8Buffer(chargeRequest.toDynamicMap()))
+	var v = assert response.getBodyAsDynamicMap()
+	var chargeResponse = v.getDynamicMap("recurring_application_charge")
+	return RecurringApplicationCharge.forData(chargeResponse)
+}
+
+func deleteRecurringCharge(shop as string, token as string, recurringChargeId as string) async as bool
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var response = assert await executeShopifyRequest("DELETE", getFullURL(shop, "/recurring_application_charges/" .. recurringChargeId .. ".json"), headers, null)
+	assert String.isNotEqual(response.statusCode, "200")
+	return true
+}
+
+func getRecurringCharge(shop as string, token as string, recurringChargeId as string) async as RecurringApplicationCharge
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var response = assert await executeShopifyRequest("GET", getFullURL(shop, "/recurring_application_charges/" .. recurringChargeId .. ".json"), headers, null)
+	var v = assert response.getBodyAsDynamicMap()
+	var chargeResponse = v.getDynamicMap("recurring_application_charge")
+	return RecurringApplicationCharge.forData(chargeResponse)
+}
+
+func createUsageCharge(shop as string, token as string, recurringChargeId as string, charge as UsageCharge) async as UsageCharge
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var chargeRequest = new UsageChargeRequest()
+	chargeRequest.usage_charge = charge
+	var response = assert await executeShopifyRequest("POST", getFullURL(shop, "/recurring_application_charges/" .. recurringChargeId .. "/usage_charges.json"), headers, toUTF8Buffer(chargeRequest.toDynamicMap()))
+	var v = assert response.getBodyAsDynamicMap()
+	var chargeResponse = v.getDynamicMap("usage_charge")
+	return UsageCharge.forData(chargeResponse)
+}
+
+func getCurrencies(shop as string, token as string) async as vector<Currency>
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var response = await executeShopifyRequest("GET", getFullURL(shop, "/currencies.json"), headers, null)
+	var v = assert response.getBodyAsDynamicMap()
+	var currencies = new vector<Currency>
+	var list = assert v.getDynamicVector("currencies")
+	foreach currency as DynamicMap in list.toVector():
+		currencies += Currency.forData(currency)
+	return currencies
+}
+
+func getCountries(shop as string, token as string) async as vector<Country>
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var response = await executeShopifyRequest("GET", getFullURL(shop, "/countries.json"), headers, null)
+	var v = assert response.getBodyAsDynamicMap()
+	var countries = new vector<Country>
+	var list = assert v.getDynamicVector("countries")
+	foreach country as DynamicMap in list.toVector():
+		countries += Country.forData(country)
+	return countries
+}
+
+func updateInventoryItem(shop as string, token as string, item as InventoryItem) async as bool
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var inventoryRequest = new InventoryItemRequest()
+	inventoryRequest.inventory_item = item
+	var response = await executeShopifyRequest("PUT", getFullURL(shop, "/inventory_items/" .. item.id .. ".json"), headers, toUTF8Buffer(inventoryRequest.toDynamicMap()))
+	var v = assert response.getBodyAsDynamicMap()
+	assert v.getDynamicMap("inventory_item")
+	return true
+}
+
+func createSmartCollection(shop as string, token as string, collection as SmartCollection) async as SmartCollection
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var smartCollectionRequest = new SmartCollectionRequest()
+	smartCollectionRequest.smart_collection = collection
+	var response = await executeShopifyRequest("POST", getFullURL(shop, "/smart_collections.json"), headers, toUTF8Buffer(smartCollectionRequest.toDynamicMap()))
+	var v = assert response.getBodyAsDynamicMap()
+	var smartCollection = assert v.getDynamicMap("smart_collection")
+	return SmartCollection.forData(smartCollection)
+}
+
+func getSmartCollections(shop as string, token as string, filters as map<string, string> = null) async as vector<SmartCollection>
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var url = "/smart_collections.json"
+	if filters {
+		var sb = new StringBuilder()
+		var first = true
+		foreach key as string in Map.getKeys(filters) {
+			if not first:
+				sb.appendString(",")
+			if first {
+				sb.appendString("?")
+				first = false
+			}
+			sb.appendString(key)
+			sb.appendString("=")
+			sb.appendString(Map.getValue(filters, key))
+		}
+		url = url .. sb.toString()
+	}
+	var response = await executeShopifyRequest("GET", getFullURL(shop, url), headers, null)
+	var v = assert response.getBodyAsDynamicMap()
+	var collections = assert v.getDynamicVector("smart_collections")
+	var sc = new vector<SmartCollection>
+	foreach c as DynamicMap in collections.toVector():
+		sc += SmartCollection.forData(c)
+	return sc
+}
+
+func updateSmartCollectionById(shop as string, token as string, collection as SmartCollection) async as bool
+{
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json; charset=UTF-8")
+	headers.add("X-Shopify-Access-Token", token)
+	var smartCollectionRequest = new SmartCollectionRequest()
+	smartCollectionRequest.smart_collection = collection
+	var response = await executeShopifyRequest("PUT", getFullURL(shop, "/smart_collections/" .. collection.id .. ".json"), headers, toUTF8Buffer(smartCollectionRequest.toDynamicMap()))
+	var v = assert response.getBodyAsDynamicMap()
+	assert v.getDynamicMap("smart_collection")
+	return true
+}

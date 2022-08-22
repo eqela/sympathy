@@ -4,63 +4,32 @@ Sympathy Web Services
 Overview
 --------
 
-The Sympathy project develops server-side applications that can be used to implement
-and provide web-based services on the Internet. Sympathy is fully implemented
-in the Sling programming language (http://eqdn.tech/sling/), and is intended to
-primarily be used on servers running either Linux, Windows or Mac OS, executing under
-the Eqela Runtime environment. For more information about Sympathy, please also visit
-the Sympathy pages on EQDN:
+The Sympathy project develops a generic cross platform web application framework and
+ready-made microservices catering towards development of modern, robust web applications.
+Sympathy aims to provide easily usable and ready-to-use components to make the development
+of applications easier and faster.
 
-http://eqdn.tech/sympathy/
+Sympathy is fully implemented in the Sling programming language (http://eqdn.tech/sling/).
+Because of Sling, the code is cross platform by nature, and has been used on different
+platforms in its history, including C, Java, C#, .NET, Lua and JavaScript/Node.JS. Currently
+the primary target platform is Node.JS and JavaScript running on Linux, but other platforms
+are equally possible, and future adaptations obviously available as necessary.
 
-According to the Sympathy naming convention, all server program names end with the
-letter "y" (much like traditional Unix server program names end with the letter
-"d").
+Compiling Sympathy
+------------------
 
-Downloads
----------
-
-For installation and usage of readily compiled binaries, please proceed to the Sympathy website:
-
-http://sympathy.ws
-
-Source code of Sympathy is available on Github:
-
-https://github.com/eqela/sympathy
-
-Usage
------
-
-To share the current directory over HTTP with filesy:
+The Sling compiler is distributed in Javascript format through NPM. To compile Sympathy,
+you will therefore need to install Node.JS (v16 or higher), which includes NPM. Then
+run the following commands:
 
 ```
-filesy .
+npm install
+npm run build
 ```
 
-By default, all Sympathy servers use port 8080 for HTTP communications. This can be
-overridden with the -listen command line option:
+This performs a full build of all modules of Sympathy and produces Javascript code as
+the output. The compiled version of the library is then found in the "dist"
+subdirectory.
 
-```
-filesy . -listen=8081
-```
-
-For further information and deeper explanations, please visit the Sympathy pages on EQDN:
-
-http://eqdn.tech/sympathy/
-
-Compiling the server-side components
-------------------------------------
-
-To compile the Sympathy source code, you will need to have the Eqela Runtime environment
-installed (get it from http://eqdn.tech/eqela-cli/). Once you then compile with Eqela tools,
-the appropriate compiler and library versions will be automatically downloaded. Simply compile
-with the following command (execute in the sympathy source code directory where build.qx is):"
-
-```
-eqela .
-```
-
----
-
-Sympathy is part of the Eqela technology stack. For more information, please
-visit http://www.eqela.com
+Sympathy uses the Jkop library, which is automatically downloaded by the Sling compiler
+during build. For more information about Jkop: https://github.com/eqela/jkop

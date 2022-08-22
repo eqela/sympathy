@@ -1,0 +1,78 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.url
+import jk.json
+import sympathy.apiclient.common
+
+class is RestApiClient:
+
+func forApiKey(ctx as LoggingContext, apiKey as string) static as this
+{
+	var v = new this(ctx)
+	v.apiKey = apiKey
+	return v
+}
+
+prop apiKey as string
+prop locationHost as string = "http://dataservice.accuweather.com/locations/"
+prop currentConditionHost as string = "http://dataservice.accuweather.com/currentconditions/"
+prop forecastHost as string = "http://dataservice.accuweather.com/forecasts/"
+prop version as string = "v1"
+prop details as bool = true
+prop metric as bool = true
+
+func queryLocation(latitude as double, longitude as double) async as DynamicMap
+{
+	var url = locationHost .. URLEncoder.encode(version) .. "/cities/geoposition/search.json?q=" .. URLEncoder.encode(String.forDouble(latitude) .. "," .. String.forDouble(longitude)) .. "&apikey=" .. URLEncoder.encode(apiKey)
+	var response = await request("GET", url, null, null)
+	var data = JSONParser.parseBuffer(response.body) as DynamicMap
+	if not data:
+		Error.throw("invalidJsonResponse", locationHost)
+	return data
+}
+
+func queryCurrentCondition(key as string) async as DynamicMap
+{
+	var url = currentConditionHost .. URLEncoder.encode(version) .."/" .. URLEncoder.encode(key) .. "?apikey=" .. URLEncoder.encode(apiKey) .. "&details=" .. URLEncoder.encode(String.forBoolean(details))
+	var response = await request ("GET", url, null, null)
+	var data = JSONParser.parseBuffer(response.body) as DynamicVector
+	if not data:
+		Error.throw("invalidData", currentConditionHost)
+	var currentCondition = data.get(0) as DynamicMap
+	if not currentCondition:
+		Error.throw("invalidJsonFormat", currentConditionHost)
+	return currentCondition
+}
+
+func queryForecast(key as string, forecastDays as int) async as DynamicMap
+{
+	var url = forecastHost .. URLEncoder.encode(version) .."/daily/".. URLEncoder.encode(String.forInteger(forecastDays)) .."day/" .. URLEncoder.encode(key) .. "?apikey=" .. URLEncoder.encode(apiKey) .. "&metric=" .. URLEncoder.encode(String.forBoolean(metric))
+	var response = await request("GET", url, null, null)
+	var data = JSONParser.parseBuffer(response.body) as DynamicMap
+	if not data:
+		Error.throw("invalidJsonFormat", forecastHost)
+	return data
+}

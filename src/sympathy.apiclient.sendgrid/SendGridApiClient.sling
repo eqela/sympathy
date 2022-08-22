@@ -1,0 +1,136 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import sympathy.apiclient.common
+
+class is RestApiClient:
+
+model EmailUser public
+{
+	email as string
+	name as string
+}
+
+model Personalization public
+{
+	to as EmailUser[]
+}
+
+model EmailContent public
+{
+	type as string
+	value as string
+}
+
+model Attachment public
+{
+	content as string
+	type as string
+}
+
+model EmailBody public
+{
+	from as EmailUser
+	personalizations as Personalization[]
+	content as EmailContent[]
+	attachments as Attachment[]
+	subject as string
+	mail_settings as EmailSetting
+}
+
+model SandboxMode public
+{
+	enable as bool
+}
+
+model EmailSetting public
+{
+	sandbox_mode as SandboxMode
+}
+
+func forApiKey(ctx as LoggingContext, apiKey as string) static as this
+{
+	var v = new this(ctx)
+	v.apiKey = apiKey
+	return v
+}
+
+prop apiKey as string
+prop baseUrl as string = "https://api.sendgrid.com"
+prop sandboxMode as bool = false
+prop sender as EmailUser
+
+func sendEmail(recipients as vector<EmailUser>, content as vector<EmailContent>, subject as string, attachments as vector<Attachment> = null) async
+{
+	assert recipients:
+		throw ExceptionWithError.forCode("sendGridAPISend", "Missing recipients")
+	assert sender:
+		throw ExceptionWithError.forCode("sendGridAPISend", "Missing sender")
+	assert apiKey:
+		throw ExceptionWithError.forCode("sendGridAPISend", "Missing API key")
+	var body = new EmailBody()
+	body.from = sender
+	foreach cnt in content:
+		body.addObjectToVectorField("content", cnt)
+	body.subject = subject
+	if attachments {
+		foreach attachment in attachments:
+			body.addObjectToVectorField("attachments", attachment)
+	}
+	if sandboxMode {
+		var esetting = new EmailSetting()
+		var sm = new SandboxMode()
+		sm.enable = true
+		esetting.sandbox_mode = sm
+		body.mail_settings = esetting
+	}
+	var counter = 0
+	foreach rctps in recipients {
+		if counter == 1000 {
+			await doSendEmail(body)
+			body.personalizations = null
+		}
+		var personalizations = new Personalization()
+		personalizations.addObjectToVectorField("to", rctps)
+		body.addObjectToVectorField("personalizations", personalizations)
+		counter++
+	}
+	if sizeof body.personalizations > 0:
+		await doSendEmail(body)
+}
+
+func doSendEmail(body as EmailBody) async
+{
+	assert body:
+		Error.throw("sendGridAPISend", "Missing API body")
+	Log.info(ctx, body.toString())
+	var headers = new KeyValueList<string, string>()
+	headers.add("Content-Type", "application/json")
+	headers.add("Authorization", "Bearer " .. apiKey)
+	var resp = await request("POST", baseUrl .. "/v3/mail/send", headers, String.toUTF8Buffer(body.toString()))
+	var statusCode = resp.statusCode
+	if statusCode != "202":
+		Error.throw(statusCode, resp.statusMessage)
+}

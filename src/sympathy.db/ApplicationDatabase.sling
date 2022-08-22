@@ -1,0 +1,96 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.env
+import jk.data.sql
+import jk.data.sql.factory
+
+class:
+
+meta
+{
+	description [[
+		Base class for application-specific database schema declarations.
+	]]
+}
+
+prop db as SQLDatabase
+prop ctx as LoggingContext
+
+ctor(ctx as LoggingContext):
+	initialize(ctx, EnvironmentVariable.get("DATABASE"))
+
+ctor(ctx as LoggingContext, connectionString as string):
+	initialize(ctx, connectionString)
+
+IFDEF "target_supports_destructor"
+{
+	dtor:
+		close()
+}
+
+func initialize(ctx as LoggingContext, connectionString as string)
+{
+	if String.isEmpty(connectionString):
+		Error.throw("configurationValueMissing", "DATABASE")
+	connectionString = String.strip(connectionString)
+	Log.debug(ctx, "Connecting to database: `" .. connectionString .. "' .. ")
+	var db = SQLDatabaseFactory.getDatabase(ctx, connectionString)
+	if not db:
+		Error.throw("failedToConnectToDatabase", connectionString)
+	this.ctx = ctx
+	this.db = db
+}
+
+func close async
+{
+	var db = this.db
+	this.db = null
+	if db:
+		await db.closeConnection()
+}
+
+func updateTable(table as SQLTableInfo) async
+{
+	if not table:
+		Error.throw("nullTable", "updateTable")
+	if not db:
+		Error.throw("nullDb", "updateTable")
+	Log.info(ctx, "Updating table: `" .. table.getName() .. "' ..")
+	if not await db.ensureTableExists(table):
+		Error.throw("failedToUpdateTable", table.getName())
+}
+
+func getTableDefinitions(tables as vector<SQLTableInfo>) virtual
+{
+}
+
+func updateTables  async virtual
+{
+	var tables = new vector<SQLTableInfo>
+	getTableDefinitions(tables)
+	foreach table in tables:
+		await updateTable(table)
+}

@@ -1,0 +1,152 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.json
+import sympathy.apiclient.common
+
+class is RestApiClient:
+
+model BitbucketUserDetails
+{
+	account_id as string
+	username as string
+	display_name as string
+	avatarUrl as string
+}
+
+model BitbucketWorkspace
+{
+	slug as string
+	name as string
+}
+
+model BitbucketRepositoryDetails
+{
+	uuid as string
+	name as string
+	httpUrl as string
+	sshUrl as string
+}
+
+func forAccessToken(ctx as LoggingContext, accessToken as string) static as this
+{
+	var v = new this(ctx)
+	v.accessToken = accessToken
+	return v
+}
+
+prop accessToken as string
+
+macro AUTHORIZATION_HEADER
+{
+	assert accessToken:
+		Error.throw("noOAuthToken", "No OAuth token configured")
+	var hdrs = new KeyValueList<string,string>()
+	hdrs.add("Authorization", "Bearer " .. accessToken)
+	hdrs.add("Content-Type", "application/json")
+}
+
+func getUserDetails async as BitbucketUserDetails
+{
+	AUTHORIZATION_HEADER()
+	var response = await request("GET", "https://api.bitbucket.org/2.0/user", hdrs, null)
+	var data = response.getBodyAsDynamicMap()
+	var err = data.getDynamicMap("error")
+	if err:
+		Error.throw(data.getString("type"), err.getString("message"))
+	var details = BitbucketUserDetails.forData(data)
+	var links = data.getDynamicMap("links")
+	if links {
+		var avatar = links.getDynamicMap("avatar")
+		if avatar:
+			details.avatarUrl = avatar.getString("href")
+	}
+	return details
+}
+
+func getUserPrimaryEmailAddress async as string
+{
+	AUTHORIZATION_HEADER()
+	var response = await request("GET", "https://api.bitbucket.org/2.0/user/emails", hdrs, null)
+	var data = response.getBodyAsDynamicMap()
+	var err = data.getDynamicMap("error")
+	if err:
+		Error.throw(data.getString("type"), err.getString("message"))
+	var emailAddress as string
+	var emails = data.getDynamicVector("values")
+	foreach email as DynamicMap in emails.toVector() {
+		var primary = email.getBoolean("is_primary")
+		if primary {
+			emailAddress = email.getString("email")
+			break
+		}
+	}
+	return emailAddress
+}
+
+func getUserWorkSpaces async as vector<BitbucketWorkspace>
+{
+	AUTHORIZATION_HEADER()
+	var response = await request("GET", "https://api.bitbucket.org/2.0/workspaces", hdrs, null)
+	var data = response.getBodyAsDynamicMap()
+	var err = data.getDynamicMap("error")
+	if err:
+		Error.throw(data.getString("type"), err.getString("message"))
+	var v = new vector<BitbucketWorkspace>
+	var wspaces = data.getDynamicVector("values")
+	foreach ws as DynamicMap in wspaces.toVector():
+		v += BitbucketWorkspace.forData(ws)
+	return v
+}
+
+func getUserRepositories(slug as string, page as int = 1) async as vector<BitbucketRepositoryDetails>
+{
+	AUTHORIZATION_HEADER()
+	assert slug
+	var response = await request("GET", "https://api.bitbucket.org/2.0/repositories/" .. slug .. "?page=" .. String.forInteger(page), hdrs, null)
+	var data = response.getBodyAsDynamicMap()
+	var err = data.getDynamicMap("error")
+	if err:
+		Error.throw(data.getString("type"), err.getString("message"))
+	var repos = data.getDynamicVector("values")
+	var v = new vector<BitbucketRepositoryDetails>
+	foreach data as DynamicMap in repos.toVector() {
+		var repo = BitbucketRepositoryDetails.forData(data)
+		var links = data.getDynamicMap("links")
+		if links {
+			var clone = links.getDynamicVector("clone")
+			foreach url as DynamicMap in clone.toVector() {
+				if String.equals(url.getString("name"), "https") {
+					repo.httpUrl = url.getString("href")
+				}
+				else if String.equals(url.getString("name"), "ssh") {
+					repo.sshUrl = url.getString("href")
+				}
+			}
+		}
+		v += repo
+	}
+	return v
+}
