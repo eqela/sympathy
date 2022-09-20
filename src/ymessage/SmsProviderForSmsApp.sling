@@ -1,0 +1,257 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.md5
+import jk.json
+import jk.time
+import jk.random
+import sympathy.sms
+import sympathy.config
+import sympathy.webserver
+import sympathy.wsserver
+
+class is SmsProvider:
+
+class MyWebSocketConnectionHandler
+{
+	prop authenticated as bool
+	prop connection as WebSocketServerConnection
+
+	func sendMessage(message as buffer)
+	{
+		if authenticated:
+			connection.sendMessage(message)
+	}
+
+	func close:
+		connection.close()
+}
+
+class MyWebSocketConnectionManager
+{
+	var connections as vector<MyWebSocketConnectionHandler>
+
+	func add(connection as MyWebSocketConnectionHandler)
+	{
+		if not connections:
+			connections = new vector<MyWebSocketConnectionHandler>
+		connections += connection
+	}
+
+	func getConnectionHandler(connection as WebSocketServerConnection) as MyWebSocketConnectionHandler
+	{
+		assert connections
+		var handler as MyWebSocketConnectionHandler
+		foreach cc in connections {
+			var ch = cc.connection
+			if ch == connection {
+				handler = cc
+				break
+			}
+		}
+		return handler
+	}
+
+	func sendBroadcastMessage(message as buffer)
+	{
+		assert connections
+		foreach cc in connections:
+			cc.sendMessage(message)
+	}
+}
+
+class MyWebSocketServerEventHandler is WebSocketServerEventHandler
+{
+	var manager as MyWebSocketConnectionManager
+	var ctx as LoggingContext
+
+	ctor(ctx as LoggingContext):
+		this.ctx = ctx
+
+	prop secretKey:secretKeyValue as string
+	{
+		get {
+			if not secretKeyValue:
+				secretKeyValue = ServerConfig.accept("SMS_SECRET_KEY")
+			return secretKeyValue
+		}
+	}
+
+	func sendBroadcastMessage(message as buffer)
+	{
+		assert manager
+		manager.sendBroadcastMessage(message)
+	}
+
+	func onNewConnection(connection as WebSocketServerConnection)
+	{
+		Log.debug(ctx, "Incomming new connection")
+		if not manager:
+			manager = new MyWebSocketConnectionManager()
+		var handler = new MyWebSocketConnectionHandler()
+		handler.connection = connection
+		manager.add(handler)
+	}
+
+	func onReceiveMessage(message as buffer, connection as WebSocketServerConnection)
+	{
+		assert manager
+		var handler = assert manager.getConnectionHandler(connection)
+		if not handler.authenticated:
+			authenticateConnection(message, handler)
+	}
+
+	func authenticateConnection(data as buffer, connection as MyWebSocketConnectionHandler)
+	{
+		var cred = JSONParser.parse(String.forUTF8Buffer(data)) as DynamicMap
+		if not String.equals(secretKey, cred.getString("auth")) {
+			Log.error(ctx, "Failed to authenticate connection")
+			connection.close()
+		}
+		var v = new DynamicMap()
+		v.setInteger("type", 2)
+		v.setString("command", "authentication_acknowledged")
+		var m = assert String.toUTF8Buffer(JSONEncoder.encode(v)) {
+			Log.error(ctx, "Failed to create authentication message")
+			connection.close()
+		}
+		connection.authenticated = true
+		connection.sendMessage(m)
+	}
+
+	func onWSServerConnectionClosed:
+		Log.debug(ctx, "On Connection closed")
+
+	func onWSServerConnectionError(code as string, message as string):
+		Log.error(ctx, "ERROR: " .. code .. ": " .. message)
+
+	func onWSServerListening:
+		Log.debug(ctx, "Web-Socket server listening...")
+}
+
+class SMSAppMessage
+{
+	const UNKNOWN_TYPE = 0
+	const DATA_TYPE = 1
+
+	func forDataBuffer(data as buffer) static as this
+	{
+		var v = new this().setDataBuffer(data)
+		assert v.initialize()
+		return v
+	}
+
+	func forDataMap(dataMap as DynamicMap) static as this
+	{
+		var v = new this().setDataMap(dataMap)
+		assert v.initialize()
+		return v
+	}
+
+	pvar smsId as string
+	pvar recipients as DynamicVector
+	pvar message as string
+	pvar priority as int
+	var timestamp private as long
+	var data private as buffer
+	var dataMap private as DynamicMap
+	var type private as int
+
+	func generateId as string
+	{
+		var sb = new StringBuilder()
+		sb.appendInteger(new Random().nextInteger())
+		sb.appendLong(SystemClock.asSeconds())
+		return "SMS-" .. MD5Encoder.encodeString(sb.toString())
+	}
+
+	func initialize as bool
+	{
+		dataMap = JSONParser.parse(data) as DynamicMap
+		assert dataMap
+		timestamp = SystemClock.asSeconds()
+		smsId = generateId()
+		recipients = dataMap.getDynamicVector("recipients")
+		message = dataMap.getString("message")
+		type = dataMap.getInteger("type")
+		priority = dataMap.getInteger("priority")
+		return true
+	}
+
+	func setDataBuffer(data as buffer) as this
+	{
+		this.data = data
+		return this
+	}
+
+	func setDataMap(data as DynamicMap) as this
+	{
+		this.data = String.toUTF8Buffer(JSONEncoder.encode(data, false))
+		return this
+	}
+
+	func getType as int:
+		return type
+
+	func toBuffer as buffer
+	{
+		assert dataMap
+		dataMap.setString("smsId", smsId)
+		dataMap.setObject("recipients", recipients)
+		dataMap.setLong("timestamp", timestamp)
+		dataMap.setInteger("type", type)
+		dataMap.setInteger("priority", priority)
+		return String.toUTF8Buffer(JSONEncoder.encode(dataMap))
+	}
+}
+
+var ctx as LoggingContext
+var engine as MyWebSocketServerEventHandler
+
+ctor(ctx as LoggingContext, server as WebServer)
+{
+	this.ctx = ctx
+	var smsWSServer = WebSocketServer.instance(ctx)
+	smsWSServer.createWSServer(server)
+	this.engine = new MyWebSocketServerEventHandler(ctx)
+	smsWSServer.eventHandler = engine
+}
+
+func sendSmsContent(recipientNumber as string, messageText as string) override async
+{
+	var smsdata = new DynamicMap()
+	smsdata.setInteger("type", 1)
+	smsdata.setInteger("priority", 1)
+	smsdata.setString("message", messageText)
+	smsdata.setObject("recipients", new DynamicVector().appendString(recipientNumber))
+	Log.debug(ctx, "Sending message data `" .. JSONEncoder.encode(smsdata) .. "'")
+	var message = SMSAppMessage.forDataMap(smsdata)
+	engine.sendBroadcastMessage(message.toBuffer())
+}
+
+func sendSmsTemplate(recipientNumber as string, templateName as string, language as string, parameters as DynamicMap) override async
+{
+	ERROR "Not implemented"
+}

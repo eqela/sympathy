@@ -24,4 +24,5 @@
 
 class abstract:
 
-func send(toNumber as string, message as string) abstract async
+func sendEmailContent(recipients as EmailRecipients, content as EmailContent) abstract async
+func sendEmailTemplate(recipients as EmailRecipients, templateName as string, language as string, parameters as DynamicMap) abstract async

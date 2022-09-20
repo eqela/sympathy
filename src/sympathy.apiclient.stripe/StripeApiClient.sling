@@ -102,37 +102,41 @@ model Price public
 {
 	id as string
 	currency as string
-	product as string
+	productId as string
 	active as bool
-	unit_amount as string
+	unitAmount as string
 	recurring as Recurring
 }
 
 model Recurring public
 {
 	interval as string
-	interval_count as int
+	intervalCount as int
 }
 
 model Subscription public
 {
 	id as string
-	customer as string
+	customerId as string
 	items as SubscriptionItem[]
 	description as string
 }
 
 model SubscriptionItem public
 {
-	price as string
+	id as string
+	subscriptionId as string
+	priceId as string
+	productId as string
 	quantity as int
+	metadata as DynamicMap
 }
 
 model SubscriptionCriteria public
 {
-	customer as string
+	customerId as string
 	status as string
-	price as string
+	priceId as string
 	limit as int
 }
 
@@ -345,6 +349,9 @@ func encodeBodyToBuffer(data as DynamicMap) private as buffer
 		if value is DynamicVector {
 			appendDynamicVectorToFormData(sb, key, value as DynamicVector)
 		}
+		else if value is DynamicMap {
+			appendDynamicMapToFormData(sb, key, value as DynamicMap)
+		}
 		else {
 			if not first:
 				sb.appendString("&")
@@ -376,6 +383,21 @@ func appendDynamicVectorToFormData(sb as StringBuilder, key as string, items as 
 			sb.appendString(URLEncoder.encode(item.getString(ikey)))
 		}
 		index++
+	}
+}
+
+func appendDynamicMapToFormData(sb as StringBuilder, key as string, map as DynamicMap)
+{
+	assert map
+	foreach ikey in map.getKeys() {
+		if sb.count() > 0:
+			sb.appendString("&")
+		sb.appendString(key)
+		sb.appendString("[")
+		sb.appendString(ikey)
+		sb.appendString("]")
+		sb.appendString("=")
+		sb.appendString(URLEncoder.encode(map.getString(ikey)))
 	}
 }
 
@@ -453,7 +475,7 @@ func updateProduct(productId as string, product as Product) async as Product
 	return Product.forData(bodyMap)
 }
 
-func listProducts async as DynamicMap
+func listProducts async as vector<Product>
 {
 	meta {
 		description "Returns a list of your products. The products are returned sorted by creation date, with the most recently created products appearing first."
@@ -463,8 +485,12 @@ func listProducts async as DynamicMap
 	var statusCode = resp.statusCode
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
-	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return bodyMap
+	var bodyMap = assert JSONParser.parse(resp.body) as DynamicMap
+	var data = assert bodyMap.getDynamicVector("data")
+	var list = new vector<Product>
+	foreach item in data.toVectorOfDynamicMaps():
+		list += Product.forData(item)
+	return list
 }
 
 func deleteProduct(productId as string) async as bool
@@ -489,13 +515,14 @@ func createPrice(price as Price) async as Price
 		description "Creates a new price for an existing product. The price can be recurring or one-time."
 	}
 	assert price
+	var data = assert transformToStripePrice(price)
 	INITIALIZE_AUTHORIZATION()
-	var resp = await request("POST", "https://api.stripe.com/v1/prices", headers, encodeBodyToBuffer(price.toDynamicMap()))
+	var resp = await request("POST", "https://api.stripe.com/v1/prices", headers, encodeBodyToBuffer(data))
 	var statusCode = resp.statusCode
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
 	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return Price.forData(bodyMap)
+	return transformToPriceModel(bodyMap)
 }
 
 func retrievePrice(priceId as string) async as Price
@@ -509,7 +536,7 @@ func retrievePrice(priceId as string) async as Price
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
 	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return Price.forData(bodyMap)
+	return transformToPriceModel(bodyMap)
 }
 
 func updatePrice(priceId as string, price as Price) async as Price
@@ -518,16 +545,17 @@ func updatePrice(priceId as string, price as Price) async as Price
 		description "Updates the specified price by setting the values of the parameters passed. Any parameters not provided are left unchanged."
 	}
 	assert price
+	var data = transformToStripePrice(price)
 	INITIALIZE_AUTHORIZATION()
-	var resp = await request("POST", "https://api.stripe.com/v1/prices/" .. priceId, headers, encodeBodyToBuffer(price.toDynamicMap()))
+	var resp = await request("POST", "https://api.stripe.com/v1/prices/" .. priceId, headers, encodeBodyToBuffer(data))
 	var statusCode = resp.statusCode
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
 	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return Price.forData(bodyMap)
+	return transformToPriceModel(bodyMap)
 }
 
-func listPrices async as DynamicMap
+func listPrices async as vector<Price>
 {
 	meta {
 		description "Returns a list of your prices."
@@ -537,8 +565,12 @@ func listPrices async as DynamicMap
 	var statusCode = resp.statusCode
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
-	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return bodyMap
+	var bodyMap = assert JSONParser.parse(resp.body) as DynamicMap
+	var data = assert bodyMap.getDynamicVector("data")
+	var list = new vector<Price>
+	foreach item in data.toVectorOfDynamicMaps():
+		list += transformToPriceModel(item)
+	return list
 }
 
 // SUBSCRIPTION
@@ -548,15 +580,15 @@ func createSubscription(subscription as Subscription) async as Subscription
 	meta {
 		description "Creates a new subscription on an existing customer. Each customer can have up to 500 active or scheduled subscriptions."
 	}
-	INITIALIZE_AUTHORIZATION()
 	assert subscription
-	var data = assert subscription.toDynamicMap()
+	var data = assert transformToStripeSubscription(subscription)
+	INITIALIZE_AUTHORIZATION()
 	var resp = await request("POST", "https://api.stripe.com/v1/subscriptions", headers, encodeBodyToBuffer(data))
 	var statusCode = resp.statusCode
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
 	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return Subscription.forData(bodyMap)
+	return transformToSubscriptionModel(bodyMap)
 }
 
 func retrieveSubscription(subscriptionId as string) async as Subscription
@@ -570,7 +602,7 @@ func retrieveSubscription(subscriptionId as string) async as Subscription
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
 	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return Subscription.forData(bodyMap)
+	return transformToSubscriptionModel(bodyMap)
 }
 
 func updateSubscription(subscriptionId as string, subscription as Subscription) async as Subscription
@@ -578,14 +610,15 @@ func updateSubscription(subscriptionId as string, subscription as Subscription) 
 	meta {
 		description "Updates an existing subscription to match the specified parameters. When changing prices or quantities, we will optionally prorate the price we charge next month to make up for any price changes."
 	}
-	INITIALIZE_AUTHORIZATION()
 	assert subscription
-	var resp = await request("POST", "https://api.stripe.com/v1/subscriptions/".. subscriptionId, headers, encodeBodyToBuffer(subscription.toDynamicMap()))
+	var data = assert transformToStripeSubscription(subscription)
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("POST", "https://api.stripe.com/v1/subscriptions/".. subscriptionId, headers, encodeBodyToBuffer(data))
 	var statusCode = resp.statusCode
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
 	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return Subscription.forData(bodyMap)
+	return transformToSubscriptionModel(bodyMap)
 }
 
 func cancelSubscription(subscriptionId as string) async as Subscription
@@ -599,19 +632,207 @@ func cancelSubscription(subscriptionId as string) async as Subscription
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
 	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return Subscription.forData(bodyMap)
+	return transformToSubscriptionModel(bodyMap)
 }
 
-func listSubscriptions(criteria as SubscriptionCriteria) async as DynamicMap
+func listSubscriptions(criteria as SubscriptionCriteria) async as vector<Subscription>
 {
 	meta {
 		description "By default, returns a list of subscriptions that have not been canceled."
 	}
+	assert criteria
+	var data = assert criteria.toDynamicMap()
+	if criteria.customerId {
+		data.setString("customer", data.getString("customerId"))
+		data.remove("customerId")
+	}
+	if criteria.priceId {
+		data.setString("price", data.getString("priceId"))
+		data.remove("priceId")
+	}
 	INITIALIZE_AUTHORIZATION()
-	var resp = await request("GET", "https://api.stripe.com/v1/subscriptions", headers, encodeBodyToBuffer(criteria.toDynamicMap()))
+	var resp = await request("GET", "https://api.stripe.com/v1/subscriptions", headers, encodeBodyToBuffer(data))
 	var statusCode = resp.statusCode
 	if statusCode != "200":
 		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
 	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
-	return bodyMap
+	var rdata = assert bodyMap.getDynamicVector("data")
+	var list = new vector<Subscription>
+	foreach item in rdata.toVectorOfDynamicMaps():
+		list += transformToSubscriptionModel(item)
+	return list
+}
+
+// SUBSCRIPTION ITEMS
+
+func addSubscriptionItem(item as SubscriptionItem) async as SubscriptionItem
+{
+	meta {
+		description "Adds a new item to an existing subscription. No existing items will be changed or replaced."
+	}
+	assert item
+	var data = assert transformToStripeSubscriptionItem(item)
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("POST", "https://api.stripe.com/v1/subscription_items", headers, encodeBodyToBuffer(data))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return transformToSubscriptionItemModel(bodyMap)
+}
+
+func updateSubscriptionItem(id as string, item as SubscriptionItem) async as SubscriptionItem
+{
+	meta {
+		description "Updates the plan or quantity of an item on a current subscription."
+	}
+	assert item
+	var data = assert transformToStripeSubscriptionItem(item)
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("POST", "https://api.stripe.com/v1/subscription_items/" .. id, headers, encodeBodyToBuffer(data))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return transformToSubscriptionItemModel(bodyMap)
+}
+
+func deleteSubscriptionItem(id as string) async as bool
+{
+	meta {
+		description "Deletes an item from the subscription. Removing a subscription item from a subscription will not cancel the subscription."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var resp = await request("DELETE", "https://api.stripe.com/v1/subscription_items/" .. id, headers, null)
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var bodyMap = JSONParser.parse(resp.body) as DynamicMap
+	return bodyMap.getBoolean("deleted")
+}
+
+func listSubscriptionItems(subscriptionId as string) async as SubscriptionItem[]
+{
+	meta {
+		description "Returns a list of your subscription items for a given subscription."
+	}
+	INITIALIZE_AUTHORIZATION()
+	var data = new DynamicMap().setString("subscription", subscriptionId)
+	var resp = await request("GET", "https://api.stripe.com/v1/subscription_items", headers, encodeBodyToBuffer(data))
+	var statusCode = resp.statusCode
+	if statusCode != "200":
+		throw ExceptionWithError.forCode(statusCode, resp.statusMessage)
+	var respData = JSONParser.parse(resp.body) as DynamicMap
+	var list = respData.getDynamicVector("data")
+	var result = new vector<SubscriptionItem>
+	foreach item in list.toVectorOfDynamicMaps():
+		result += transformToSubscriptionItemModel(item)
+	return result
+}
+
+func transformToStripePrice(price as Price) as DynamicMap
+{
+	assert price
+	var data = assert price.toDynamicMap()
+	if price.unitAmount {
+		data.setString("unit_amount", price.unitAmount)
+		data.remove("unitAmount")
+	}
+	if price.productId {
+		data.setString("product", price.productId)
+		data.remove("productId")
+	}
+	var recurring = price.recurring
+	if recurring {
+		var recurringData = recurring.toDynamicMap()
+		recurringData.setInteger("interval_count", recurring.intervalCount)
+		recurringData.remove("intervalCount")
+		data.setObject("recurring", recurringData)
+	}
+	return data
+}
+
+func transformToPriceModel(data as DynamicMap) as Price
+{
+	assert data
+	var price = Price.forData(data)
+	price.productId = data.getString("product")
+	price.unitAmount = data.getString("unit_amount")
+	var recurringData = data.getDynamicMap("recurring")
+	var recurring = Recurring.forData(recurringData)
+	recurring.intervalCount = recurringData.getInteger("interval_count")
+	price.recurring = recurring
+	return price
+}
+
+func transformToStripeSubscription(subscription as Subscription) as DynamicMap
+{
+	assert subscription
+	var data = assert subscription.toDynamicMap()
+	if subscription.customerId {
+		data.setString("customer", subscription.customerId)
+		data.remove("customerId")
+	}
+	var items = data.getDynamicVector("items")
+	foreach item in items.toVectorOfDynamicMaps() {
+		if item.getString("subscriptionId") {
+			item.setString("subscription", item.getString("subscriptionId"))
+			item.remove("subscriptionId")
+		}
+		if item.getString("priceId") {
+			item.setString("price", item.getString("priceId"))
+			item.remove("priceId")
+		}
+		if item.getString("productId") {
+			item.setString("product", item.getString("productId"))
+			item.remove("productId")
+		}
+	}
+	return data
+}
+
+func transformToSubscriptionModel(data as DynamicMap) as Subscription
+{
+	assert data
+	var subscription = Subscription.forData(data)
+	subscription.customerId = data.getString("customer")
+	var items = data.getDynamicMap("items")
+	if items {
+		var itemsList = items.getDynamicVector("data")
+		foreach item in itemsList.toVectorOfDynamicMaps():
+			subscription.addObjectToVectorField("items", transformToSubscriptionItemModel(item))
+	}
+	return subscription
+}
+
+func transformToStripeSubscriptionItem(subscriptionItem as SubscriptionItem) as DynamicMap
+{
+	assert subscriptionItem
+	var data = assert subscriptionItem.toDynamicMap()
+	if subscriptionItem.subscriptionId {
+		data.setString("subscription", subscriptionItem.subscriptionId)
+		data.remove("subscriptionId")
+	}
+	if subscriptionItem.priceId {
+		data.setString("price", subscriptionItem.priceId)
+		data.remove("priceId")
+	}
+	if subscriptionItem.productId {
+		data.setString("product", subscriptionItem.productId)
+		data.remove("productId")
+	}
+	return data
+}
+
+func transformToSubscriptionItemModel(data as DynamicMap) as SubscriptionItem
+{
+	assert data
+	var subscriptionItem = SubscriptionItem.forData(data)
+	subscriptionItem.subscriptionId = data.getString("subscription")
+	var price = data.getDynamicMap("price")
+	if price {
+		subscriptionItem.priceId = price.getString("id")
+		subscriptionItem.productId = price.getString("product")
+	}
+	return subscriptionItem
 }

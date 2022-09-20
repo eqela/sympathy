@@ -22,23 +22,15 @@
  * SOFTWARE.
  */
 
-import sympathy.client
+import sympathy.rpcclient.common
 import sympathy.geo
 
-class is MicroServiceClient:
+class is RpcClient:
 
 ctor:
 	baseUrl = requireConfigValue("GEOLOCATION_SERVICE_URL")
 
-func stringToGeoLocation(location as string) async as GeoLocation
-{
-	var params = new map {
-		location location
-	}
-	return GeoLocation.forData(await queryMap("stringToGeoLocation", params))
-}
-
-func getTravelDuration(origin as Address, destination as GeoLocation) async as string
+func getTravelDuration(origin as GeoAddress, destination as GeoCoordinates) async as string
 {
 	var params = new map {
 		origin origin
@@ -47,25 +39,13 @@ func getTravelDuration(origin as Address, destination as GeoLocation) async as s
 	return await queryString("getTravelDuration", params)
 }
 
-func getDistanceForAddresses(origin as Address, destination as Address) async as double
+func getDistanceForAddresses(origin as GeoAddress, destination as GeoAddress) async as double
 {
 	var params = new map {
 		origin origin
 		destination destination
 	}
 	var v = await queryObject("getDistanceForAddresses", params)
-	if v is DoubleObject:
-		return (v as! DoubleObject).toDouble()
-	return 0.0
-}
-
-func computeDistanceForAddresses(origin as Address, destination as Address) async as double
-{
-	var params = new map {
-		origin origin
-		destination destination
-	}
-	var v = await queryObject("computeDistanceForAddresses", params)
 	if v is DoubleObject:
 		return (v as! DoubleObject).toDouble()
 	return 0.0
@@ -80,7 +60,7 @@ func getDistances(origin as string, destination as string) async as DynamicVecto
 	return await queryVector("getDistances", params)
 }
 
-func computeChargeForAddresses(vehicleBasePrice as long, from as Address, to as Address, routes as vector<Address>, charge as int) async as DynamicVector
+func computeChargeForAddresses(vehicleBasePrice as long, from as GeoAddress, to as GeoAddress, routes as vector<GeoAddress>, charge as int) async as DynamicVector
 {
 	var params = new map {
 		vehicleBasePrice LongInteger.asObject(vehicleBasePrice)
@@ -90,12 +70,4 @@ func computeChargeForAddresses(vehicleBasePrice as long, from as Address, to as 
 		charge Integer.asObject(charge)
 	}
 	return await queryVector("computeChargeForAddresses", params)
-}
-
-func addressToLatLonString(address as Address) async as string
-{
-	var params = new map {
-		address address
-	}
-	return await queryString("addressToLatLonString", params)
 }

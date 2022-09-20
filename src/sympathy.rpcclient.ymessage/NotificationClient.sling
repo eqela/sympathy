@@ -1,0 +1,122 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import sympathy.rpcclient.common
+
+class is RpcClient:
+
+ctor:
+	baseUrl = requireConfigValue("NOTIFICATION_SERVICE_URL")
+
+model NotificationDetail public #dynamic
+{
+	notificationId as string
+	recipientId as string
+	actorId as string
+	entityType as int
+	entityId as string
+	message as string
+	status as int
+	timeStamp as long
+}
+
+model NotificationList public #dynamic
+{
+	notifications as NotificationDetail[]
+	unread as int
+	recordCount as int
+	pageCount as int
+	offset as int
+}
+
+func createNotification(notificationData as DynamicMap, messageData as DynamicMap) async
+{
+	var params = new map {
+		notificationData notificationData
+		messageData messageData
+	}
+	await query("createNotification", params)
+}
+
+func updateNotificationAsReadByEntityType(entityType as int, recipientId as string) async
+{
+	var params = new map {
+		entityType Integer.asObject(entityType)
+		recipientId recipientId
+	}
+	await query("updateNotificationAsReadByEntityType", params)
+}
+
+func updateNotificationAsReadByEntityTypes(entityTypes as DynamicVector, recipientId as string) async
+{
+	var params = new map {
+		entityTypes entityTypes
+		recipientId recipientId
+	}
+	await query("updateNotificationAsReadByEntityTypes", params)
+}
+
+func getUnreadNotificationCountAsMap(recipient as string) async as DynamicMap
+{
+	var params = new map {
+		recipient recipient
+	}
+	return await queryMap("getUnreadNotificationCountAsMap", params)
+}
+
+func getNotificationsForUser(userId as string, page as int) async as NotificationList
+{
+	var params = new map {
+		userId userId
+		page Integer.asObject(page)
+	}
+	return NotificationList.forData(await queryMap("getNotificationsForUser", params))
+}
+
+func getUnreadNotificationsForUser(userId as string, page as int) async as NotificationList
+{
+	var params = new map {
+		userId userId
+		page Integer.asObject(page)
+	}
+	return NotificationList.forData(await queryMap("getUnreadNotificationsForUser", params))
+}
+
+func updateNotificationAsRead(notificationId as string, recipientId as string) async
+{
+	var params = new map {
+		notificationId notificationId
+		recipientId recipientId
+	}
+	await query("updateNotificationAsRead", params)
+}
+
+func getUnreadNotificationCountForUser(userId as string) async as int
+{
+	var params = new map {
+		userId userId
+	}
+	var cc = assert await queryInteger("getUnreadNotificationCountForUser", params)
+	return cc.toInteger()
+}

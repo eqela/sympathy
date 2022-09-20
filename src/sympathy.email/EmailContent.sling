@@ -24,5 +24,6 @@
 
 model:
 
-person as string
-number as string
+subject as string
+content as string
+contentType as string

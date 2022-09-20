@@ -69,7 +69,7 @@ model StripeEvent
 	id as string
 	customerId as string
 	description as string
-	planName as string
+	subscriptionProductId as string
 	status as string
 	event as string
 }
@@ -83,16 +83,16 @@ ctor:
 
 func createTransaction(transaction as DynamicMap) async as object
 {
-	var tran = assert Transaction.forData(transaction):
+	var tran = assert SympathyPaymentDatabase.Transaction.forData(transaction):
 		Error.throw("missingTransactionData", null)
-	var result = assert await database.addTransaction(tran.toDynamicMap()):
+	var result = assert await database.addTransaction(tran):
 		Error.throw("failedToAddTransaction", null)
 	var products = transaction.getDynamicVector("products")
 	foreach product in products.toVectorOfDynamicMaps() {
-		var prod = assert TransactionProduct.forData(product):
+		var prod = assert SympathyPaymentDatabase.TransactionProduct.forData(product):
 			Error.throw("missingTransactionProductData", null)
 		prod.transactionId = result.id
-		var product = assert await database.addTransactionProduct(prod.toDynamicMap()):
+		var product = assert await database.addTransactionProduct(prod):
 			Error.throw("failedToAddTransactionProduct", null)
 	}
 	return result.toDynamicMap()
@@ -172,12 +172,12 @@ func handleStripeEvents(body as buffer, signature as dynamic) async as StripeEve
 			var plan = evesub.plan
 			if plan {
 				var product = await paymentProvider.retrieveProduct(plan.product)
-				stripeEvent.planName = product.name
+				stripeEvent.subscriptionProductId = product.id
 			}
 			var price = evesub.price
-			if !stripeEvent.planName && price {
+			if !stripeEvent.subscriptionProductId && price {
 				var product = await paymentProvider.retrieveProduct(price.product)
-				stripeEvent.planName = product.name
+				stripeEvent.subscriptionProductId = product.id
 			}
 			return stripeEvent
 		}
@@ -308,7 +308,7 @@ func initializeFunctions
 	addFunction("updateProduct", func(params as DynamicMap) async as dynamic {
 		if !params:
 			Error.throw("invalidParams", null)
-			var product = new StripeApiClient.Product()
+		var product = new StripeApiClient.Product()
 		product.fromDynamicMap(params.getDynamicMap("product"))
 		return await paymentProvider.updateProduct(params.getString("productId"), product)
 	})
@@ -374,6 +374,72 @@ func initializeFunctions
 		var crit = new StripeApiClient.SubscriptionCriteria()
 		crit.fromDynamicMap(params)
 		return await paymentProvider.listSubscriptions(crit)
+	})
+	// SUBSCRIPTION ITEM
+	addFunction("addSubscriptionItem", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var subscription = new StripeApiClient.SubscriptionItem()
+		subscription.fromDynamicMap(params)
+		return await paymentProvider.addSubscriptionItem(subscription)
+	})
+	addFunction("updateSubscriptionItem", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var subscription = new StripeApiClient.SubscriptionItem()
+		subscription.fromDynamicMap(params.getDynamicMap("subscriptionItem"))
+		return await paymentProvider.updateSubscriptionItem(params.getString("subscriptionItemId"), subscription)
+	})
+	addFunction("deleteSubscriptionItem", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return Boolean.asObject(await paymentProvider.deleteSubscriptionItem(params.getString("subscriptionItemId")))
+	})
+	addFunction("listSubscriptionItems", func(params as DynamicMap) async as dynamic {
+		return await paymentProvider.listSubscriptionItems(params.getString("subscriptionId"))
+	})
+	addFunction("addSubscriptionService", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.addSubscriptionService(SympathyPaymentDatabase.SubscriptionService.forData(params))
+	})
+	addFunction("getSubscriptionServices", func(params as DynamicMap) async as dynamic {
+		return await database.getSubscriptionServices()
+	})
+	addFunction("updateSubscriptionService", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.updateSubscriptionService(params.getString("serviceId"), SympathyPaymentDatabase.SubscriptionService.forData(params.getDynamicMap("service")))
+	})
+	addFunction("deleteSubscriptionService", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return Boolean.asObject(await database.deleteSubscriptionService(params.getString("serviceId")))
+	})
+	addFunction("addSubscriptionPackage", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.addSubscriptionPackage(SympathyPaymentDatabase.SubscriptionPackage.forData(params))
+	})
+	addFunction("getSubscriptionPackagesByProductId", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.getSubscriptionPackagesByProductId(params.getString("productId"))
+	})
+	addFunction("getSubscriptionPackageByProductIdAndServiceId", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.getSubscriptionPackageByProductIdAndServiceId(params.getString("productId"), params.getString("serviceId"))
+	})
+	addFunction("updateSubscriptionPackage", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.updateSubscriptionPackage(params.getString("subscriptionPackageId"), SympathyPaymentDatabase.SubscriptionPackage.forData(params.getDynamicMap("subscriptionPackage")))
+	})
+	addFunction("deleteSubscriptionPackage", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return Boolean.asObject(await database.deleteSubscriptionPackage(params.getString("subscriptionPackageId")))
 	})
 	addRoute("POST", "/func/handlePaymentEvents", func(req as WebServerRequest, vars as DynamicMap) async {
 		try {

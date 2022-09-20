@@ -41,7 +41,11 @@ func addFunction(name as string, handler as function<promise<dynamic>,DynamicMap
 					Log.debug(ctx, "Invalid body: `" .. String.asString(data) .. "'")
 				Error.throw("invalidBody", null)
 			}
+			if ctx && ctx.isInDebugMode():
+				Log.debug(ctx, "Received : [ Method Name: " .. name .. " ]" .. " [ Paramameters : `" .. JSONEncoder.encode(data)  .. " `] ")
 			var v = await handler(data)
+			if ctx && ctx.isInDebugMode():
+				Log.debug(ctx, "Responding : [ Method Name: " .. name .. " ]" .. " [ Result : `" .. JSONEncoder.encode(v)  .. " `] ")
 			var rdata = String.toUTF8Buffer(JSONEncoder.toString(new map {
 				status "ok"
 				data v

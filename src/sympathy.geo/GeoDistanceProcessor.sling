@@ -22,41 +22,8 @@
  * SOFTWARE.
  */
 
-import jk.log
-import jk.env
-import sympathy.apiclient.twilio
+interface:
 
-class is SympathySMSProvider:
-
-prop ssid as string
-prop token as string
-prop twilioNumber as string
-
-var ctx as LoggingContext
-
-ctor(ctx as LoggingContext):
-	this.ctx = ctx
-
-func send(toNumber as string, message as string) override async
-{
-	var msg = new TwilioSmsApiClient.Message()
-	msg.from = twilioNumber
-	msg.body = message
-	msg.to = toNumber
-	var sms = new TwilioSmsApiClient(ctx) {
-		ssid ssid
-		token token
-	}
-	await sms.sendMessage(msg)
-}
-
-func lookupNumber(phoneNumber as string) async as TwilioLookupApiClient.PhoneNumberInfo
-{
-	var lookup = new TwilioLookupApiClient(ctx) {
-		ssid ssid
-		token token
-	}
-	assert phoneNumber
-	var countryCode = String.getSubString(phoneNumber, 1, 2)
-	return await lookup.lookupPhoneNumber(phoneNumber, countryCode)
-}
+func getTravelDuration(origin as GeoAddress, destination as GeoAddress) async as int
+func getTravelDistance(origin as GeoAddress, destination as GeoAddress) async as double
+func getDirectDistance(origin as GeoAddress, destination as GeoAddress) async as double

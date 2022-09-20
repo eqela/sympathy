@@ -32,11 +32,13 @@ class is ApplicationDatabase:
 
 const TABLE_TRANSACTION = "transaction"
 const TABLE_TRANSACTION_PRODUCT = "transaction_product"
+const TABLE_SUBSCRIPTION_SERVICE = "subscription_service"
+const TABLE_SUBSCRIPTION_PACKAGE = "subscription_package"
 const TRANSACTION_STATE_NEW = 0
 const TRANSACTION_STATE_PAID = 1
 const TRANSACTION_STATE_CANCELLED = 2
 
-model Transaction #dynamic
+model Transaction
 {
 	id as string #key
 	state as int
@@ -51,7 +53,7 @@ model Transaction #dynamic
 	paymentId as string
 }
 
-model TransactionProduct #dynamic
+model TransactionProduct
 {
 	id as string #key
 	transactionId as string
@@ -64,15 +66,30 @@ model TransactionProduct #dynamic
 	totalPrice as int
 }
 
+model SubscriptionService
+{
+	id as string #key
+	name as string
+}
+
+model SubscriptionPackage
+{
+	id as string #key
+	serviceId as string
+	productId as string
+	metadata as DynamicMap
+}
+
 func getTableDefinitions(tables as vector<SQLTableInfo>) override
 {
 	tables += SQLTableInfo.forDynamicModel(TABLE_TRANSACTION, new Transaction())
 	tables += SQLTableInfo.forDynamicModel(TABLE_TRANSACTION_PRODUCT, new TransactionProduct())
+	tables += SQLTableInfo.forDynamicModel(TABLE_SUBSCRIPTION_SERVICE, new SubscriptionService())
+	tables += SQLTableInfo.forDynamicModel(TABLE_SUBSCRIPTION_PACKAGE, new SubscriptionPackage())
 }
 
-func addTransaction(tran as DynamicMap) async as Transaction
+func addTransaction(transaction as Transaction) async as Transaction
 {
-	var transaction = Transaction.forData(tran)
 	assert transaction
 	var transactionId = UniqueHash.generate()
 	transaction.timeCreated = SystemClock.asUTCSeconds() as int
@@ -85,9 +102,8 @@ func addTransaction(tran as DynamicMap) async as Transaction
 	return transaction
 }
 
-func addTransactionProduct(prod as DynamicMap) async as TransactionProduct
+func addTransactionProduct(product as TransactionProduct) async as TransactionProduct
 {
-	var product = TransactionProduct.forData(prod)
 	assert product
 	product.id = UniqueHash.generate()
 	assert await db.executeStatement(await db.prepareInsertStatement(TABLE_TRANSACTION_PRODUCT, product.toDynamicMap()))
@@ -142,4 +158,88 @@ func getTransactionProducts(transactionId as string) async as TransactionProduct
 	foreach product in vm.toVectorOfDynamicMaps():
 		result += TransactionProduct.forData(product)
 	return result
+}
+
+func addSubscriptionService(service as SubscriptionService) async as SubscriptionService
+{
+	assert service
+	assert await db.executeStatement(await db.prepareInsertStatement(TABLE_SUBSCRIPTION_SERVICE, service.toDynamicMap()))
+	return service
+}
+
+func getSubscriptionServices async as SubscriptionService[]
+{
+	var resp = assert await db.executeQueryStatement(await db.prepareSelectAllStatement(TABLE_SUBSCRIPTION_SERVICE))
+	var vm = resp.toVectorOfMaps()
+	var results = new vector<SubscriptionService>
+	foreach v in vm.toVectorOfDynamicMaps():
+		results += SubscriptionService.forData(v)
+	return results
+}
+
+func updateSubscriptionService(serviceId as string, service as SubscriptionService) async as SubscriptionService
+{
+	assert service
+	var criteria = new DynamicMap()
+	criteria.setString("id", serviceId)
+	service.id = null
+	service.removeNullValues()
+	assert await db.executeStatement(await db.prepareUpdateStatement(TABLE_SUBSCRIPTION_SERVICE, criteria, service.toDynamicMap()))
+	service.id = serviceId
+	return service
+}
+
+func deleteSubscriptionService(serviceId as string) async as bool
+{
+	var criteria = new DynamicMap()
+	criteria.setString("id", serviceId)
+	return await db.executeStatement(await db.prepareDeleteStatement(TABLE_SUBSCRIPTION_SERVICE, criteria))
+}
+
+func addSubscriptionPackage(package as SubscriptionPackage) async as SubscriptionPackage
+{
+	assert package
+	package.id = UniqueHash.generate()
+	assert await db.executeStatement(await db.prepareInsertStatement(TABLE_SUBSCRIPTION_PACKAGE, package.toFlatDynamicMap()))
+	return package
+}
+
+func getSubscriptionPackagesByProductId(productId as string) async as SubscriptionPackage[]
+{
+	var criteria = new DynamicMap()
+	criteria.setString("productId", productId)
+	var v = assert await db.executeQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_SUBSCRIPTION_PACKAGE, criteria))
+	var vm = v.toVectorOfMaps()
+	var result = new vector<SubscriptionPackage>
+	foreach sub in vm.toVectorOfDynamicMaps():
+		result += SubscriptionPackage.forData(sub)
+	return result
+}
+
+func getSubscriptionPackageByProductIdAndServiceId(productId as string, serviceId as string) async as SubscriptionPackage
+{
+	var criteria = new DynamicMap()
+	criteria.setString("productId", productId)
+	criteria.setString("serviceId", serviceId)
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_SUBSCRIPTION_PACKAGE, criteria))
+	return SubscriptionPackage.forData(v)
+}
+
+func updateSubscriptionPackage(subscriptionPackageId as string, package as SubscriptionPackage) async as SubscriptionPackage
+{
+	assert package
+	var criteria = new DynamicMap()
+	criteria.setString("id", subscriptionPackageId)
+	package.id = null
+	package.removeNullValues()
+	assert await db.executeStatement(await db.prepareUpdateStatement(TABLE_SUBSCRIPTION_PACKAGE, criteria, package.toFlatDynamicMap()))
+	package.id = subscriptionPackageId
+	return package
+}
+
+func deleteSubscriptionPackage(subscriptionPackageId as string) async as bool
+{
+	var criteria = new DynamicMap()
+	criteria.setString("id", subscriptionPackageId)
+	return await db.executeStatement(await db.prepareDeleteStatement(TABLE_SUBSCRIPTION_PACKAGE, criteria))
 }

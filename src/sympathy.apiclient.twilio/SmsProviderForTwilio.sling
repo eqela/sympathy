@@ -23,24 +23,46 @@
  */
 
 import jk.log
-import jk.url
-import jk.json
-import jk.webclient
-import sympathy.util
+import jk.env
+import sympathy.sms
 
-class:
+class is SmsProvider:
 
-func getTravelDetails(ctx as LoggingContext, apiKey as string, origin as string, destination as string) async static as DynamicMap
+prop ssid as string
+prop token as string
+prop twilioNumber as string
+
+var ctx as LoggingContext
+
+ctor(ctx as LoggingContext):
+	this.ctx = ctx
+
+
+func sendSmsContent(recipientNumber as string, messageText as string) override async
 {
-	if String.isEmpty(apiKey):
-		Error.throw("apiKeyMissing", null)
-	var client = WebClient.instance()
-	var url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-	var response = await client.executeQuery(ctx, "GET", url .. "?units=imperial&origins=" .. URLEncoder.encode(origin) .. "&destinations=" .. URLEncoder.encode(destination) .. "&key=" .. URLEncoder.encode(apiKey), null, null)
-	var json = JSONParser.parse(DataValidator.toValidJSONString(String.forUTF8Buffer(response.body))) as DynamicMap
-	if not json:
-		Error.forCode("invalidResponse", url)
-	if String.equals("INVALID_REQUEST", json.getString("status")):
-		Error.forCode("invalidRequest", url)
-	return json
+	var msg = new TwilioSmsApiClient.Message()
+	msg.from = twilioNumber
+	msg.body = messageText
+	msg.to = recipientNumber
+	var sms = new TwilioSmsApiClient(ctx) {
+		ssid ssid
+		token token
+	}
+	await sms.sendMessage(msg)
+}
+
+func sendSmsTemplate(recipientNumber as string, templateName as string, language as string, parameters as DynamicMap) override async
+{
+	ERROR "Not implemented"
+}
+
+func lookupNumber(phoneNumber as string) async as TwilioLookupApiClient.PhoneNumberInfo
+{
+	var lookup = new TwilioLookupApiClient(ctx) {
+		ssid ssid
+		token token
+	}
+	assert phoneNumber
+	var countryCode = String.getSubString(phoneNumber, 1, 2)
+	return await lookup.lookupPhoneNumber(phoneNumber, countryCode)
 }

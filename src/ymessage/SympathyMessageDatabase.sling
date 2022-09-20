@@ -1,0 +1,144 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.time
+import jk.json
+import jk.data.sql
+import sympathy.db
+import sympathy.util
+import jk.random
+
+class is ApplicationDatabase:
+
+const TABLE_USER_COMMUNICATION_PREFERENCE = "user_communication_preference"
+const TABLE_EMAIL_VERIFICATION = "email_verification"
+const MAIL_COMMUNICATION_PREFERENCE = "mail"
+const EMAIL_COMMUNICATION_PREFERENCE = "email"
+
+model EmailVerification
+{
+	code as string #key
+	emailAddress as string #unique
+	userId as string #unique
+}
+
+model UserCommunicationPreferences
+{
+	userId as string #key
+	channelPreferences as string[]
+	enableMarketingChannels as string[]
+}
+
+func getTableDefinitions(tables as vector<SQLTableInfo>) override
+{
+	tables += SQLTableInfo.forDynamicModel(TABLE_USER_COMMUNICATION_PREFERENCE, new UserCommunicationPreferences())
+	tables += SQLTableInfo.forDynamicModel(TABLE_EMAIL_VERIFICATION, new EmailVerification())
+}
+
+func generateCode(length as int, allDigits as bool, allCaps as bool) as string
+{
+	var random = new Random()
+	var sb = new StringBuilder()
+	var l = length
+	if l < 1:
+		l = 1
+	for(var i = 0; i < l; i++) {
+		if allDigits {
+			sb.appendCharacter(random.nextIntegerBetween(48, 58) as! char)
+		}
+		else {
+			if random.nextIntegerBetween(0, 2) == 0 {
+				sb.appendCharacter(random.nextIntegerBetween(48, 58) as! char)
+			}
+			else {
+				if allCaps {
+					sb.appendCharacter(Character.toUppercase(random.nextIntegerBetween(97, 123) as! char))
+				}
+				else {
+					if random.nextIntegerBetween(0, 2) == 0 {
+						sb.appendCharacter(Character.toUppercase(random.nextIntegerBetween(97, 123) as! char))
+					}
+					else {
+						sb.appendCharacter(random.nextIntegerBetween(97, 123) as! char)
+					}
+				}
+			}
+		}
+	}
+	return sb.toString()
+}
+
+func generateVerificationCode(emailAddress as string, userId as string) async as EmailVerification
+{
+	assert emailAddress
+	var verification = new EmailVerification()
+	verification.code = generateCode(6, false, true)
+	verification.emailAddress = emailAddress
+	verification.userId = userId
+	assert await db.executeStatement(await db.prepareInsertStatement(TABLE_EMAIL_VERIFICATION, verification.toDynamicMap()))
+	return verification
+}
+
+func verifyCode(emailAddress as string, code as string) async as EmailVerification
+{
+	assert emailAddress
+	var verification = new EmailVerification()
+	verification.code = code
+	verification.emailAddress = emailAddress
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_EMAIL_VERIFICATION, verification.toDynamicMap()))
+	assert v.getCount() > 0
+	assert await db.executeStatement(await db.prepareDeleteStatement(TABLE_EMAIL_VERIFICATION, verification.toDynamicMap()))
+	return EmailVerification.forData(v)
+}
+
+func setUserCommunicationPreferences(preferences as UserCommunicationPreferences) async as UserCommunicationPreferences
+{
+	assert preferences
+	var userId = preferences.userId
+	var preferencesData = await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_USER_COMMUNICATION_PREFERENCE, new DynamicMap().setString("userId", userId)))
+	if preferencesData && preferencesData.getCount() > 0 {
+		await db.executeStatement(await db.prepareUpdateStatement(TABLE_USER_COMMUNICATION_PREFERENCE, new DynamicMap().setString("userId", userId), preferences.toDynamicMap()))
+	}
+	else {
+		assert await db.executeStatement(await db.prepareInsertStatement(TABLE_USER_COMMUNICATION_PREFERENCE, preferences.toDynamicMap()))
+	}
+	return UserCommunicationPreferences.forData(preferencesData)
+}
+
+func getUserCommunicationPreferences(userId as string) async as UserCommunicationPreferences
+{
+	assert userId
+	var criteria = new DynamicMap()
+	criteria.setString("userId", userId)
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_USER_COMMUNICATION_PREFERENCE, criteria))
+	return UserCommunicationPreferences.forData(v)
+}
+
+func deleteUserCommunicationPreferences(userId as string) async as bool
+{
+	assert userId
+	var criteria = new DynamicMap()
+	criteria.setString("userId", userId)
+	return await db.executeStatement(await db.prepareDeleteStatement(TABLE_USER_COMMUNICATION_PREFERENCE, criteria))
+}

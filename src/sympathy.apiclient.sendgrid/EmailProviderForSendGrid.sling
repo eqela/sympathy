@@ -23,36 +23,54 @@
  */
 
 import jk.log
-import sympathy.apiclient.sendgrid
+import sympathy.email
 
-class is SympathyMailProvider:
+class is EmailProvider:
 
+prop ctx as LoggingContext
 prop apiKey as string
-var ctx as LoggingContext
+prop sender as EmailUser
 
 ctor(ctx as LoggingContext):
 	this.ctx = ctx
 
-func send(mail as SympathyMailContent) override async
+func sendEmailContent(recipients as EmailRecipients, content as EmailContent) override async
 {
-	var mailSender = mail.sender
-	if !mailSender:
+	if !sender:
 		Error.throw("noSenderObject", null)
-	var sender = SendGridApiClient.EmailUser.forData(mailSender.toDynamicMap())
+	var senderData = SendGridApiClient.EmailUser.forData(sender.toDynamicMap())
 	var sendGrid = new SendGridApiClient(ctx) {
 		apiKey apiKey
-		sender sender
+		sender senderData
 	}
-	var rcpts = mail.recipients
+	var rcpts = recipients.to
 	if !rcpts:
 		Error.throw("noRecipientsObject", null)
 	var recipients = new vector<SendGridApiClient.EmailUser>
 	foreach rcpt in rcpts:
 		recipients += SendGridApiClient.EmailUser.forData(rcpt.toDynamicMap())
 	var contents = new vector<SendGridApiClient.EmailContent>
-	var content = new SendGridApiClient.EmailContent()
-	content.type = mail.contentType
-	content.value = mail.content
-	contents += content
-	await sendGrid.sendEmail(recipients, contents, mail.subject)
+	var scontent = new SendGridApiClient.EmailContent()
+	scontent.type = content.contentType
+	scontent.value = content.content
+	contents += scontent
+	await sendGrid.sendEmailContent(recipients, contents, content.subject)
+}
+
+func sendEmailTemplate(recipients as EmailRecipients, templateName as string, language as string, parameters as DynamicMap) override async
+{
+	if !sender:
+		Error.throw("noSenderObject", null)
+	var senderData = SendGridApiClient.EmailUser.forData(sender.toDynamicMap())
+	var sendGrid = new SendGridApiClient(ctx) {
+		apiKey apiKey
+		sender senderData
+	}
+	var rcpts = recipients.to
+	if !rcpts:
+		Error.throw("noRecipientsObject", null)
+	var recipients = new vector<SendGridApiClient.EmailUser>
+	foreach rcpt in rcpts:
+		recipients += SendGridApiClient.EmailUser.forData(rcpt.toDynamicMap())
+	await sendGrid.sendEmailTemplate(recipients, templateName, parameters)
 }

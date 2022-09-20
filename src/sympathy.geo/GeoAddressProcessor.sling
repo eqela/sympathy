@@ -22,9 +22,7 @@
  * SOFTWARE.
  */
 
-model:
+interface:
 
-startLocation as Address
-destination as Address
-routePoints as Address[]
-vehicleType as string
+func getAddressForCoordinates(latitude as double, longitude as double) async as GeoAddress
+func getCoordinatesForAddress(address as string) async as vector<GeoCoordinates>

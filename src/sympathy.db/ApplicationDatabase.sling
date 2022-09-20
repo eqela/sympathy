@@ -24,6 +24,7 @@
 
 import jk.log
 import jk.env
+import jk.url
 import jk.data.sql
 import jk.data.sql.factory
 
@@ -51,11 +52,45 @@ IFDEF "target_supports_destructor"
 		close()
 }
 
+func processConnectionString(connectionString as string) as string
+{
+	if String.contains(connectionString, "://") {
+		var url = URL.forString(connectionString)
+		var sb = new StringBuilder()
+		var scheme = url.getScheme()
+		if scheme == "postgresql":
+			scheme = "postgres"
+		sb.appendString(scheme)
+		sb.appendCharacter(':')
+		sb.appendString(url.getHost())
+		sb.appendCharacter(':')
+		var username = url.getUsername()
+		if username:
+			sb.appendString(username)
+		sb.appendCharacter(':')
+		var password = url.getPassword()
+		if password:
+			sb.appendString(password)
+		sb.appendCharacter(':')
+		var path = url.getPath()
+		while path && String.startsWith(path, "/"):
+			path = String.getEndOfString(path, 1)
+		sb.appendString(path)
+		var port = url.getPort()
+		if port {
+			sb.appendCharacter(':')
+			sb.appendString(port)
+		}
+		return sb.toString()
+	}
+	return connectionString
+}
+
 func initialize(ctx as LoggingContext, connectionString as string)
 {
 	if String.isEmpty(connectionString):
 		Error.throw("configurationValueMissing", "DATABASE")
-	connectionString = String.strip(connectionString)
+	connectionString = processConnectionString(String.strip(connectionString))
 	Log.debug(ctx, "Connecting to database: `" .. connectionString .. "' .. ")
 	var db = SQLDatabaseFactory.getDatabase(ctx, connectionString)
 	if not db:

@@ -24,12 +24,14 @@
 
 model:
 
+coordinates as GeoCoordinates
 completeAddress as string
-additionalDetails as string
 country as string
-latitude as double
-longitude as double
-purpose as string
-purposeStatus as int
-contactInfo as ContactInfo
-isPaymentAddress as bool
+countryCode as string
+administrativeArea as string
+subAdministrativeArea as string
+locality as string
+subLocality as string
+streetAddress as string
+streetAddressDetail as string
+postalCode as string

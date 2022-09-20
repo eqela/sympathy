@@ -24,6 +24,6 @@
 
 model:
 
-contactInfo as string
-hopMoverWebsite as string
-iconUrl as string
+to as EmailUser[]
+cc as EmailUser[]
+bcc as EmailUser[]

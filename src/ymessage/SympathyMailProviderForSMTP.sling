@@ -25,8 +25,9 @@
 import jk.env
 import jk.log
 import sympathy.apiclient.smtp
+import sympathy.email
 
-class is SympathyMailProvider:
+class is EmailProvider:
 
 prop serverType as string
 prop username as string
@@ -59,23 +60,22 @@ var ctx as LoggingContext
 ctor(ctx as LoggingContext):
 	this.ctx = ctx
 
-func send(mail as SympathyMailContent) override async
+func sendEmailContent(recipients as EmailRecipients, content as EmailContent) override async
 {
 	var sender = this.sender
 	if not sender:
 		Error.throw("noSmtpSenderObject", null)
 	var message = new SMTPMessage()
-	var rcpts = mail.recipients
+	var rcpts = recipients.to
 	if !rcpts:
 		Error.throw("noRecipientsObject", null)
 	foreach rcpt in rcpts:
-		message.setTo(rcpt.email)
-	message.setContentType(mail.contentType)
-	message.setSubject(mail.subject)
-	var senderinfo = mail.sender
-	message.setMyAddress(senderinfo.email)
-	message.setMyName(senderinfo.name)
-	message.setText(mail.content)
+		message.setTo(rcpt.emailAddress)
+	message.setContentType(content.contentType)
+	message.setSubject(content.subject)
+	message.setMyAddress(senderAddress)
+	message.setMyName(senderName)
+	message.setText(content.content)
 	var transaction = sender.sendSync(message)
 	if not transaction:
 		Error.throw("failedToSendMessage", message)
@@ -87,4 +87,9 @@ func send(mail as SympathyMailContent) override async
 		}
 		Error.throw("failedToSendMessage", message)
 	}
+}
+
+func sendEmailTemplate(recipients as EmailRecipients, templateName as string, language as string, parameters as DynamicMap) override async
+{
+	ERROR "Not implemented"
 }

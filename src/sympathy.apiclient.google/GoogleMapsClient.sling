@@ -1,0 +1,321 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.url
+import jk.log
+import jk.json
+import jk.math
+import jk.webclient
+import sympathy.geo
+
+class is GeoAddressProcessor is GeoDistanceProcessor is GeoRoadProcessor:
+
+func forApiKey(ctx as LoggingContext, apiKey as string) static as this
+{
+	var v = new this()
+	v.ctx = ctx
+	v.apiKey = apiKey
+	return v
+}
+
+prop ctx as LoggingContext
+prop apiKey as string
+
+func getAddressForCoordinates(latitude as double, longitude as double) async as GeoAddress
+{
+	var client = WebClient.instance()
+	var url = "https://maps.googleapis.com/maps/api/geocode/json" .. "?key=" .. URLEncoder.encode(String.safeString(apiKey)) .. "&latlng=" .. URLEncoder.encode(String.forDouble(latitude) .. "," .. String.forDouble(longitude))
+	var response = await client.executeQuery(ctx, "GET", url, null, null)
+	var data = JSONParser.parseBuffer(response.body) as DynamicMap
+	if not data:
+		Error.throw("invalidResponseFromGoogleMapsAPI", null)
+	var results = data.getDynamicVector("results")
+	if not results || results.getSize() < 1:
+		Error.throw("noResultFoundFromGoogleMapsAPI", data)
+	var v as GeoAddress
+	foreach result as DynamicMap in results.toVector() {
+		if not result:
+			continue
+		var addressComponents = result.getDynamicVector("address_components")
+		if not addressComponents || addressComponents.getSize() < 1:
+			Error.throw("noAddressComponentsFoundFromGoogleMapsAPI", result)
+		v = new GeoAddress()
+		foreach addressComponent as DynamicMap in addressComponents.toVector() {
+			if not addressComponent:
+				continue
+			var types = addressComponent.getDynamicVector("types")
+			if not types || types.getSize() < 1:
+				continue
+			foreach type as string in types.toVector() {
+				if not type:
+					continue
+				if String.equals("street_number", type) {
+					v.streetAddressDetail = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("route", type) {
+					v.streetAddress = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("locality", type) {
+					v.locality = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("sublocality", type) {
+					v.subLocality = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("administrative_area_level_2", type) {
+					v.subAdministrativeArea = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("administrative_area_level_1", type) {
+					v.administrativeArea = addressComponent.getString("long_name")
+					break
+				}
+				if String.equals("country", type) {
+					v.country = addressComponent.getString("long_name")
+					v.countryCode = addressComponent.getString("short_name")
+					break
+				}
+				if String.equals("postal_code", type) {
+					v.postalCode = addressComponent.getString("long_name")
+					break
+				}
+			}
+		}
+		v.completeAddress = result.getString("formatted_address")
+		var geometry = result.getDynamicMap("geometry")
+		if not geometry:
+			continue
+		var location = geometry.getDynamicMap("location")
+		if not location:
+			continue
+		v.coordinates = new GeoCoordinates() {
+			latitude location.getDouble("lat")
+			longitude location.getDouble("lng")
+		}
+		break
+	}
+	if not v:
+		Error.throw("invalidResultFromGoogleMapsAPI", null)
+	return v
+}
+
+func getCoordinatesForAddress(address as string) async as vector<GeoCoordinates>
+{
+	var client = WebClient.instance()
+	var host = "https://maps.googleapis.com/maps/api/geocode/json"
+	var url = host .. "?key=" .. URLEncoder.encode(String.safeString(apiKey)) .. "&address=" .. URLEncoder.encode(address)
+	var response = await client.executeQuery(ctx, "GET", url, null, null)
+	var data = JSONParser.parseBuffer(response.body) as DynamicMap
+	if not data:
+		Error.throw("invalidResponseFromGoogleMapsAPI", host)
+	var results = data.getDynamicVector("results")
+	if not results || results.getSize() < 1:
+		Error.throw("noResultsFoundFromGoogleMapsAPI", host)
+	var v = new vector<GeoCoordinates>
+	foreach result as DynamicMap in results.toVector() {
+		if not result:
+			continue
+		var geometry = result.getDynamicMap("geometry")
+		if not geometry:
+			continue
+		var location = geometry.getDynamicMap("location")
+		if not location:
+			continue
+		v += new GeoCoordinates() {
+			latitude location.getDouble("lat")
+			longitude location.getDouble("lng")
+		}
+	}
+	return v
+}
+
+func getFirstDistanceDataElement(data as DynamicMap) private as DynamicMap
+{
+	if not data:
+		Error.throw("noDistanceData", null, StackTrace.generate())
+	var rows = data.get("rows") as DynamicVector
+	if not rows:
+		Error.throw("distanceDataHasNoRows", JSONEncoder.toString(data))
+	foreach element as DynamicMap in rows.toVector() {
+		var el = element.getDynamicVector("elements")
+		if not el:
+			continue
+		var ee = el.get(0) as DynamicMap
+		if not ee:
+			continue
+		return ee
+	}
+	Error.throw("noDistanceDataElement", JSONEncoder.toString(data))
+	return null
+}
+
+func addressToCoordinates(address as GeoAddress) private async as GeoCoordinates
+{
+	if not address:
+		Error.throw("nullAddress", null, StackTrace.generate())
+	var coordinates = address.coordinates
+	if coordinates:
+		return coordinates
+	var ass = address.completeAddress
+	if String.isEmpty(ass):
+		ass = address.streetAddress
+	if String.isEmpty(ass):
+		ass = address.country
+	if String.isEmpty(ass):
+		ass = address.locality
+	var coords = await getCoordinatesForAddress(ass)
+	if Vector.getSize(coords) < 1:
+		Error.throw("failedToFindCoordinatesForAddress", ass)
+	return Vector.get(coords, 0)
+}
+
+func coordinatesToString(coordinates as GeoCoordinates) private as string
+{
+	if not coordinates:
+		Error.throw("nullCoordinates", null, StackTrace.generate())
+	return String.forDouble(coordinates.latitude) .. "," .. String.forDouble(coordinates.longitude)
+}
+
+func getDistanceData(origin as GeoAddress, destination as GeoAddress) private async as DynamicMap
+{
+	if not origin:
+		Error.throw("noOriginSupplied", null)
+	if not destination:
+		Error.throw("noDestinationSupplied", null)
+	var originString = coordinatesToString(await addressToCoordinates(origin))
+	var destinationString = coordinatesToString(await addressToCoordinates(destination))
+	var client = WebClient.instance()
+	var url = "https://maps.googleapis.com/maps/api/distancematrix/json"
+	var response = await client.executeQuery(ctx, "GET", url .. "?units=imperial&origins=" .. URLEncoder.encode(originString) .. "&destinations=" .. URLEncoder.encode(destinationString) .. "&key=" .. URLEncoder.encode(apiKey), null, null)
+	var data = JSONParser.parse(response.body) as DynamicMap
+	if not data:
+		Error.throw("invalidServerResponse", url)
+	if String.equals("INVALID_REQUEST", data.getString("status")):
+		Error.throw("invalidRequest", url)
+	return data
+}
+
+func getTravelDuration(origin as GeoAddress, destination as GeoAddress) async as int
+{
+	var data = await getDistanceData(origin, destination)
+	var element = getFirstDistanceDataElement(data)
+	var durationData = element.getDynamicMap("duration")
+	if not durationData:
+		Error.throw("noDurationData", JSONEncoder.toString(data))
+	return durationData.getInteger("value")
+}
+
+func getTravelDistance(origin as GeoAddress, destination as GeoAddress) async as double
+{
+	var data = await getDistanceData(origin, destination)
+	var element = getFirstDistanceDataElement(data)
+	var distanceData = element.getDynamicMap("distance")
+	if not distanceData:
+		Error.throw("noDistanceData", JSONEncoder.toString(data))
+	return distanceData.getInteger("value") as double
+}
+
+func computeDistance(lat1 as double, lon1 as double, lat2 as double, lon2 as double, rad as double = 6378137) private as double
+{
+	var lat = Math.toRadians(lat2 - lat1)
+	var lon = Math.toRadians(lon2 - lon1)
+	var x = Math.sin(lat/2) * Math.sin(lat/2) + Math.cos( Math.toRadians(lat1)) * Math.cos( Math.toRadians(lat2)) * Math.sin(lon/2) * Math.sin(lon/2)
+	var y = 2.0 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x))
+	return rad * y
+}
+
+func getDirectDistance(origin as GeoAddress, destination as GeoAddress) async as double
+{
+	var o = await addressToCoordinates(origin)
+	var d = await addressToCoordinates(destination)
+	return computeDistance(o.latitude, o.longitude, d.latitude, d.longitude)
+}
+
+func getNearestRoadCoordinates(address as GeoAddress) async as vector<GeoCoordinates>
+{
+	if not address:
+		Error.throw("noAddressSupplied", null, StackTrace.generate())
+	var coordinates = coordinatesToString(await addressToCoordinates(address))
+	var client = WebClient.instance()
+	var url = "https://roads.googleapis.com/v1"
+	var response = await client.executeQuery(ctx, "GET", url .. "/nearestRoads?key=" .. URLEncoder.encode(apiKey) .. "&points=" .. URLEncoder.encode(coordinates), null, null)
+	var data = JSONParser.parseBuffer(response.body) as DynamicMap
+	if not data:
+		Error.throw("invalidServerResponse", url)
+	var snappedPoints = data.getDynamicVector("snappedPoints")
+	if not snappedPoints || snappedPoints.getSize() < 0:
+		Error.throw("noSnappedPointsFound", url)
+	var v = new vector<GeoCoordinates>
+	foreach point as DynamicMap in snappedPoints.toVector() {
+		v += new GeoCoordinates() {
+			latitude point.getDouble("latitude")
+			longitude point.getDouble("longitude")
+		}
+	}
+	return v
+}
+
+func getRoadPathForCoordinates(coordinates as vector<GeoCoordinates>) async as vector<GeoCoordinates>
+{
+	if not coordinates:
+		Error.throw("noCoordinatesProvided", null, StackTrace.generate())
+	var url = "https://roads.googleapis.com/v1/snapToRoads"
+	var sb = new StringBuilder()
+	sb.appendString(url)
+	sb.appendString("?key=")
+	sb.appendString(URLEncoder.encode(apiKey))
+	sb.appendString("&path=")
+	var sb2 = new StringBuilder()
+	var first = true
+	foreach coordinate in coordinates {
+		if not first {
+			sb2.appendString("|")
+		}
+		else {
+			first = false
+		}
+		sb2.appendString(coordinatesToString(coordinate))
+	}
+	sb.appendString(URLEncoder.encode(sb2.toString()))
+	sb.appendString("&interpolate=true")
+	var client = WebClient.instance()
+	var response = await client.executeQuery(ctx, "GET", sb.toString(), null, null)
+	var data = JSONParser.parseBuffer(response.body) as DynamicMap
+	if not data:
+		Error.forCode("invalidServerResponse", url)
+	var snappedPoints = data.getDynamicVector("snappedPoints")
+	if not snappedPoints || snappedPoints.getSize() < 0:
+		Error.throw("noSnappedPointsFound", url)
+	var v = new vector<GeoCoordinates>
+	foreach point as DynamicMap in snappedPoints.toVector() {
+		v += new GeoCoordinates() {
+			latitude point.getDouble("latitude")
+			longitude point.getDouble("longitude")
+		}
+	}
+	return v
+}

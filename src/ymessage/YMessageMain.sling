@@ -1,0 +1,442 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.console
+import jk.log
+import jk.json
+import jk.env
+import jk.fs
+import sympathy.config
+import sympathy.webserver
+import sympathy.sms
+import sympathy.email
+import sympathy.apiclient.sendgrid
+import sympathy.apiclient.twilio
+
+class is WebServerRpcRouter:
+
+class TestModeSmsProvider is SmsProvider
+{
+	prop ctx as LoggingContext
+
+	func sendSmsContent(recipientNumber as string, messageText as string) override async
+	{
+		var info = new DynamicMap()
+		info.setString("recipientNumber", recipientNumber)
+		info.setString("messageText", messageText)
+		Log.info(ctx, "Test mode SMS message: `" .. JSONEncoder.toString(info) .. "'")
+	}
+
+	func sendSmsTemplate(recipientNumber as string, templateName as string, language as string, parameters as DynamicMap) override async
+	{
+		var info = new DynamicMap()
+		info.setString("recipientNumber", recipientNumber)
+		info.setString("templateName", templateName)
+		info.setString("language", language)
+		info.setObject("parameters", parameters)
+		Log.info(ctx, "Test mode SMS message: `" .. JSONEncoder.toString(info) .. "'")
+	}
+}
+
+class TestModeEmailProvider is EmailProvider
+{
+	prop ctx as LoggingContext
+
+	func sendEmailContent(recipients as EmailRecipients, content as EmailContent) override async
+	{
+		var info = new DynamicMap()
+		info.setObject("recipients", recipients)
+		info.setObject("content", content)
+		Log.info(ctx, "Test mode email message: `" .. JSONEncoder.toString(info) .. "'")
+	}
+
+	func sendEmailTemplate(recipients as EmailRecipients, templateName as string, language as string, parameters as DynamicMap) override async
+	{
+		var info = new DynamicMap()
+		info.setObject("recipients", recipients)
+		info.setString("templateName", templateName)
+		info.setString("language", language)
+		info.setObject("parameters", parameters)
+		Log.info(ctx, "Test mode email message: `" .. JSONEncoder.toString(info) .. "'")
+	}
+}
+
+prop templateManager as TemplateManager
+prop smsApp as SmsProviderForSmsApp
+prop database as SympathyMessageDatabase
+prop emailProvider as EmailProvider
+prop smsProvider as SmsProvider
+prop notificationProvider as SympathyNotificationProvider
+
+var defaultLanguage = ServerConfig.accept("DEFAULT_LANGUAGE")
+var defaultSenderAddress = ServerConfig.accept("DEFAULT_SENDER_ADDRESS")
+var defaultSenderName = ServerConfig.accept("DEFAULT_SENDER_NAME")
+
+ctor:
+	initializeFunctions()
+
+func guessContentType(content as string) virtual as string
+{
+	if content && String.getIndexOfString(content, "<html") >= 0:
+		return "text/html"
+	return "text/plain"
+}
+
+func validatePhoneNumber(string as string) as string
+{
+	if not string:
+		Error.throw("nullPhoneNumber", null, StackTrace.generate())
+	if String.contains(string, "@"):
+		Error.throw("invalidPhoneNumber", string)
+	if String.startsWith(string, "+") == false:
+		Error.throw("invalidPhoneNumber", string)
+	var v = new StringBuilder()
+	v.appendCharacter('+')
+	var it = String.iterate(string)
+	while it {
+		var c = it.getNextChar()
+		if Character.isEOF(c):
+			break
+		if Character.isDigit(c):
+			v.appendCharacter(c)
+	}
+	var r = v.toString()
+	if String.isEmpty(r):
+		Error.throw("invalidPhoneNumber", string)
+	return r
+}
+
+func validateEmailAddress(string as string)
+{
+	if not string:
+		Error.throw("nullEmailAddress", null, StackTrace.generate())
+	if String.contains(string, "@") == false:
+		Error.throw("invalidEmailAddress", string)
+}
+
+func validateEmailRecipients(recipients as EmailRecipients) as EmailRecipients
+{
+	if not recipients:
+		Error.throw("nullEmailRecipients", null, StackTrace.generate())
+	foreach user in recipients.to:
+		validateEmailAddress(user.emailAddress)
+	foreach user in recipients.cc:
+		validateEmailAddress(user.emailAddress)
+	foreach user in recipients.bcc:
+		validateEmailAddress(user.emailAddress)
+	return recipients
+}
+
+func setUserCommunicationPreferences(preference as SympathyMessageDatabase.UserCommunicationPreferences) async as dynamic
+{
+	if !preference:
+		Error.throw("missingClientPreferences", null)
+	return await database.setUserCommunicationPreferences(preference)
+}
+
+func getUserCommunicationPreferences(userId as string) async as dynamic
+{
+	if !userId:
+		Error.throw("missingUserId", null)
+	var result = await database.getUserCommunicationPreferences(userId)
+	return result
+}
+
+func deleteUserCommunicationPreferences(userId as string) async as dynamic
+{
+	if !userId:
+		Error.throw("missingUserId", null)
+	return await database.deleteUserCommunicationPreferences(userId)
+}
+
+func sendVerificationCode(emailAddress as string, userId as string) async as dynamic
+{
+	if !emailAddress:
+		Error.throw("missingEmailAddress", null)
+	if !userId:
+		Error.throw("missingUserId", null)
+	var verification = await database.generateVerificationCode(emailAddress, userId)
+	var emailverificationTemplate = ServerConfig.accept("USER_VERIFICATION_TEMPLATE")
+	var erecipients = new EmailRecipients()
+	var recipient = new EmailUser()
+	recipient.emailAddress = emailAddress
+	erecipients.addObjectToVectorField("to", recipient)
+	if emailverificationTemplate {
+		var language = ServerConfig.accept("EMAIL_VERIFICATION_LANGUAGE")
+		if not language:
+			language = defaultLanguage
+		await sendEmailTemplate(erecipients, emailverificationTemplate, language, verification.toDynamicMap())
+	}
+	else {
+		var content = new EmailContent()
+		content.content = verification.code
+		await sendEmailContent(erecipients, content)
+	}
+	return verification
+}
+
+func verifyCode(emailAddress as string, code as string) async as dynamic
+{
+	if !emailAddress:
+		Error.throw("missingEmailAddress", null)
+	if !code:
+		Error.throw("missingCode", null)
+	return await database.verifyCode(emailAddress, code)
+}
+
+func sendEmailTemplate(recipients as EmailRecipients, templateName as string, language as string, parameters as DynamicMap) async as dynamic
+{
+	if not emailProvider:
+		Error.throw("noEmailProvider", null, StackTrace.generate())
+	if templateManager {
+		var content = templateManager.tryGetProcessedMessageContent(templateName, "email", language, parameters)
+		if content {
+			var subject as string
+			if String.startsWith(content, "Subject:") {
+				var newline = String.getIndexOfCharacter(content, '\n')
+				if newline < 0 {
+					subject = String.getEndOfString(content, 8)
+					content = ""
+				}
+				else {
+					subject = String.getSubString(content, 8, newline-8)
+					content = String.getEndOfString(content, newline+1)
+				}
+			}
+			subject = String.strip(subject)
+			content = String.strip(content)
+			var mailContent = new EmailContent()
+			mailContent.subject = subject
+			mailContent.content = content
+			mailContent.contentType = guessContentType(content)
+			await emailProvider.sendEmailContent(recipients, mailContent)
+			return null
+		}
+	}
+	await emailProvider.sendEmailTemplate(recipients, templateName, language, parameters)
+	return null
+}
+
+func sendEmailContent(recipients as EmailRecipients, content as EmailContent) async as dynamic
+{
+	if not emailProvider:
+		Error.throw("noEmailProvider", null, StackTrace.generate())
+	await emailProvider.sendEmailContent(recipients, content)
+	return null
+}
+
+func initializeFunctions private
+{
+	addFunction("setUserCommunicationPreferences", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		var preference = new SympathyMessageDatabase.UserCommunicationPreferences()
+		preference.fromDynamicMap(params)
+		return await setUserCommunicationPreferences(preference)
+	})
+	addFunction("getUserCommunicationPreferences", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await getUserCommunicationPreferences(params.getString("userId"))
+	})
+	addFunction("deleteUserCommunicationPreferences", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await deleteUserCommunicationPreferences(params.getString("userId"))
+	})
+	addFunction("sendVerificationCode", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await sendVerificationCode(params.getString("emailAddress"), params.getString("userId"))
+	})
+	addFunction("verifyCode", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await verifyCode(params.getString("userId"), params.getString("code"))
+	})
+	addFunction("sendEmailContent", func(params as DynamicMap) async as dynamic {
+		var recipients = validateEmailRecipients(EmailRecipients.forData(params.getDynamicMap("recipients")))
+		var content = EmailContent.forData(params.getDynamicMap("content"))
+		return await sendEmailContent(recipients, content)
+	})
+	addFunction("sendEmailTemplate", func(params as DynamicMap) async as dynamic {
+		var recipients = validateEmailRecipients(EmailRecipients.forData(params.getDynamicMap("recipients")))
+		var templateName = params.getString("templateName")
+		var language = params.getString("language")
+		if String.isEmpty(language):
+			language = defaultLanguage
+		var parameters = params.getDynamicMap("parameters")
+		return await sendEmailTemplate(recipients, templateName, language, parameters)
+	})
+	addFunction("sendSmsContent", func(params as DynamicMap) async as dynamic {
+		if not smsProvider:
+			Error.throw("noSmsProvider", null, StackTrace.generate())
+		var recipientNumber = validatePhoneNumber(params.getString("recipientNumber"))
+		var messageText = params.getString("messageText")
+		await smsProvider.sendSmsContent(recipientNumber, messageText)
+		return null
+	})
+	addFunction("sendSmsTemplate", func(params as DynamicMap) async as dynamic {
+		if not smsProvider:
+			Error.throw("noSmsProvider", null, StackTrace.generate())
+		var recipientNumber = validatePhoneNumber(params.getString("recipientNumber"))
+		var templateName = params.getString("templateName")
+		var language = params.getString("language")
+		if String.isEmpty(language):
+			language = defaultLanguage
+		var parameters = params.getDynamicMap("parameters")
+		if templateManager {
+			var content = templateManager.tryGetProcessedMessageContent(templateName, "sms", language, parameters)
+			if content {
+				await smsProvider.sendSmsContent(recipientNumber, content)
+				return null
+			}
+		}
+		await smsProvider.sendSmsTemplate(recipientNumber, templateName, language, parameters)
+		return null
+	})
+	addFunction("sendMessage", func(params as DynamicMap) async as dynamic {
+		var recipient = params.getString("recipient")
+		var message = params.getDynamicMap("message")
+		await sendMessage(recipient, message)
+		return null
+	})
+	addFunction("sendNotification", func(params as DynamicMap) async as dynamic {
+		var recipients = params.getVector("recipients")
+		var notificationData = params.getDynamicMap("notificationData")
+		await sendNotification(recipients, notificationData)
+		return null
+	})
+}
+
+func sendNotification(rcpts as object, notificationData as object) async
+{
+	if not rcpts:
+		Error.throw("noRecipients", null)
+	if not notificationData:
+		Error.throw("noNotificationData", null)
+	if not notificationProvider:
+		Error.throw("noNotificationProvider", null, StackTrace.generate())
+	await notificationProvider.send(rcpts, notificationData)
+}
+
+func sendMessage(recipient as string, message as object) async:
+	ERROR "Not implemented"
+
+func isInTestMode static as bool
+{
+	if Boolean.asBoolean(ServerConfig.accept("TEST_MODE"), false) == true:
+		return true
+	return false
+}
+
+func createEmailProvider(ctx as LoggingContext) static as EmailProvider
+{
+	if isInTestMode() {
+		var v = new TestModeEmailProvider()
+		v.ctx = ctx
+		return v
+	}
+	var sendGridAPIKey = ServerConfig.accept("SENDGRID_API_KEY")
+	if String.isNotEmpty(sendGridAPIKey) {
+		var sender = new EmailUser()
+		sender.emailAddress = ServerConfig.require("SENDGRID_SENDER_EMAIL")
+		sender.name = ServerConfig.require("SENDGRID_SENDER_NAME")
+		var v = new EmailProviderForSendGrid(ctx)
+		v.apiKey = sendGridAPIKey
+		v.sender = sender
+		return v
+	}
+	var serverAddress = ServerConfig.accept("SMTP_SERVER_ADDRESS")
+	if String.isNotEmpty(serverAddress) {
+		var v = new SympathyMailProviderForSMTP(ctx)
+		v.serverType = ServerConfig.require("SMTP_SERVER_TYPE")
+		v.username = ServerConfig.require("SMTP_USERNAME")
+		v.password = ServerConfig.require("SMTP_PASSWORD")
+		v.serverAddress = serverAddress
+		v.port = ServerConfig.require("SMTP_PORT")
+		v.senderAddress = ServerConfig.require("SMTP_SENDER_ADDRESS")
+		v.senderName = ServerConfig.require("SMTP_SENDER_NAME")
+		return v
+	}
+	return null
+}
+
+func createSmsProvider(ctx as LoggingContext) static as SmsProvider
+{
+	if isInTestMode() {
+		var v = new TestModeSmsProvider()
+		v.ctx = ctx
+		return v
+	}
+	var ssid = ServerConfig.accept("TWILIO_SSID")
+	if String.isNotEmpty(ssid) {
+		var token = ServerConfig.require("TWILIO_AUTH_TOKEN")
+		var twilioNumber = ServerConfig.require("TWILIO_PHONE_NUMBER")
+		var v = new SmsProviderForTwilio(ctx)
+		v.ssid = ssid
+		v.token = token
+		v.twilioNumber = twilioNumber
+		return v
+	}
+	if smsApp:
+		return smsApp
+	return null
+}
+
+func createNotificationProvider(ctx as LoggingContext) static as SympathyNotificationProvider
+{
+	var fcmServerKey = ServerConfig.accept("FCM_SERVER_KEY")
+	if String.isNotEmpty(fcmServerKey) {
+		var provider = new SympathyNotificationProviderForFirebase(ctx)
+		provider.fcmServerKey = fcmServerKey
+		return provider
+	}
+	return null
+}
+
+main
+{
+	return await WebServerMain.execute(args, func(server as WebServer) async {
+		var db = new SympathyMessageDatabase(server.ctx)
+		await db.updateTables()
+		var router = new this()
+		router.emailProvider = createEmailProvider(server.ctx)
+		router.smsProvider = createSmsProvider(server.ctx)
+		router.notificationProvider = createNotificationProvider(server.ctx)
+		router.database = db
+		var templateManager = new TemplateManager() {
+			ctx server.ctx
+		}
+		var templateDir = ServerConfig.accept("TEMPLATE_DIRECTORY")
+		if String.isNotEmpty(templateDir):
+			templateManager.templateDirectory = File.forPath(templateDir)
+		router.templateManager = templateManager
+		if Boolean.asValue(ServerConfig.accept("ENABLE_SMS_WS"), false) {
+			router.smsApp = new SmsProviderForSmsApp(server.ctx, server)
+			Log.debug(ctx, "Enable SMS websocket")
+		}
+		server.use(router)
+	})
+}

@@ -22,33 +22,43 @@
  * SOFTWARE.
  */
 
-import jk.log
-import jk.json
-import sympathy.webserver
-import sympathy.wsserver
+import sympathy.otp
+import sympathy.rpcclient.common
 
-class is SympathySMSProvider:
+class is RpcClient:
 
-var ctx as LoggingContext
-var engine as SympathyWSEngine
+ctor:
+	baseUrl = requireConfigValue("OTP_SERVICE_URL")
 
-ctor(ctx as LoggingContext, server as WebServer)
+func sendOtp(mobileNumber as string) async as string
 {
-	this.ctx = ctx
-	var smsWSServer = WebSocketServer.instance(ctx)
-	smsWSServer.createWSServer(server)
-	this.engine = new SympathyWSEngine(ctx)
-	smsWSServer.eventHandler = engine
+	var params = new map {
+		recipient mobileNumber
+	}
+	return await queryString("sendOtp", params)
 }
 
-func send(toNumber as string, message as string) override  async
+func verifyOtpCode(code as string, mobileNumber as string) async
 {
-	var smsdata = new DynamicMap()
-	smsdata.setInteger("type", 1)
-	smsdata.setInteger("priority", 1)
-	smsdata.setString("message", message)
-	smsdata.setObject("recipients", new DynamicVector().appendString(toNumber))
-	Log.debug(ctx, "Sending message data `" .. JSONEncoder.encode(smsdata) .. "'")
-	var message = SMSAppMessage.forDataMap(smsdata)
-	engine.sendBroadcastMessage(message.toBuffer())
+	var params = new map {
+		code code
+		mobileNumber mobileNumber
+	}
+	await query("verifyOtpCode", params)
+}
+
+func checkMobileNumberValidationAttempts(mobileNumber as string) async
+{
+	var params = new map {
+		mobileNumber mobileNumber
+	}
+	await query("checkMobileNumberValidationAttempts", params)
+}
+
+func getOtpById(otpId as string) async as Otp
+{
+	var params = new map {
+		otpId otpId
+	}
+	return Otp.forData(await queryMap("getOtpById", params))
 }

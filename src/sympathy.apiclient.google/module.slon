@@ -25,6 +25,6 @@
 {
 	moduleTitle "Google API support"
 	moduleDescription [[
-		Support for miscellaneous Google APIs
+		Support for Google APIs
 	]]
 }

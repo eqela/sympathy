@@ -36,6 +36,7 @@ model EmailUser public
 model Personalization public
 {
 	to as EmailUser[]
+	dynamic_template_data as DynamicMap
 }
 
 model EmailContent public
@@ -58,6 +59,8 @@ model EmailBody public
 	attachments as Attachment[]
 	subject as string
 	mail_settings as EmailSetting
+	template_id as string
+
 }
 
 model SandboxMode public
@@ -82,7 +85,7 @@ prop baseUrl as string = "https://api.sendgrid.com"
 prop sandboxMode as bool = false
 prop sender as EmailUser
 
-func sendEmail(recipients as vector<EmailUser>, content as vector<EmailContent>, subject as string, attachments as vector<Attachment> = null) async
+func sendEmailContent(recipients as vector<EmailUser>, content as vector<EmailContent>, subject as string, attachments as vector<Attachment> = null) async
 {
 	assert recipients:
 		throw ExceptionWithError.forCode("sendGridAPISend", "Missing recipients")
@@ -99,6 +102,66 @@ func sendEmail(recipients as vector<EmailUser>, content as vector<EmailContent>,
 		foreach attachment in attachments:
 			body.addObjectToVectorField("attachments", attachment)
 	}
+	var vrecipients = assert groupRecipients(recipients)
+	foreach rctps in vrecipients {
+		var personalizations = new Personalization()
+		personalizations.addObjectToVectorField("to", rctps)
+		body.addObjectToVectorField("personalizations", personalizations)
+		await doSendEmail(body)
+		body.personalizations = null
+	}
+}
+
+func sendEmailTemplate(recipients as vector<EmailUser>, templateName as string, parameters as DynamicMap) async
+{
+	assert recipients:
+		throw ExceptionWithError.forCode("sendGridAPISend", "Missing recipients")
+	assert templateName:
+		throw ExceptionWithError.forCode("sendGridAPISend", "Missing templateName")
+	assert parameters:
+		throw ExceptionWithError.forCode("sendGridAPISend", "Missing parameters")
+	assert apiKey:
+		throw ExceptionWithError.forCode("sendGridAPISend", "Missing API key")
+	var body = new EmailBody()
+	body.from = sender
+	body.template_id = templateName
+	var counter = 0
+	var vrecipients = assert groupRecipients(recipients)
+	foreach rctps in vrecipients {
+		var personalizations = new Personalization()
+		personalizations.addObjectToVectorField("to", rctps)
+		personalizations.addObjectToVectorField("dynamic_template_data", parameters)
+		body.addObjectToVectorField("personalizations", personalizations)
+		await doSendEmail(body)
+		body.personalizations = null
+	}
+}
+
+func groupRecipients(recipients as vector<EmailUser>) as vector<vector<EmailUser>>
+{
+	var counter = 0
+	var vrecipients = new vector<vector<EmailUser>>
+	var recipientsItem = new vector<EmailUser>
+	var itr =  Vector.iterate(recipients)
+	loop {
+		var it = itr.next()
+		if !it {
+			if Vector.getSize(recipientsItem) > 0:
+				vrecipients += recipientsItem
+			break
+		}
+		if counter == 1000 {
+			vrecipients += recipientsItem
+		}
+		recipientsItem += it
+	}
+	return vrecipients
+}
+
+func doSendEmail(body as EmailBody) async
+{
+	assert body:
+		Error.throw("sendGridAPISend", "Missing API body")
 	if sandboxMode {
 		var esetting = new EmailSetting()
 		var sm = new SandboxMode()
@@ -106,25 +169,6 @@ func sendEmail(recipients as vector<EmailUser>, content as vector<EmailContent>,
 		esetting.sandbox_mode = sm
 		body.mail_settings = esetting
 	}
-	var counter = 0
-	foreach rctps in recipients {
-		if counter == 1000 {
-			await doSendEmail(body)
-			body.personalizations = null
-		}
-		var personalizations = new Personalization()
-		personalizations.addObjectToVectorField("to", rctps)
-		body.addObjectToVectorField("personalizations", personalizations)
-		counter++
-	}
-	if sizeof body.personalizations > 0:
-		await doSendEmail(body)
-}
-
-func doSendEmail(body as EmailBody) async
-{
-	assert body:
-		Error.throw("sendGridAPISend", "Missing API body")
 	Log.info(ctx, body.toString())
 	var headers = new KeyValueList<string, string>()
 	headers.add("Content-Type", "application/json")

@@ -29,14 +29,14 @@ import sympathy.apiclient.common
 
 class is RestApiClient:
 
-model ProductImage
+model ProductImage public
 {
 	src as string
 	filename as string
 	attachment as buffer
 }
 
-model ProductVariant
+model ProductVariant public
 {
 	id as string
 	product_id as string
@@ -47,7 +47,7 @@ model ProductVariant
 	inventory_item_id as string
 }
 
-model Product
+model Product public
 {
 	id as string
 	title as string
@@ -59,19 +59,19 @@ model Product
 	published as bool
 }
 
-model ScriptTag
+model ScriptTag public
 {
 	event as string
 	src as string
 }
 
-model Token
+model Token public
 {
 	access_token as string
 	scope as string
 }
 
-model Shop
+model Shop public
 {
 	id as string
 	name as string
@@ -101,14 +101,14 @@ model Shop
 	money_with_currency_format as string
 }
 
-model Webhook
+model Webhook public
 {
 	topic as string
 	format as string
 	address as string
 }
 
-model CustomCollection
+model CustomCollection public
 {
 	id as string
 	handle as string
@@ -121,7 +121,7 @@ model CustomCollection
 	published_scope as string
 }
 
-model RecurringApplicationCharge
+model RecurringApplicationCharge public
 {
 	activated_on as string
 	billing_on as string
@@ -141,7 +141,7 @@ model RecurringApplicationCharge
 	updated_at as string
 }
 
-model UsageCharge
+model UsageCharge public
 {
 	created_at as string
 	description as string
@@ -155,14 +155,14 @@ model UsageCharge
 	risk_level as int
 }
 
-model Currency
+model Currency public
 {
 	currency as string
 	rate_updated_at as string
 	enabled as bool
 }
 
-model Country
+model Country public
 {
 	id as string
 	code as string
@@ -171,7 +171,7 @@ model Country
 	tax_name as string
 }
 
-model InventoryItem
+model InventoryItem public
 {
 	cost as string
 	id as string
@@ -182,14 +182,14 @@ model InventoryItem
 	updated_at as string
 }
 
-model SmartCollectionRule
+model SmartCollectionRule public
 {
 	column as string
 	relation as string
 	condition as string
 }
 
-model SmartCollection
+model SmartCollection public
 {
 	id as string
 	title as string
@@ -202,44 +202,44 @@ model SmartCollection
 
 // API Request
 
-model ShopTokenRequest
+model ShopTokenRequest public
 {
 	client_id as string
 	client_secret as string
 	code as string
 }
 
-model ProductRequest
+model ProductRequest public
 {
 	product as Product
 }
 
-model ScriptTagRequest
+model ScriptTagRequest public
 {
 	script_tag as ScriptTag
 }
 
-model WebhookRequest
+model WebhookRequest public
 {
 	webhook as Webhook
 }
 
-model RecurringApplicationChargeRequest
+model RecurringApplicationChargeRequest public
 {
 	recurring_application_charge as RecurringApplicationCharge
 }
 
-model UsageChargeRequest
+model UsageChargeRequest public
 {
 	usage_charge as UsageCharge
 }
 
-model InventoryItemRequest
+model InventoryItemRequest public
 {
 	inventory_item as InventoryItem
 }
 
-model SmartCollectionRequest
+model SmartCollectionRequest public
 {
 	smart_collection as SmartCollection
 }

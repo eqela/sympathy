@@ -22,58 +22,7 @@
  * SOFTWARE.
  */
 
-import sympathy.client
+class abstract:
 
-class is MicroServiceClient:
-
-ctor:
-	baseUrl = requireConfigValue("MESSAGE_SERVICE_URL")
-
-func sendMessage(rcpt as string, message as object)
-{
-	var params = new map {
-		rcpt rcpt
-		message message
-	}
-	query("sendSMS", params)
-}
-
-func sendSMS(recipient as string, message as string)
-{
-	var params = new map {
-		number recipient
-		message message
-	}
-	query("sendSMS", params)
-}
-
-func sendNotification(rcpts as DynamicVector, notificationData as DynamicMap)
-{
-	var params = new map {
-		rcpts rcpts
-		notificationData notificationData
-	}
-	query("sendNotification", params)
-}
-
-func sendEmailWithSenderInfo(senderAddress as string, senderName as string, subject as string, recipient as string, message as DynamicMap)
-{
-	var params = new map {
-		senderAddress senderAddress
-		senderName senderName
-		subject subject
-		recipient recipient
-		message message
-	}
-	query("sendEmailWithSenderInfo", params)
-}
-
-func sendEmail(subject as string, recipient as string, message as DynamicMap)
-{
-	var params = new map {
-		subject subject
-		recipient recipient
-		message message
-	}
-	query("sendEmail", params)
-}
+func sendSmsContent(recipientNumber as string, messageText as string) abstract async
+func sendSmsTemplate(recipientNumber as string, templateName as string, language as string, parameters as DynamicMap) abstract async

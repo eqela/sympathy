@@ -28,4 +28,4 @@ model:
 
 placeId as string
 originalIndex as int
-location as GeoLocation
+location as GeoCoordinates

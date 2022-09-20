@@ -22,6 +22,7 @@
  * SOFTWARE.
  */
 
-class abstract:
+interface:
 
-func send(mail as SympathyMailContent) abstract async
+func getNearestRoadCoordinates(address as GeoAddress) async as vector<GeoCoordinates>
+func getRoadPathForCoordinates(coordinates as vector<GeoCoordinates>) async as vector<GeoCoordinates>

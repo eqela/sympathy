@@ -1,0 +1,93 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.fs
+import jk.env
+import jk.log
+import jk.template
+
+class:
+
+prop ctx as LoggingContext
+prop templateDirectory as File
+
+func getTemplateFileContents(templateName as string, type as string, language as string) as string
+{
+    var dir = assert templateDirectory
+	if String.isNotEmpty(type):
+        dir = dir.entry(String.toLowerCase(type))
+	if String.isNotEmpty(language):
+        dir = dir.entry(String.toLowerCase(language))
+	var template = dir.entry(templateName .. ".t")
+	assert template.isFile()
+	return template.getContentsUTF8()
+}
+
+func toTemplateNameCompatible(string as string) as string
+{
+	if not string:
+		return ""
+	var sb = new StringBuilder()
+	var it = String.iterate(string)
+	while it {
+		var c = it.getNextChar()
+		if Character.isEOF(c):
+			break
+		if c == '-' || c == '_' || c == '.' {
+			sb.appendCharacter('_')
+		}
+		else if Character.isLowercaseAlpha(c) {
+			sb.appendCharacter(Character.toUppercase(c))
+		}
+		else if Character.isDigit(c) {
+			sb.appendCharacter(c)
+		}
+		else if Character.isUppercaseAlpha(c) {
+			sb.appendCharacter(c)
+		}
+	}
+	return sb.toString()
+}
+
+func getTemplateEnvironmentVariableContents(templateName as string, type as string, language as string) as string
+{
+	var variableName = "TEMPLATE_" .. toTemplateNameCompatible(templateName)
+	if String.isNotEmpty(type):
+		variableName = variableName .. "_" .. toTemplateNameCompatible(type)
+	if String.isNotEmpty(language):
+		variableName = variableName .. "_" .. toTemplateNameCompatible(language)
+	return EnvironmentVariable.get(variableName)
+}
+
+func tryGetProcessedMessageContent(templateName as string, type as string, language as string, parameters as DynamicMap) as string
+{
+	if String.isEmpty(templateName):
+		Error.throw("noTemplateName", null, StackTrace.generate())
+    var template = getTemplateEnvironmentVariableContents(templateName, type, language)
+	if not template:
+		template = getTemplateFileContents(templateName, type, language)
+	if template:
+		return TextTemplate.processString(template, "<%", "%>", parameters)
+	return null
+}
