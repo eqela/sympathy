@@ -38,7 +38,9 @@ func sendEmailContent(recipients as EmailRecipients, content as EmailContent) ov
 {
 	if !sender:
 		Error.throw("noSenderObject", null)
-	var senderData = SendGridApiClient.EmailUser.forData(sender.toDynamicMap())
+	var senderData = new SendGridApiClient.EmailUser()
+	senderData.name = sender.name
+	senderData.email = sender.emailAddress
 	var sendGrid = new SendGridApiClient(ctx) {
 		apiKey apiKey
 		sender senderData
@@ -47,8 +49,11 @@ func sendEmailContent(recipients as EmailRecipients, content as EmailContent) ov
 	if !rcpts:
 		Error.throw("noRecipientsObject", null)
 	var recipients = new vector<SendGridApiClient.EmailUser>
-	foreach rcpt in rcpts:
-		recipients += SendGridApiClient.EmailUser.forData(rcpt.toDynamicMap())
+	foreach rcpt in rcpts {
+		var semail = new SendGridApiClient.EmailUser()
+		semail.email = rcpt.emailAddress
+		recipients += semail
+	}
 	var contents = new vector<SendGridApiClient.EmailContent>
 	var scontent = new SendGridApiClient.EmailContent()
 	scontent.type = content.contentType
@@ -61,7 +66,9 @@ func sendEmailTemplate(recipients as EmailRecipients, templateName as string, la
 {
 	if !sender:
 		Error.throw("noSenderObject", null)
-	var senderData = SendGridApiClient.EmailUser.forData(sender.toDynamicMap())
+	var senderData = new SendGridApiClient.EmailUser()
+	senderData.name = sender.name
+	senderData.email = sender.emailAddress
 	var sendGrid = new SendGridApiClient(ctx) {
 		apiKey apiKey
 		sender senderData
@@ -70,7 +77,10 @@ func sendEmailTemplate(recipients as EmailRecipients, templateName as string, la
 	if !rcpts:
 		Error.throw("noRecipientsObject", null)
 	var recipients = new vector<SendGridApiClient.EmailUser>
-	foreach rcpt in rcpts:
-		recipients += SendGridApiClient.EmailUser.forData(rcpt.toDynamicMap())
+	foreach rcpt in rcpts {
+		var semail = new SendGridApiClient.EmailUser()
+		semail.email = rcpt.emailAddress
+		recipients += semail
+	}
 	await sendGrid.sendEmailTemplate(recipients, templateName, parameters)
 }

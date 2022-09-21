@@ -105,7 +105,8 @@ func sendEmailContent(recipients as vector<EmailUser>, content as vector<EmailCo
 	var vrecipients = assert groupRecipients(recipients)
 	foreach rctps in vrecipients {
 		var personalizations = new Personalization()
-		personalizations.addObjectToVectorField("to", rctps)
+		foreach rctp in rctps:
+			personalizations.addObjectToVectorField("to", rctp)
 		body.addObjectToVectorField("personalizations", personalizations)
 		await doSendEmail(body)
 		body.personalizations = null
@@ -129,7 +130,8 @@ func sendEmailTemplate(recipients as vector<EmailUser>, templateName as string, 
 	var vrecipients = assert groupRecipients(recipients)
 	foreach rctps in vrecipients {
 		var personalizations = new Personalization()
-		personalizations.addObjectToVectorField("to", rctps)
+		foreach rctp in rctps:
+			personalizations.addObjectToVectorField("to", rctp)
 		personalizations.addObjectToVectorField("dynamic_template_data", parameters)
 		body.addObjectToVectorField("personalizations", personalizations)
 		await doSendEmail(body)
@@ -176,5 +178,5 @@ func doSendEmail(body as EmailBody) async
 	var resp = await request("POST", baseUrl .. "/v3/mail/send", headers, String.toUTF8Buffer(body.toString()))
 	var statusCode = resp.statusCode
 	if statusCode != "202":
-		Error.throw(statusCode, resp.statusMessage)
+		Error.throw(statusCode, resp.getBodyAsString())
 }
