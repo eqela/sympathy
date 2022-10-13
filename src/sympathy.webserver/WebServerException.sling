@@ -22,28 +22,18 @@
  * SOFTWARE.
  */
 
-import jk.log
+class is Exception is StringObject:
 
-class:
+func forNotFound static as this:
+    return new this() { httpStatus 404 }
 
-prop handler as function<promise,WebServerRequest,function<promise>>
-prop server as WebServer
+func forBadRequest static as this:
+    return new this() { httpStatus 400 }
 
-prop ctx as LoggingContext
-{
-	get {
-		if server:
-			return server.ctx
-		return null
-	}
-}
+func forInternalServerError static as this:
+    return new this() { httpStatus 500 }
 
-func initializeMiddleware(server as WebServer) async virtual:
-	nop
+prop httpStatus as int
 
-func handleRequest(request as WebServerRequest, next as function<promise>) async virtual
-{
-	var hh = handler
-	if hh:
-		await hh(request, next)
-}
+func toString as string:
+    return "httpError:" .. String.forInteger(httpStatus)

@@ -28,6 +28,12 @@ class is WebServerMiddleware:
 
 var routes = new map<string,function<promise,WebServerRequest,DynamicMap>>
 
+ctor:
+	initializeRoutes()
+
+func initializeRoutes virtual:
+	nop
+
 func addHealthCheckRoute
 {
 	addRoute("GET", "/health", func(req as WebServerRequest, vars as DynamicMap) async {
@@ -35,6 +41,9 @@ func addHealthCheckRoute
 		await req.endResponse()
 	})
 }
+
+func deleteAllRoutes:
+	Map.clear(routes)
 
 func addRoute(method as string, pattern as string, handler as function<promise,WebServerRequest,DynamicMap>)
 {
@@ -100,9 +109,20 @@ func handleRequest(request as WebServerRequest, next as function<promise>) async
 		if handler {
 			if not matchVars:
 				matchVars = new DynamicMap()
-			request.setResponseStatus(200)
-			await handler(request, matchVars)
-			return
+			var wasFound = true
+			try {
+				await handler(request, matchVars)
+			}
+			catch e {
+				if e is WebServerException && (e as! WebServerException).httpStatus == 404 {
+					wasFound = false
+				}
+				else {
+					throw e
+				}
+			}
+			if wasFound:
+				return
 		}
 	}
 	await next()

@@ -27,6 +27,7 @@ import jk.log
 class abstract:
 
 prop ctx as LoggingContext
+prop errorHandler as function<void,WebServerRequest,dynamic>
 
 ctor:
 	initialize()
@@ -56,6 +57,29 @@ func useFunction(function as function<promise,WebServerRequest,function<promise>
 	use(new WebServerMiddleware() {
 		handler function
 	})
+}
+
+func asHttpErrorCode(error as dynamic) as int
+{
+	if error == null:
+		return 500
+	var wse = error as WebServerException
+	if wse == null:
+		return 500
+	return wse.httpStatus
+}
+
+func handleError(req as WebServerRequest, error as dynamic) virtual
+{
+	var handler = errorHandler
+	if handler {
+		handler(req, error)
+	}
+	else {
+		Log.error(ctx, String.asString(error))
+		req.setResponseStatus(asHttpErrorCode(error))
+		req.endResponse()
+	}
 }
 
 func use(middleware as WebServerMiddleware) abstract

@@ -27,7 +27,7 @@ import jk.nodejs
 
 class is WebServer:
 
-class WebServerRequestForNodejs is WebServerRequest
+class WebServerRequestForNodejs public is WebServerRequest
 {
 	prop req as dynamic
 	prop res as dynamic
@@ -168,11 +168,15 @@ func initialize override
 				await mw.handleRequest(rq, nextf)
 			}
 			else {
-				res.writeHead(404)
-				res.end()
+				throw WebServerException.forNotFound()
 			}
 		}
-		await nextf()
+		try {
+			await nextf()
+		}
+		catch e {
+			handleError(rq, e)
+		}
 	})
 }
 
@@ -181,6 +185,7 @@ func use(middleware as WebServerMiddleware) override
 	if middleware {
 		middleware.server = this
 		middlewares += middleware
+		middleware.initializeMiddleware(this)
 	}
 }
 

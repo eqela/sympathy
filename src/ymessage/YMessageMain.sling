@@ -90,8 +90,22 @@ prop smsProvider as SmsProvider
 prop notificationProvider as SympathyNotificationProvider
 
 var defaultLanguage = ServerConfig.accept("DEFAULT_LANGUAGE")
-var defaultSenderAddress = ServerConfig.accept("DEFAULT_SENDER_ADDRESS")
-var defaultSenderName = ServerConfig.accept("DEFAULT_SENDER_NAME")
+
+model NotificationCreateModel
+{
+	title as string
+	message as string
+	actorId as string
+	entityType as string
+	entityId as string
+	messageData as DynamicMap
+}
+
+model NotificationRecipient
+{
+	userId as string
+	gcmId as string
+}
 
 ctor:
 	initializeFunctions()
@@ -246,6 +260,62 @@ func sendEmailContent(recipients as EmailRecipients, content as EmailContent) as
 	return null
 }
 
+func sendNotification(recipients as DynamicVector, notificationData as NotificationCreateModel) async as dynamic
+{
+	if not notificationData:
+		Error.throw("invalidNotificationData", notificationData)
+	var entityType = notificationData.entityType
+	if not entityType:
+		Error.throw("noEnityType", null)
+	var entityId = notificationData.entityId
+	if String.isEmpty(entityId):
+		Error.throw("noEntityId", null)
+	var actorId = notificationData.actorId
+	if String.isEmpty(actorId):
+		Error.throw("noActorId", null)
+	if not recipients:
+		Error.throw("noRecipients", null)
+	var notifRecipients = new DynamicMap
+	foreach recipient in recipients.toVectorOfDynamicMaps() {
+		var nr = NotificationRecipient.forData(recipient)
+		notifRecipients.setString(nr.userId, nr.gcmId)
+	}
+	await doCreateAndSendNotification(notifRecipients, notificationData)
+	return null
+}
+
+func doCreateAndSendNotification(recipients as DynamicMap, notification as NotificationCreateModel) async
+{
+	assert notificationProvider
+	assert recipients
+	assert notification
+	assert recipients && recipients.getCount() > 0
+	recipients.remove(notification.actorId)
+	assert recipients.getCount() > 0
+	var notificationId = await database.createNotification(SympathyMessageDatabase.NotificationModel.forData(notification.toDynamicMap()), recipients.getKeys())
+	assert String.isNotEmpty(notificationId)
+	var notifications = await database.fetchNotificationsForNotificationId(notificationId)
+	var unreadCountMap = await database.getUnreadNotificationCountForNotificationIdAsMap(notificationId)
+	assert unreadCountMap
+	assert notifications && sizeof notifications > 0
+	foreach notification in notifications {
+		var data = new DynamicMap()
+		data.setString("title", notification.title)
+		data.setString("notificationId", notification.notificationId)
+		data.setObject("messageData", notification.messageData)
+		data.setString("recipientId", notification.recipientId)
+		data.setString("body", notification.message)
+		data.setInteger("badge", unreadCountMap.getInteger(notification.recipientId))
+		var fcmTokens = new DynamicVector()
+		fcmTokens.appendString(recipients.getString(notification.recipientId))
+		data.setString("entityType", notification.entityType)
+		data.setString("entityId", notification.entityId)
+		data.setObject("badgeMap", await database.getUnreadNotificationCountAsMap(notification.recipientId))
+		Log.debug(ctx, "FirebaseCloudMessaging notification component: '" .. JSONEncoder.encode(data) .. "'")
+		await notificationProvider.send(fcmTokens, data)
+	}
+}
+
 func initializeFunctions private
 {
 	addFunction("setUserCommunicationPreferences", func(params as DynamicMap) async as dynamic {
@@ -323,22 +393,51 @@ func initializeFunctions private
 		return null
 	})
 	addFunction("sendNotification", func(params as DynamicMap) async as dynamic {
-		var recipients = params.getVector("recipients")
+		if !params:
+			Error.throw("invalidParams", null)
+		var recipients = params.getDynamicVector("recipients")
 		var notificationData = params.getDynamicMap("notificationData")
-		await sendNotification(recipients, notificationData)
+		await sendNotification(recipients, NotificationCreateModel.forData(notificationData))
 		return null
 	})
-}
-
-func sendNotification(rcpts as object, notificationData as object) async
-{
-	if not rcpts:
-		Error.throw("noRecipients", null)
-	if not notificationData:
-		Error.throw("noNotificationData", null)
-	if not notificationProvider:
-		Error.throw("noNotificationProvider", null, StackTrace.generate())
-	await notificationProvider.send(rcpts, notificationData)
+	addFunction("updateNotificationAsReadByEntityType", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		await database.updateNotificationAsReadByEntityType(params.getString("entityType"), params.getString("recipientId"))
+		return null
+	})
+	addFunction("updateNotificationAsReadByEntityTypes", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		await database.updateNotificationAsReadByEntityTypes(params.getDynamicVector("entityTypes").toVectorOfStrings(), params.getString("recipientId"))
+		return null
+	})
+	addFunction("updateNotificationAsRead", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		await database.updateNotificationAsRead(params.getString("notificationId"), params.getString("recipientId"))
+		return null
+	})
+	addFunction("getUnreadNotificationCountAsMap", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.getUnreadNotificationCountAsMap(params.getString("recipientId"))
+	})
+	addFunction("getNotificationsForUser", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.fetchNotificationsForRecipientId(params.getString("userId"), params.getInteger("page"), params.getInteger("limit"))
+	})
+	addFunction("getUnreadNotificationsForUser", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return await database.fetchUnreadNotificationsForRecipientId(params.getString("userId"), params.getInteger("page"), params.getInteger("limit"))
+	})
+	addFunction("getUnreadNotificationCountForUser", func(params as DynamicMap) async as dynamic {
+		if !params:
+			Error.throw("invalidParams", null)
+		return Integer.asObject(await database.getUnreadNotificationCount(params.getString("userId")))
+	})
 }
 
 func sendMessage(recipient as string, message as object) async:

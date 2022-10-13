@@ -33,8 +33,12 @@ class is ApplicationDatabase:
 
 const TABLE_USER_COMMUNICATION_PREFERENCE = "user_communication_preference"
 const TABLE_EMAIL_VERIFICATION = "email_verification"
+const NOTIFICATIONS = "notifications"
+const NOTIFICATION_RECIPIENTS = "notification_recipients"
 const MAIL_COMMUNICATION_PREFERENCE = "mail"
 const EMAIL_COMMUNICATION_PREFERENCE = "email"
+const STATUS_READ = 0
+const STATUS_UNREAD = 1
 
 model EmailVerification
 {
@@ -50,10 +54,55 @@ model UserCommunicationPreferences
 	enableMarketingChannels as string[]
 }
 
+model NotificationModel
+{
+	notificationId as string #key
+	title as string
+	message as string
+	actorId as string #index
+	entityType as string #index
+	entityId as string #index
+	messageData as DynamicMap
+	timeStamp as long
+}
+
+model NotificationRecipientModel
+{
+	notificationId as string #index
+	recipientId as string #index
+	status as int #index
+	timeStamp as long
+}
+
+model NotificationDetail public
+{
+	notificationId as string
+	recipientId as string
+	title as string
+	message as string
+	actorId as string
+	entityType as string
+	entityId as string
+	messageData as DynamicMap
+	status as int
+	timeStamp as long
+}
+
+model NotificationList public
+{
+	notifications as NotificationDetail[]
+	unread as int
+	recordCount as int
+	pageCount as int
+	offset as int
+}
+
 func getTableDefinitions(tables as vector<SQLTableInfo>) override
 {
 	tables += SQLTableInfo.forDynamicModel(TABLE_USER_COMMUNICATION_PREFERENCE, new UserCommunicationPreferences())
 	tables += SQLTableInfo.forDynamicModel(TABLE_EMAIL_VERIFICATION, new EmailVerification())
+	tables += SQLTableInfo.forDynamicModel(NOTIFICATIONS, new NotificationModel())
+	tables += SQLTableInfo.forDynamicModel(NOTIFICATION_RECIPIENTS, new NotificationRecipientModel())
 }
 
 func generateCode(length as int, allDigits as bool, allCaps as bool) as string
@@ -141,4 +190,235 @@ func deleteUserCommunicationPreferences(userId as string) async as bool
 	var criteria = new DynamicMap()
 	criteria.setString("userId", userId)
 	return await db.executeStatement(await db.prepareDeleteStatement(TABLE_USER_COMMUNICATION_PREFERENCE, criteria))
+}
+
+func createNotification(notification as NotificationModel, recipientIds as vector<string>) async as string
+{
+	assert notification
+	var notificationId = UniqueHash.generate()
+	assert String.isNotEmpty(notificationId):
+		Error.throw("emptyNotificationId", null)
+	var now = SystemClock.asUTCSeconds()
+	notification.notificationId = notificationId
+	notification.timeStamp = now
+	if not await db.executeStatement(await db.prepareInsertStatement(NOTIFICATIONS, notification.toDynamicMap())):
+		Error.throw("failedToInsert", null)
+	var sb = new StringBuilder()
+	sb.appendString("INSERT INTO " .. NOTIFICATION_RECIPIENTS .. " (" .. db.prepareColumnName("notificationId") .. ", " .. db.prepareColumnName("recipientId") .. ", " .. db.prepareColumnName("status") .. ", " .. db.prepareColumnName("timeStamp") .. ") VALUES ")
+	var first = true
+	foreach recipientId in recipientIds {
+		if not first:
+			sb.appendString(", ")
+		first = false
+		sb.appendString("(?, ?, ?, ?)")
+	}
+	sb.appendString(";")
+	var stmt = assert await db.prepareStatement(sb.toString()):
+	   Error.throw("internalError", null)
+	foreach recipientId in recipientIds {
+		stmt.addParamString(notificationId)
+		stmt.addParamString(recipientId)
+		stmt.addParamInteger(STATUS_UNREAD)
+		stmt.addParamLongInteger(now)
+	}
+	if not await db.executeStatement(stmt):
+		Error.throw("failedToInsert", null)
+	return notificationId
+}
+
+func getUnreadNotificationCountForNotificationIdAsMap(notificationId as string) async as DynamicMap
+{
+	var itr = assert await db.executeQueryStatement((await db.prepareStatement("SELECT count(*) AS unread, " ..  db.prepareColumnName("recipientId") .. " FROM " .. NOTIFICATION_RECIPIENTS .. " WHERE " ..  db.prepareColumnName("status") .. " = ? AND " ..  db.prepareColumnName("recipientId") .. " IN (SELECT " ..  db.prepareColumnName("recipientId") .. " FROM " .. NOTIFICATION_RECIPIENTS .. " WHERE " ..  db.prepareColumnName("notificationId") .. " = ?) GROUP BY " ..  db.prepareColumnName("recipientId") .. ";")).addParamInteger(STATUS_UNREAD).addParamString(notificationId))
+	var v = new DynamicMap()
+	loop {
+		var o = itr.next()
+		if not o:
+			break
+		v.setInteger(o.getString("recipientId"), o.getInteger("unread"))
+	}
+	return v
+}
+
+func fetchNotificationsForNotificationId(notificationId as string) async as vector<NotificationDetail>
+{
+	var crit = new NotificationModel()
+	crit.notificationId = notificationId
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(NOTIFICATIONS, crit.toDynamicMap())):
+		Error.throw("invalidNotificationId", null)
+	var itr = assert await db.executeQueryStatement((await db.prepareStatement("SELECT * FROM " .. NOTIFICATION_RECIPIENTS .. " INNER JOIN " .. NOTIFICATIONS .. " ON " .. NOTIFICATION_RECIPIENTS .. "." ..  db.prepareColumnName("notificationId") .. " = " .. NOTIFICATIONS .. "." ..  db.prepareColumnName("notificationId") .. " WHERE " .. NOTIFICATION_RECIPIENTS .. "." ..  db.prepareColumnName("notificationId") .. " = ?;")).addParamString(notificationId)):
+		Error.throw("internalError", null)
+	var list = new vector<NotificationDetail>
+	loop {
+		var o = itr.next()
+		if not o:
+			break
+		var n = new NotificationDetail()
+		n.notificationId = o.getString("notificationId")
+		n.recipientId = o.getString("recipientId")
+		n.actorId = o.getString("actorId")
+		n.entityType = o.getString("entityType")
+		n.title = o.getString("title")
+		n.message = o.getString("message")
+		n.entityId = o.getString("entityId")
+		n.timeStamp = o.getLongInteger("timeStamp")
+		n.messageData = o.getDynamicMap("messageData")
+		n.status = o.getInteger("status")
+		list += n
+	}
+	return list
+}
+
+func updateNotificationAsRead(notificationId as string, recipientId as string) async
+{
+	assert String.isNotEmpty(notificationId):
+		Error.throw("noNotificationId", null)
+	assert String.isNotEmpty(recipientId):
+		Error.throw("noRecipientId", null)
+	var rcpt = new NotificationRecipientModel()
+	rcpt.status = STATUS_READ
+	var crit = new NotificationRecipientModel()
+	crit.notificationId = notificationId
+	crit.recipientId = recipientId
+	if not await db.executeStatement(await db.prepareUpdateStatement(NOTIFICATION_RECIPIENTS, crit.toDynamicMap(), rcpt.toDynamicMap())):
+		Error.throw("internalError", null)
+}
+
+func updateNotificationAsReadByEntityType(entityType as string, recipientId as string) async
+{
+	var entityTypes = new vector<string>
+	entityTypes += entityType
+	await updateNotificationAsReadByEntityTypes(entityTypes, recipientId)
+}
+
+func updateNotificationAsReadByEntityTypes(entityTypes as vector<string>, recipientId as string) async
+{
+	assert String.isNotEmpty(recipientId):
+		Error.throw("noRecipientId", null)
+	assert entityTypes && sizeof entityTypes > 0
+	var sb = new StringBuilder()
+	sb.appendString("UPDATE " .. NOTIFICATION_RECIPIENTS .. " SET " ..  db.prepareColumnName("status") .. " = ? WHERE " ..  db.prepareColumnName("recipientId") .. " = ? AND " ..  db.prepareColumnName("notificationId") .. " IN (SELECT " ..  db.prepareColumnName("notificationId") .. " FROM " .. NOTIFICATIONS .. " WHERE " ..  db.prepareColumnName("entityType") .. " IN (")
+	var first = true
+	for(var i = 0; i < sizeof entityTypes; i++) {
+		if not first:
+			sb.appendString(", ")
+		first = false
+		sb.appendString("?")
+	}
+	sb.appendString("));")
+	var stmt = assert await db.prepareStatement(sb.toString()):
+		Error.throw("internalError", null)
+	stmt.addParamInteger(STATUS_READ)
+	stmt.addParamString(recipientId)
+	foreach entityType in entityTypes:
+		stmt.addParamString(entityType)
+	if not await db.executeQueryStatement(stmt):
+		Error.throw("internalError", null)
+}
+
+func getUnreadNotificationCount(recipientId as string) async as int
+{
+	var v = assert await db.executeSingleRowQueryStatement((await db.prepareStatement("SELECT COUNT(" .. NOTIFICATIONS .. "." ..  db.prepareColumnName("notificationId") .. ") AS size FROM " .. NOTIFICATION_RECIPIENTS .. " INNER JOIN " .. NOTIFICATIONS .. " ON " .. NOTIFICATION_RECIPIENTS .. "." ..  db.prepareColumnName("notificationId") .. " = " .. NOTIFICATIONS .. "." ..  db.prepareColumnName("notificationId") .. " WHERE " ..  db.prepareColumnName("recipientId") .. " = ? AND " ..  db.prepareColumnName("status") .. " = ?;")).addParamString(recipientId).addParamInteger(STATUS_UNREAD))
+	return v.getInteger("size")
+}
+
+func getUnreadNotificationCountAsMap(recipientId as string) async as DynamicMap
+{
+	var itr = assert await db.executeQueryStatement((await db.prepareStatement("SELECT COUNT(" .. NOTIFICATIONS .. "." ..  db.prepareColumnName("notificationId") .. ") AS size, " ..  db.prepareColumnName("entityType") .. " FROM " .. NOTIFICATION_RECIPIENTS .. " INNER JOIN " .. NOTIFICATIONS .. " ON " .. NOTIFICATION_RECIPIENTS .. "." ..  db.prepareColumnName("notificationId") .. " = " .. NOTIFICATIONS .. "." ..  db.prepareColumnName("notificationId") .. " WHERE " ..  db.prepareColumnName("recipientId") .. " = ? AND " ..  db.prepareColumnName("status") .. " = ? GROUP BY " ..  db.prepareColumnName("entityType") .. ";")).addParamString(recipientId).addParamInteger(STATUS_UNREAD))
+	var v = new DynamicMap()
+	loop {
+		var o = itr.next()
+		if not o:
+			break
+		v.setInteger(o.getString("entityType"), o.getInteger("size"))
+	}
+	return v
+}
+
+func fetchNotificationsForRecipientId(recipientId as string, page as int, recordPerPage as int) async as NotificationList
+{
+	var offset = page - 1
+	if offset < 0:
+		offset = 0
+	var limit = recordPerPage
+	if limit < 1:
+		limit = 10
+	var recordCount = await getUnreadNotificationCount(recipientId)
+	var pageCount = recordCount / limit
+	if recordCount % limit > 0:
+		pageCount++
+	if pageCount < 1:
+		pageCount = 1
+	if recordCount < 1:
+		return null
+	var itr = assert await db.executeQueryStatement((await db.prepareStatement("SELECT * FROM " .. NOTIFICATION_RECIPIENTS .. " INNER JOIN " .. NOTIFICATIONS .. " ON " .. NOTIFICATION_RECIPIENTS .. "." ..  db.prepareColumnName("notificationId") .. " = " .. NOTIFICATIONS .. "." ..  db.prepareColumnName("notificationId") .. " WHERE " ..  db.prepareColumnName("recipientId") .. " = ? ORDER BY " .. NOTIFICATION_RECIPIENTS .. "." ..  db.prepareColumnName("timeStamp") .. " DESC LIMIT ? OFFSET ?;")).addParamString(recipientId).addParamInteger(limit).addParamInteger(offset * limit)):
+		Error.throw("internalError", null)
+	var nl = new NotificationList()
+	var unread = 0
+	loop {
+		var o = itr.next()
+		if not o:
+			break
+		var n = new NotificationDetail()
+		n.notificationId = o.getString("notificationId")
+		n.recipientId = o.getString("recipientId")
+		n.title = o.getString("title")
+		n.message = o.getString("message")
+		n.actorId = o.getString("actorId")
+		n.entityType = o.getString("entityType")
+		n.entityId = o.getString("entityId")
+		n.timeStamp = o.getLongInteger("timeStamp")
+		n.messageData = o.getDynamicMap("messageData")
+		n.status = o.getInteger("status")
+		if n.status == STATUS_UNREAD:
+			unread ++
+		nl.addObjectToVectorField("notifications", n)
+	}
+	nl.unread = unread
+	nl.recordCount = recordCount
+	nl.pageCount = pageCount
+	nl.offset = offset + 1
+	return nl
+}
+
+func fetchUnreadNotificationsForRecipientId(recipientId as string, page as int, recordPerPage as int) async as NotificationList
+{
+	var offset = page - 1
+	if offset < 0:
+		offset = 0
+	var limit = recordPerPage
+	if limit < 1:
+		limit = 10
+	var recordCount = await getUnreadNotificationCount(recipientId)
+	var pageCount = recordCount / limit
+	if recordCount % limit > 0:
+		pageCount++
+	if pageCount < 1:
+		pageCount = 1
+	var list = new vector<NotificationDetail>
+	if recordCount < 1:
+		return null
+	var itr = assert await db.executeQueryStatement((await db.prepareStatement("SELECT * FROM " .. NOTIFICATION_RECIPIENTS .. " INNER JOIN " .. NOTIFICATIONS .. " ON " .. NOTIFICATION_RECIPIENTS .. "." ..  db.prepareColumnName("notificationId") .. " = " .. NOTIFICATIONS .. "." ..  db.prepareColumnName("notificationId") .. " WHERE " ..  db.prepareColumnName("recipientId") .. " = ? AND " ..  db.prepareColumnName("status") .. " = ? ORDER BY " .. NOTIFICATION_RECIPIENTS .. "." ..  db.prepareColumnName("timeStamp") .. " DESC LIMIT ? OFFSET ?;")).addParamString(recipientId).addParamInteger(STATUS_UNREAD).addParamInteger(limit).addParamInteger(offset * limit)):
+		Error.throw("internalError", null)
+	var nl = new NotificationList()
+	loop {
+		var o = itr.next()
+		if not o:
+			break
+		var n = new NotificationDetail()
+		n.notificationId = o.getString("notificationId")
+		n.recipientId = o.getString("recipientId")
+		n.title = o.getString("title")
+		n.message = o.getString("message")
+		n.actorId = o.getString("actorId")
+		n.entityType = o.getString("entityType")
+		n.entityId = o.getString("entityId")
+		n.timeStamp = o.getLongInteger("timeStamp")
+		n.messageData = o.getDynamicMap("messageData")
+		n.status = o.getInteger("status")
+		nl.addObjectToVectorField("notifications", n)
+	}
+	nl.recordCount = recordCount
+	nl.pageCount = pageCount
+	nl.offset = offset + 1
+	return nl
 }

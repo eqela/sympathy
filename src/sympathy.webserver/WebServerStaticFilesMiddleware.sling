@@ -1,0 +1,336 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2022 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.fs
+import jk.log
+import jk.md5
+import jk.url
+import jk.text
+import jk.mime
+import jk.template
+import jk.time.format
+
+class is WebServerMiddleware:
+
+func forDirectory(dir as File) static as this
+{
+	var v = new this()
+	v.directory = dir
+	return v
+}
+
+prop directory as File
+prop urlPrefix as string
+prop listDirectories as bool = false
+prop maxAge as int = 0
+prop serverUrl as string
+prop serverName as string
+prop processTemplateFiles as bool = false
+prop templateIncludeDirs as vector<File>
+prop templateData as DynamicMap
+prop indexFiles as vector<string>
+
+func getFileForUrlPath(path as string) as File
+{
+	assert directory
+	var prefix = urlPrefix
+	if String.isNotEmpty(prefix) {
+		if String.startsWith(prefix, "/") == false:
+			prefix = "/" .. prefix
+		if String.endsWith(prefix, "/") == false:
+			prefix = prefix .. "/"
+	}
+	else {
+		prefix = "/"
+	}
+	if String.startsWith(path, prefix) == false:
+		return null
+	var rpath = String.getEndOfString(path, String.getLength(prefix))
+	var dd = directory
+	foreach comp in String.split(rpath, '/') {
+		var cc = URLDecoder.decode(comp)
+		if String.isNotEmpty(cc):
+			dd = dd.entry(cc)
+	}
+	return dd
+}
+
+func getDirectoryEntries(dir as File, allEntries as vector<string>, dirs as vector<string>, files as vector<string>)
+{
+	assert dir
+	var entries as Iterator<File> #force = dir.entries()
+	while entries {
+		var entry = entries.next()
+		if entry == null:
+			break
+		var name = entry.getBasename()
+		if dirs && entry.isDirectory():
+			dirs += name
+		if files && entry.isFile():
+			files += name
+		if allEntries:
+			allEntries += name
+	}
+}
+
+func directoryToHtml(dir as File) as string
+{
+	assert dir
+	var sb = new StringBuilder()
+	sb.appendString("<html>\n")
+	sb.appendString("<head>\n")
+	sb.appendString("<title>")
+	sb.appendString(dir.getBasename())
+	sb.appendString("</title>\n")
+	sb.appendString("<style>\n")
+	sb.appendString("* { font-face: arial; font-size: 12px; }\n")
+	sb.appendString("h1 { font-face: arial; font-size: 14px; font-style: bold; border-bottom: solid 1px black; padding: 4px; margin: 4px}\n")
+	sb.appendString("#content a { text-decoration: none; color: #000080; }\n")
+	sb.appendString("#content a:hover { text-decoration: none; color: #FFFFFF; font-weight: bold; }\n")
+	sb.appendString(".entry { padding: 4px; }\n")
+	sb.appendString(".entry:hover { background-color: #AAAACC; }\n")
+	sb.appendString(".dir { font-weight: bold; }\n")
+	sb.appendString(".even { background-color: #DDDDDD; }\n")
+	sb.appendString(".odd { background-color: #EEEEEE; }\n")
+	sb.appendString("#footer { border-top: 1px solid black; padding: 4px; margin: 4px; font-size: 10px; text-align: right; }\n")
+	sb.appendString("#footer a { font-size: 10px; text-decoration: none; color: #000000; }\n")
+	sb.appendString("#footer a:hover { font-size: 10px; text-decoration: underline; color: #000000; }\n")
+	sb.appendString("</style>\n")
+	sb.appendString("<meta name=\"viewport\" content=\"initial-scale=1,maximum-scale=1\" />\n")
+	sb.appendString("</head>\n")
+	sb.appendString("<body>\n")
+	sb.appendString("<h1>")
+	sb.appendString(dir.getBasename())
+	sb.appendString("</h1>\n")
+	sb.appendString("<div id=\"content\">\n")
+	var dirs = new vector<string>
+	var files = new vector<string>
+	getDirectoryEntries(dir, null, dirs, files)
+	Vector.sortAsStrings(dirs)
+	Vector.sortAsStrings(files)
+	var n = 0
+	foreach dn in dirs {
+		var cc as string
+		if n % 2 == 0 {
+			cc = "even"
+		}
+		else {
+			cc = "odd"
+		}
+		sb.appendString("<a href=\"")
+		sb.appendString(dn)
+		sb.appendString("/\"><div class=\"entry dir ")
+		sb.appendString(cc)
+		sb.appendString("\">")
+		sb.appendString(dn)
+		sb.appendString("/</div></a>\n")
+		n++
+	}
+	foreach fn in files {
+		var cc as string
+		if n % 2 == 0 {
+			cc = "even"
+		}
+		else {
+			cc = "odd"
+		}
+		sb.appendString("<a href=\"")
+		sb.appendString(fn)
+		sb.appendString("\"><div class=\"entry ")
+		sb.appendString(cc)
+		sb.appendString("\">")
+		sb.appendString(fn)
+		sb.appendString("</div></a>\n")
+		n++
+	}
+	sb.appendString("</div>\n")
+	sb.appendString("<div id=\"footer\">")
+	if String.isEmpty(serverName) == false {
+		if String.isEmpty(serverUrl) == false {
+			sb.appendString("Generated by <a href=\"")
+			if String.contains(serverUrl, "://") == false:
+				sb.appendString("http://")
+			sb.appendString(serverUrl)
+			sb.appendString("\">")
+			sb.appendString(serverName)
+			sb.appendString("</a>\n")
+		}
+		else {
+			sb.appendString("Generated by ")
+			sb.appendString(serverName)
+			sb.appendString("\n")
+		}
+	}
+	sb.appendString("</div>\n")
+	sb.appendString("</body>\n")
+	sb.appendString("</html>\n")
+	return sb.toString()
+}
+
+func startResponse(request as WebServerRequest, contentType as string)
+{
+	request.setResponseStatus(200)
+	request.setResponseHeader("Content-Type", contentType)
+	if maxAge > 0 {
+		request.setResponseHeader("Cache-Control", "max-age=" .. String.forInteger(maxAge))
+	}
+	else {
+		request.setResponseHeader("Cache-Control", "no-cache")
+	}
+}
+
+func handleRequest(request as WebServerRequest, next as function<promise>) async override
+{
+	var method = String.toUpperCase(request.getMethod())
+	if method == "GET" || method == "HEAD" {
+		var url = URL.forString(request.getPath(), true)
+		var path = url.getPath()
+		var file = getFileForUrlPath(path)
+		if file && file.isDirectory() {
+			foreach indexFile in indexFiles {
+				var ff = file.entry(indexFile)
+				if ff.isFile() {
+					file = ff
+					break
+				}
+			}
+		}
+		if file && file.isDirectory() && listDirectories {
+			if String.endsWith(path, "/") == false {
+				url.setPath(path .. "/")
+				var location = url.toString()
+				request.setResponseStatus(303)
+				request.setResponseHeader("Location", location)
+				await request.writeResponseData(String.toUTF8Buffer(location))
+				await request.endResponse()
+				return
+			}
+			startResponse(request, "text/html")
+			if method == "GET":
+				await request.writeResponseData(String.toUTF8Buffer(directoryToHtml(file)))
+			await request.endResponse()
+			return
+		}
+		if file && file.isFile() {
+			var content as buffer
+			var contentType as string
+			var etag as string
+			if processTemplateFiles {
+				var bn = file.getBasename()
+				var isJSONTemplate = false
+				var isHTMLTemplate = false
+				var isCSSTemplate = false
+				if String.endsWith(bn, ".html.t") {
+					isHTMLTemplate = true
+				}
+				else if String.endsWith(bn, ".css.t") {
+					isCSSTemplate = true
+				}
+				else if String.endsWith(bn, ".json.t") {
+					isJSONTemplate = true
+				}
+				if isHTMLTemplate || isCSSTemplate || isJSONTemplate {
+					var data = file.getContentsUTF8()
+					if data == null {
+						Log.error(ctx, "Failed to read template file content: `" .. file.getPath() .. "'")
+						throw WebServerException.forInternalServerError()
+					}
+					var includeDirs = new vector<File>
+					includeDirs += file.getParent()
+					foreach dir in templateIncludeDirs:
+						includeDirs += dir
+					var tt as TextTemplate
+					if isHTMLTemplate || isCSSTemplate {
+						tt = TextTemplate.forHTMLString(data, includeDirs, null, ctx)
+					}
+					else {
+						tt = TextTemplate.forJSONString(data, includeDirs, null, ctx)
+					}
+					if tt == null {
+						Log.error(ctx, "Failed to process template file content: `" .. file.getPath() .. "'")
+						throw WebServerException.forInternalServerError()
+					}
+					var tdata = templateData
+					if not tdata:
+						tdata = new DynamicMap()
+					var text = tt.execute(tdata, includeDirs)
+					if text == null {
+						Log.error(ctx, "Failed to execute template: `" .. file.getPath() .. "'")
+						throw WebServerException.forInternalServerError()
+					}
+					content = String.toUTF8Buffer(text)
+					etag = MD5Encoder.encodeBuffer(content)
+					if isHTMLTemplate {
+						contentType = "text/html"
+					}
+					else if isCSSTemplate {
+						contentType = "text/css"
+					}
+					else if isJSONTemplate {
+						contentType = "application/json"
+					}
+					else {
+						contentType = "text/plain"
+					}
+				}
+			}
+			if String.isEmpty(contentType):
+				contentType = MimeTypeRegistry.getSharedInstance().getTypeForFile(file)
+			var lastModified as string
+			var st = file.stat()
+			if st {
+				var lm = st.getModifyTimeUTC()
+				if lm > 0:
+					lastModified = VerboseDateTimeString.forDateTime(DateTime.forSeconds(lm))
+			}
+			if String.isEmpty(etag) && lastModified:
+				etag = MD5Encoder.encodeString(lastModified)
+			startResponse(request, contentType)
+			if lastModified:
+				request.setResponseHeader("Last-Modified", lastModified)
+			if etag:
+				request.setResponseHeader("ETag", etag)
+			if method == "GET" {
+				if content {
+					await request.writeResponseData(content)
+				}
+				else {
+					var buffer = malloc 1024 * 1024
+					var rd = file.read()
+					while rd {
+						var sz = rd.read(buffer)
+						if sz < 1 {
+							rd.close()
+							break
+						}
+						await request.writeResponseData(Buffer.getSubBuffer(buffer, 0, sz))
+					}
+				}
+			}
+			await request.endResponse()
+			return
+		}
+	}
+	await next()
+}
