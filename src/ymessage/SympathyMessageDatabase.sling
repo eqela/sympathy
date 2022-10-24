@@ -145,16 +145,20 @@ func generateVerificationCode(emailAddress as string, userId as string) async as
 	verification.code = generateCode(6, false, true)
 	verification.emailAddress = emailAddress
 	verification.userId = userId
+	var crit = new EmailVerification()
+	crit.emailAddress = emailAddress
+	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_EMAIL_VERIFICATION, crit.toDynamicMap()))
+	if v.getCount() > 0:
+		return EmailVerification.forData(v)
 	assert await db.executeStatement(await db.prepareInsertStatement(TABLE_EMAIL_VERIFICATION, verification.toDynamicMap()))
 	return verification
 }
 
-func verifyCode(emailAddress as string, code as string) async as EmailVerification
+func verifyCode(code as string) async as EmailVerification
 {
-	assert emailAddress
+	assert code
 	var verification = new EmailVerification()
 	verification.code = code
-	verification.emailAddress = emailAddress
 	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_EMAIL_VERIFICATION, verification.toDynamicMap()))
 	assert v.getCount() > 0
 	assert await db.executeStatement(await db.prepareDeleteStatement(TABLE_EMAIL_VERIFICATION, verification.toDynamicMap()))

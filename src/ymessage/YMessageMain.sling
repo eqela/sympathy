@@ -210,13 +210,11 @@ func sendVerificationCode(emailAddress as string, userId as string) async as dyn
 	return verification
 }
 
-func verifyCode(emailAddress as string, code as string) async as dynamic
+func verifyCode(code as string) async as dynamic
 {
-	if !emailAddress:
-		Error.throw("missingEmailAddress", null)
 	if !code:
 		Error.throw("missingCode", null)
-	return await database.verifyCode(emailAddress, code)
+	return await database.verifyCode(code)
 }
 
 func sendEmailTemplate(recipients as EmailRecipients, templateName as string, language as string, parameters as DynamicMap) async as dynamic
@@ -343,7 +341,7 @@ func initializeFunctions private
 	addFunction("verifyCode", func(params as DynamicMap) async as dynamic {
 		if !params:
 			Error.throw("invalidParams", null)
-		return await verifyCode(params.getString("userId"), params.getString("code"))
+		return await verifyCode(params.getString("code"))
 	})
 	addFunction("sendEmailContent", func(params as DynamicMap) async as dynamic {
 		var recipients = validateEmailRecipients(EmailRecipients.forData(params.getDynamicMap("recipients")))
