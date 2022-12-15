@@ -147,8 +147,8 @@ func generateVerificationCode(emailAddress as string, userId as string) async as
 	verification.userId = userId
 	var crit = new EmailVerification()
 	crit.emailAddress = emailAddress
-	var v = assert await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_EMAIL_VERIFICATION, crit.toDynamicMap()))
-	if v.getCount() > 0:
+	var v = await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_EMAIL_VERIFICATION, crit.toDynamicMap()))
+	if v && v.getCount() > 0:
 		return EmailVerification.forData(v)
 	assert await db.executeStatement(await db.prepareInsertStatement(TABLE_EMAIL_VERIFICATION, verification.toDynamicMap()))
 	return verification
@@ -171,12 +171,12 @@ func setUserCommunicationPreferences(preferences as UserCommunicationPreferences
 	var userId = preferences.userId
 	var preferencesData = await db.executeSingleRowQueryStatement(await db.prepareSelectWithCriteriaStatement(TABLE_USER_COMMUNICATION_PREFERENCE, new DynamicMap().setString("userId", userId)))
 	if preferencesData && preferencesData.getCount() > 0 {
-		await db.executeStatement(await db.prepareUpdateStatement(TABLE_USER_COMMUNICATION_PREFERENCE, new DynamicMap().setString("userId", userId), preferences.toDynamicMap()))
+		await db.executeStatement(await db.prepareUpdateStatement(TABLE_USER_COMMUNICATION_PREFERENCE, new DynamicMap().setString("userId", userId), preferences.toFlatDynamicMap()))
 	}
 	else {
-		assert await db.executeStatement(await db.prepareInsertStatement(TABLE_USER_COMMUNICATION_PREFERENCE, preferences.toDynamicMap()))
+		assert await db.executeStatement(await db.prepareInsertStatement(TABLE_USER_COMMUNICATION_PREFERENCE, preferences.toFlatDynamicMap()))
 	}
-	return UserCommunicationPreferences.forData(preferencesData)
+	return preferences
 }
 
 func getUserCommunicationPreferences(userId as string) async as UserCommunicationPreferences

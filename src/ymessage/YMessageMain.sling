@@ -191,6 +191,8 @@ func sendVerificationCode(emailAddress as string, userId as string) async as dyn
 	if !userId:
 		Error.throw("missingUserId", null)
 	var verification = await database.generateVerificationCode(emailAddress, userId)
+	if !verification:
+		Error.throw("nullVerification", null, StackTrace.generate())
 	var emailverificationTemplate = ServerConfig.accept("USER_VERIFICATION_TEMPLATE")
 	var erecipients = new EmailRecipients()
 	var recipient = new EmailUser()
