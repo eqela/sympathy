@@ -1,0 +1,768 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2023 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.fs
+import jk.log
+import jk.env
+import jk.xml
+import jk.json
+import jk.template
+
+class:
+
+class PageLink public
+{
+	prop url as string
+	prop text as string
+}
+
+prop pageLinkResolver as function<promise<PageLink>,string>
+prop attachmentLinkResolver as function<promise<string>,string,string>
+prop imgTagMaker as function<promise<string>,string>
+prop dataTagMaker as function<promise<string>,string,string>
+prop internalLinkTagMaker as function<promise<string>,string,string>
+prop internalLinkBlockMaker as function<promise<string>,string,string>
+prop externalLinkTagMaker as function<promise<string>,string,string>
+prop externalLinkBlockMaker as function<promise<string>,string,string>
+
+func resolvePageLink(pageId as string) async as PageLink
+{
+	var plr = pageLinkResolver
+	if plr:
+		return await plr(pageId)
+	return new PageLink() {
+		url "#"
+		text pageId
+	}
+}
+
+func resolveAttachmentLink(id as string, contentUrl as string) async as string
+{
+	var alr = attachmentLinkResolver
+	if alr:
+		return await alr(id, contentUrl)
+	return id
+}
+
+func createHtmlDataTag(data as string, tag as string) async as string
+{
+	var tm = dataTagMaker
+	if tm {
+		var v = await tm(data, tag)
+		if v:
+			return v
+	}
+	var sb = new StringBuilder()
+	sb.appendCharacter('<')
+	sb.appendString(tag)
+	sb.appendCharacter('>')
+	sb.appendString(data)
+	sb.appendString("</")
+	sb.appendString(tag)
+	sb.appendCharacter('>')
+	return sb.toString()
+}
+
+func createHtmlLinkTag(link as string, label as string) as string
+{
+	var sb = new StringBuilder()
+	sb.appendString("<a href=")
+	sb.appendString(HTMLString.toQuotedString(link))
+	sb.appendString(">")
+	sb.appendString(HTMLString.sanitize(label))
+	sb.appendString("</a>")
+	return sb.toString()
+}
+
+func createInternalLinkTag(url as string, title as string) async as string
+{
+	var maker = internalLinkTagMaker
+	if maker:
+		return maker(url, title)
+	return createHtmlLinkTag(url, title)
+}
+
+func createInternalLinkBlock(url as string, title as string) async as string
+{
+	var maker = internalLinkBlockMaker
+	if maker:
+		return maker(url, title)
+	return "<p>" .. createHtmlLinkTag(url, title) .. "</p>"
+}
+
+func createExternalLinkTag(url as string, title as string) async as string
+{
+	var maker = externalLinkTagMaker
+	if maker:
+		return maker(url, title)
+	return createHtmlLinkTag(url, title)
+}
+
+func createExternalLinkBlock(url as string, title as string) async as string
+{
+	var maker = externalLinkBlockMaker
+	if maker:
+		return maker(url, title)
+	return "<p>" .. createHtmlLinkTag(url, title) .. "</p>"
+}
+
+func createHtmlInput(inputType as string, label as string) as string
+{
+	var sb = new StringBuilder()
+	sb.appendString("<input type=")
+	sb.appendString(HTMLString.toQuotedString(inputType))
+	sb.appendString(" /> ")
+	sb.appendString(label)
+	return sb.toString()
+}
+
+func createHtmlIframe(src as string) as string
+{
+	var sb = new StringBuilder()
+	sb.appendString("<iframe src=")
+	sb.appendString(HTMLString.toQuotedString(src))
+	sb.appendString(">")
+	sb.appendString("</iframe>")
+	return sb.toString()
+}
+
+func createHtmlSingletonTag(tag as string) as string
+{
+	var sb = new StringBuilder()
+	sb.appendCharacter('<')
+	sb.appendString(tag)
+	sb.appendString(" />")
+	return sb.toString()
+}
+
+func applyRichTextAnnotation(richTextVector as vector<NotionClient.RichText>) async as string
+{
+	if not richTextVector:
+		Error.throw("missingParameter", "richTextParameter")
+	var sb = new StringBuilder()
+	var checkVector = new vector<string>
+	foreach r in richTextVector {
+		var annots = r.annotations
+		var appendStr as string
+		var linkUrl as string
+		var isInternalLink as bool
+		var type = r.type
+		if type == "text" {
+			var text = r.text
+			if text {
+				if text.link && text.link.url {
+					linkUrl = text.link.url
+					isInternalLink = false
+				}
+				appendStr = text.content
+			}
+		}
+		else if type == "equation" {
+			if r.equation:
+				appendStr = r.equation.expression
+		}
+		else if type == "mention" {
+			var pageId as string
+			if r.mention && r.mention.page:
+				pageId = r.mention.page.id
+			if pageId {
+				var path as string
+				var title as string
+				var plink = await resolvePageLink(pageId)
+				if plink {
+					path = plink.url
+					title = plink.text
+				}
+				if String.isEmpty(title) {
+					// NOTE: This could be r.plain_text but
+					// it would be confusingly incompatible
+					// with the case int convertLinkToPageBlocksToHtml
+					// where we use pageId. So we use pageId also
+					// here for consistency.
+					title = pageId
+				}
+				if String.isEmpty(path):
+					path = "#"
+				linkUrl = path
+				isInternalLink = true
+				appendStr = title
+			}
+		}
+		if appendStr {
+			var bsb = new StringBuilder()
+			if annots {
+				if annots.bold:
+					bsb.appendString("<b>")
+				if annots.italic:
+					bsb.appendString("<i>")
+				if annots.strikethrough:
+					bsb.appendString("<span class=\"strikethrough\">")
+				if annots.underline:
+					bsb.appendString("<span class=\"underline\">")
+				if annots.code:
+					bsb.appendString("<span class=\"code\">")
+				if annots.color != "default" {
+					var color = annots.color
+					var isBackgroundColor = String.contains(color, "_")
+					var style as string
+					if isBackgroundColor == true {
+						style +=  "background-color:" .. String.split(color, '_')[0] .. ";"
+					}
+					else {
+						style += "color:" .. color .. ";"
+					}
+					bsb.appendString("<span style=\"")
+					bsb.appendString(style)
+					bsb.appendString("\">")
+				}
+			}
+			bsb.appendString(HTMLString.sanitize(appendStr))
+			if annots {
+				if annots.color != "default":
+					bsb.appendString("</span>")
+				if annots.code:
+					bsb.appendString("</span>")
+				if annots.underline:
+					bsb.appendString("</span>")
+				if annots.strikethrough:
+					bsb.appendString("</span>")
+				if annots.italic:
+					bsb.appendString("</i>")
+				if annots.bold:
+					bsb.appendString("</b>")
+			}
+			var text = bsb.toString()
+			if linkUrl {
+				if isInternalLink {
+					sb.appendString(await createInternalLinkTag(linkUrl, text))
+				}
+				else {
+					sb.appendString(await createExternalLinkTag(linkUrl, text))
+				}
+			}
+			else:
+				sb.appendString(text)
+		}
+	}
+	return sb.toString()
+}
+
+func convertTextBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var block = blockItr.next()
+		if not block:
+			break
+		var htmlTag as string
+		var richText as vector<NotionClient.RichText>
+		var blockType = block.type
+		if blockType == "paragraph" {
+			htmlTag = "p"
+			if block.paragraph:
+				richText = block.paragraph.rich_text
+		}
+		else if blockType == "heading_1" {
+			htmlTag = "h1"
+			if block.heading_1:
+				richText = block.heading_1.rich_text
+		}
+		else if blockType == "heading_2" {
+			htmlTag = "h2"
+			if block.heading_2:
+				richText = block.heading_2.rich_text
+		}
+		else if blockType == "heading_3" {
+			htmlTag = "h3"
+			if block.heading_3:
+				richText = block.heading_3.rich_text
+		}
+		if richText {
+			var richTextAnnotation = await applyRichTextAnnotation(richText)
+			if String.isNotEmpty(richTextAnnotation):
+				sb.appendString(await createHtmlDataTag(richTextAnnotation, htmlTag))
+		}
+	}
+	return sb.toString()
+}
+
+func convertBookmarkBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	foreach block in blocks {
+		var bookmark = block.bookmark
+		if not bookmark:
+			continue
+		var url = bookmark.url
+		var text = await applyRichTextAnnotation(bookmark.caption)
+		if String.isEmpty(text):
+			text = url
+		sb.appendString(await createExternalLinkBlock(url, text))
+	}
+	return sb.toString()
+}
+
+func convertCodeBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var block = blockItr.next()
+		if not block:
+			break
+		var code = block.code
+		var richText = code.rich_text
+		var codeCaption = await applyRichTextAnnotation(code.caption)
+		var codeRichTextContent = await applyRichTextAnnotation(richText)
+		sb.appendString(await createHtmlDataTag(codeRichTextContent, "code"))
+		if String.isNotEmpty(codeCaption):
+			sb.appendString(await createHtmlDataTag(codeCaption, "small"))
+	}
+	return sb.toString()
+}
+
+func convertBulletedListBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var block = blockItr.next()
+		if not block:
+			break
+		var bulletedList = block.bulleted_list_item
+		var bulletedListRichTextContent = await applyRichTextAnnotation(bulletedList.rich_text)
+		if String.isNotEmpty(bulletedListRichTextContent) {
+			sb.appendString(await createHtmlDataTag(bulletedListRichTextContent, "li"))
+		}
+	}
+	return await createHtmlDataTag(sb.toString(), "ul")
+}
+
+func convertNumberListBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var block = blockItr.next()
+		if not block:
+			break
+		var numberedList = block.numbered_list_item
+		var numberedListRichTextContent = await applyRichTextAnnotation(numberedList.rich_text)
+		if String.isNotEmpty(numberedListRichTextContent):
+			sb.appendString(await createHtmlDataTag(numberedListRichTextContent, "li"))
+	}
+	return await createHtmlDataTag(sb.toString(), "ol")
+}
+
+func convertQuoteBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var result as string = ""
+		var block = blockItr.next()
+		if not block:
+			break
+		var quote = block.quote
+		var quoteRichTextContent = await applyRichTextAnnotation(quote.rich_text)
+		if String.isNotEmpty(quoteRichTextContent):
+			result = await createHtmlDataTag(quoteRichTextContent, "q")
+		sb.appendString(result)
+	}
+	return sb.toString()
+}
+
+func convertCalloutBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var result as string = ""
+		var block = blockItr.next()
+		if not block:
+			break
+		var callout = block.callout
+		var icon = callout.icon
+		var iconValue = icon.type
+		var calloutRichTextContent = await applyRichTextAnnotation(callout.rich_text)
+		if String.isNotEmpty(iconValue):
+			result = await createHtmlDataTag(iconValue, "i")
+		sb.appendString(await createHtmlDataTag(result .. calloutRichTextContent, "p"))
+	}
+	return sb.toString()
+}
+
+func convertToDoBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var block = blockItr.next()
+		if not block:
+			break
+		var toDo = block.to_do
+		var toDoRichTextContent = await applyRichTextAnnotation(toDo.rich_text)
+		sb.appendString(createHtmlInput("checkbox", toDoRichTextContent))
+	}
+	return sb.toString()
+}
+
+func convertEquationBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	foreach block in blocks {
+		var equation = block.equation
+		if not equation:
+			continue
+		var expression = equation.expression
+		if not expression:
+			continue
+		sb.appendString(await createHtmlDataTag(expression, "pre"))
+	}
+	return sb.toString()
+}
+
+func convertPdfBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	foreach block in blocks {
+		var pdf = block.pdf
+		if not pdf:
+			continue
+		var fileType = pdf.type
+		if fileType == "external" {
+			if pdf.external && pdf.external.url:
+				sb.appendString(createHtmlIframe(pdf.external.url))
+		}
+		if fileType == "file" {
+			if pdf.file && pdf.file.url:
+				sb.appendString(createHtmlIframe(pdf.file.url))
+		}
+	}
+	return sb.toString()
+}
+
+func convertEmbedBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var block = blockItr.next()
+		if not block:
+			break
+		var embed = block.embed
+		var embedCaption = await applyRichTextAnnotation(embed.caption)
+		var url = embed.url
+		sb.appendString(createHtmlIframe(url))
+		if String.isNotEmpty(embedCaption):
+			sb.appendString(await createHtmlDataTag(embedCaption, "small"))
+	}
+	return sb.toString()
+}
+
+func convertMediaBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var block = blockItr.next()
+		if not block:
+			break
+		var blockType = block.type
+		var file as NotionClient.File
+		if blockType == "image":
+			file = block.image
+		else if blockType == "video":
+			file = block.video
+		else if blockType == "file":
+			file = block.file
+		var url as string
+		if file {
+			if file.file:
+				url = file.file.url
+			else if file.external:
+				url = file.external.url
+		}
+		if String.isEmpty(url):
+			continue
+		var text = await applyRichTextAnnotation(file.caption)
+		if String.isEmpty(text):
+			text = url
+		if blockType == "image":
+			sb.appendString(await createHtmlImage(block.id, url))
+		else if blockType == "video":
+			sb.appendString(createHtmlVideoTag(url, text))
+		else if blockType == "file":
+			sb.appendString(await createExternalLinkBlock(url, text))
+	}
+	return sb.toString()
+}
+
+func convertLinkToPageBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var blockItr = Vector.iterate(blocks)
+	loop {
+		var block = blockItr.next()
+		if not block:
+			break
+		var pageLink = block.link_to_page
+		if not pageLink:
+			continue
+		var pageId = pageLink.page_id
+		if String.isEmpty(pageId):
+			continue
+		var path as string
+		var title as string
+		var plink = await resolvePageLink(pageId)
+		if plink {
+			path = plink.url
+			title = plink.text
+		}
+		if String.isEmpty(title):
+			title = pageId
+		if String.isEmpty(path):
+			path = "#"
+		sb.appendString(await createInternalLinkBlock(path, title))
+	}
+	return sb.toString()
+}
+
+func convertTableRowBlocksToHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	sb.appendString("<table>")
+	foreach block in blocks {
+		var row = block.table_row
+		if row {
+			var cells = row.cells
+			sb.appendString("<tr>")
+			foreach cell in cells:
+				sb.appendString(await createHtmlDataTag(await applyRichTextAnnotation(cell), "td"))
+			sb.appendString("</tr>")
+		}
+	}
+	sb.appendString("</table>")
+	return sb.toString()
+}
+
+func blocksListToGroups(blocks as vector<NotionClient.Block>) as vector<NotionClient.BlockGroup>
+{
+	var v = new vector<NotionClient.BlockGroup>
+	var current as NotionClient.BlockGroup
+	foreach block in blocks {
+		var blockType = block.type
+		if not current {
+			current = new NotionClient.BlockGroup() {
+				type blockType
+			}
+		}
+		else if blockType != current.type {
+			v += current
+			current = new NotionClient.BlockGroup() {
+				type blockType
+			}
+		}
+		current.addToBlocks(block)
+	}
+	if current:
+		v += current
+	return v
+}
+
+func blocksToHtml(blocksList as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var groupedBlocks = blocksListToGroups(blocksList)
+	foreach gb in groupedBlocks {
+		var type = gb.type
+		var blocks = gb.blocks
+		if not type:
+			return null
+		if type == "unsupported":
+			sb.appendString("")
+		else if type == "paragraph" || type == "heading_1" || type == "heading_2" || type == "heading_3":
+			sb.appendString(await convertTextBlocksToHtml(blocks))
+		else if type == "bookmark":
+			sb.appendString(await convertBookmarkBlocksToHtml(blocks))
+		else if type == "code":
+			sb.appendString(await convertCodeBlocksToHtml(blocks))
+		else if type == "bulleted_list_item":
+			sb.appendString(await convertBulletedListBlocksToHtml(blocks))
+		else if type == "numbered_list_item":
+			sb.appendString(await convertNumberListBlocksToHtml(blocks))
+		else if type == "quote":
+			sb.appendString(await convertQuoteBlocksToHtml(blocks))
+		else if type == "callout":
+			sb.appendString(await convertCalloutBlocksToHtml(blocks))
+		else if type == "to_do":
+			sb.appendString(await convertToDoBlocksToHtml(blocks))
+		else if type == "equation":
+			sb.appendString(await convertEquationBlocksToHtml(blocks))
+		else if type == "pdf":
+			sb.appendString(await convertPdfBlocksToHtml(blocks))
+		else if type == "embed":
+			sb.appendString(await convertEmbedBlocksToHtml(blocks))
+		else if type == "image" || type == "video" || type == "file":
+			sb.appendString(await convertMediaBlocksToHtml(blocks))
+		else if type == "divider":
+			sb.appendString(createHtmlSingletonTag("hr"))
+		else if type == "link_to_page":
+			sb.appendString(await convertLinkToPageBlocksToHtml(blocks))
+		else if type = "table_row":
+			sb.appendString(await convertTableRowBlocksToHtml(blocks))
+		else:
+			sb.appendString(await createHtmlDataTag("not yet implemented: " .. type, "p"))
+	}
+	return sb.toString()
+}
+
+func createHtmlImage(id as string, contentUrl as string) async as string
+{
+	var url = await resolveAttachmentLink(id, contentUrl)
+	var itm = imgTagMaker
+	if itm:
+		return await itm(url)
+	var sb = new StringBuilder()
+	sb.appendString("<img src=")
+	sb.appendString(HTMLString.toQuotedString(url))
+	sb.appendString(" />")
+	return sb.toString()
+}
+
+func createHtmlVideoTag(src as string, caption as string) as string
+{
+	var sb = new StringBuilder()
+	sb.appendString("<video controls src=")
+	sb.appendString(HTMLString.toQuotedString(src))
+	sb.appendString(">")
+	sb.appendString(caption)
+	sb.appendString("</video>")
+	return sb.toString()
+}
+
+func getPropertyContent(page as NotionClient.PageProperty, name as string) async as string
+{
+	var sb = new StringBuilder()
+	var type = page.type
+	if type == "rich_text" {
+		var r = page.rich_text
+		if r {
+			var richtext = Vector.get(r, 0)
+			if richtext {
+				var content = richtext.plain_text
+				var label = name .. ": " .. content
+				sb.appendString(await createHtmlDataTag(label, "p"))
+			}
+		}
+	}
+	else if type == "date" {
+		var date = page.date
+		if date {
+			var startDate = date.start
+			var endDate = date.end
+			var timeZone = date.time_zone
+			if startDate {
+				var startDateLabel = name .. ": " .. startDate
+				sb.appendString(await createHtmlDataTag(startDateLabel, "p"))
+			}
+			if endDate:
+				sb.appendString(await createHtmlDataTag(endDate, "p"))
+			if timeZone:
+				sb.appendString(await createHtmlDataTag(timeZone, "p"))
+		}
+	}
+	else if type == "checkbox" {
+		var cb = page.checkbox
+		var label = name .. ": " .. String.forBoolean(cb)
+		sb.appendString(await createHtmlDataTag(label, "p"))
+	}
+	else if type == "title" {
+		var t = page.title
+		if t {
+			var tt = Vector.get(t, 0)
+			if tt {
+				var text = tt.text
+				if text {
+					var title = text.content
+					if title {
+						var label = name .. ": " .. title
+						sb.appendString(await createHtmlDataTag(label, "p"))
+					}
+				}
+			}
+		}
+	}
+	else if type == "multi_select" {
+		var m = page.multi_select
+		if m {
+			var size = Vector.getSize(m)
+			var counter as int = 0
+			while counter < size {
+				var item = Vector.get(m, counter)
+				if item {
+					var itemName = item.name
+					var label = name .. ": " .. itemName
+					sb.appendString(await createHtmlDataTag(label, "p"))
+					counter++
+				}
+			}
+		}
+	}
+	else if type == "select" {
+		var s = page.select
+		if s {
+			var selectedName = s.name
+			var label = name .. ": " .. selectedName
+			sb.appendString(await createHtmlDataTag(label, "p"))
+		}
+	}
+	return sb.toString()
+}
+
+func createPageHtmlFormat(page as NotionClient.Page) async as string
+{
+	var sb = new StringBuilder()
+	if page.properties {
+		var p = page.properties.getKeys()
+		foreach item in p {
+			var pp = page.properties.getDynamicMap(item)
+			var data = NotionClient.PageProperty.forData(pp)
+			sb.appendString(await getPropertyContent(data, item))
+		}
+	}
+	sb.appendString(await createHtmlDataTag(page.created_time, "p"))
+	return sb.toString()
+}
+
+func toHtml(blocks as vector<NotionClient.Block>) async as string
+{
+	var sb = new StringBuilder()
+	var pageBlocksHtml as string = ""
+	if blocks:
+		pageBlocksHtml = await blocksToHtml(blocks)
+	sb.appendString(pageBlocksHtml)
+	return sb.toString()
+}

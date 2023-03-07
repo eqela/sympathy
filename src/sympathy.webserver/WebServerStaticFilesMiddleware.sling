@@ -1,7 +1,7 @@
 
 /*
  * This file is part of Eqela Sympathy
- * Copyright (c) 2020-2022 J42 Pte Ltd
+ * Copyright (c) 2020-2023 J42 Pte Ltd
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -44,6 +44,7 @@ prop directory as File
 prop urlPrefix as string
 prop listDirectories as bool = false
 prop maxAge as int = 0
+prop staleIfError as int = 0
 prop serverUrl as string
 prop serverName as string
 prop processTemplateFiles as bool = false
@@ -192,11 +193,21 @@ func startResponse(request as WebServerRequest, contentType as string)
 {
 	request.setResponseStatus(200)
 	request.setResponseHeader("Content-Type", contentType)
-	if maxAge > 0 {
-		request.setResponseHeader("Cache-Control", "max-age=" .. String.forInteger(maxAge))
+	if maxAge < 1 && staleIfError < 1 {
+		request.setResponseHeader("Cache-Control", "no-cache")
 	}
 	else {
-		request.setResponseHeader("Cache-Control", "no-cache")
+		var sb = new StringBuilder()
+		sb.appendString("public")
+		if maxAge > 0 {
+			sb.appendString(", max-age=")
+			sb.appendString(String.forInteger(maxAge))
+		}
+		if staleIfError > 0 {
+			sb.appendString(", stale-if-error=")
+			sb.appendString(String.forInteger(staleIfError))
+			request.setResponseHeader("Cache-Control", sb.toString())
+		}
 	}
 }
 

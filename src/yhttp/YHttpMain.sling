@@ -22,7 +22,23 @@
  * SOFTWARE.
  */
 
+import jk.fs
+import sympathy.config
+import sympathy.webserver
+
 class:
 
-pvar message as SMTPMessage
-pvar status as bool
+main
+{
+	return await WebServerMain.execute(args, func(server as WebServer) async {
+        var wwwroot = ServerConfig.accept("WWWROOT")
+        if String.isEmpty(wwwroot):
+            wwwroot = "."
+        var mw = WebServerStaticFilesMiddleware.forDirectory(File.forPath(wwwroot))
+        mw.indexFiles = [
+            "index.html"
+        ]
+        mw.listDirectories = true
+		server.use(mw)
+	})
+}

@@ -1,7 +1,7 @@
 
 /*
  * This file is part of Eqela Sympathy
- * Copyright (c) 2020-2022 J42 Pte Ltd
+ * Copyright (c) 2020-2023 J42 Pte Ltd
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -159,30 +159,30 @@ func handleStripeEvents(body as buffer, signature as dynamic) async as StripeEve
 			}}}
 		}
 		catch err {
-			Error.throw(err.message, null)
+			Error.throw(String.asString(err.message), null)
 		}
 		if event.type == "customer.subscription.created" || event.type == "customer.subscription.deleted" || event.type == "customer.subscription.updated" {
 			var evesub = event.data.object
 			var stripeEvent = new StripeEvent()
-			stripeEvent.id = evesub.id
-			stripeEvent.customerId = evesub.customer
-			stripeEvent.description = evesub.description
-			stripeEvent.status = evesub.status
-			stripeEvent.event = paymentProvider.convertStripePaymentEvent(event.type)
+			stripeEvent.id = String.asString(evesub.id)
+			stripeEvent.customerId = String.asString(evesub.customer)
+			stripeEvent.description = String.asString(evesub.description)
+			stripeEvent.status = String.asString(evesub.status)
+			stripeEvent.event = paymentProvider.convertStripePaymentEvent(String.asString(event.type))
 			var plan = evesub.plan
 			if plan {
-				var product = await paymentProvider.retrieveProduct(plan.product)
+				var product = await paymentProvider.retrieveProduct(String.asString(plan.product))
 				stripeEvent.subscriptionProductId = product.id
 			}
 			var price = evesub.price
 			if !stripeEvent.subscriptionProductId && price {
-				var product = await paymentProvider.retrieveProduct(price.product)
+				var product = await paymentProvider.retrieveProduct(String.asString(price.product))
 				stripeEvent.subscriptionProductId = product.id
 			}
 			return stripeEvent
 		}
 		else {
-			println "Unhandled event type" .. event.type
+			println "Unhandled event type" .. String.asString(event.type)
 		}
 	}
 	ELSE {

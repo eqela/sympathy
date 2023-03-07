@@ -1,6 +1,6 @@
 {
     "scripts": {
-        "clean": "rm -rf node_modules dist src/.cache src/.build",
-        "build": "npx -y @eqela/slingdev@3.4.0 build src -o dist"
+        "build": "npx -y @eqela/slingc@3.6.0 build src -cachedir .cache -output dist -npm-install",
+        "clean": "rm -rf .cache dist"
     }
 }

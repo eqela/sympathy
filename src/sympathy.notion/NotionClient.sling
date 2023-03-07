@@ -1,0 +1,622 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2023 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.log
+import jk.json
+import jk.webclient
+import jk.thread
+import jk.time
+
+class:
+
+model Page public
+{
+	object as string
+	id as string
+	created_time as string
+	last_edited_time as string
+	created_by as User
+	last_edited_by as User
+	cover as string
+	icon as string
+	parent as Parent
+	archived as bool
+	url as string
+	properties as DynamicMap
+}
+
+model Database public
+{
+	object as string
+	id as string
+	created_time as string
+	created_by as User
+	last_edited_time as string
+	last_edited_by as User
+	title as DynamicVector
+	description as DynamicVector
+	icon as DynamicMap
+	cover as DynamicMap
+	properties as DynamicMap
+	parent as DynamicMap
+	url as string
+	archived as boolean
+	is_inline as boolean
+}
+
+model User public
+{
+	object as string
+	id as string
+	type as string
+	name as string
+	avatar_url as string
+}
+
+model UsersList public
+{
+	users as User[]
+}
+
+model PageProperty public
+{
+	id as string
+	object as string
+	type as string
+	has_more as bool
+	property_item as PropertyItem
+	date as Date
+	checkbox as bool
+	multi_select as MultiSelect[]
+	title as RichText[]
+	rich_text as RichText[]
+	select as Select
+}
+
+model Select public
+{
+	id as string
+	name as string
+	color as string
+}
+
+model PropertyItem public
+{
+	object as string
+	id as string
+	type as string
+}
+
+model Parent public
+{
+	type as string
+	database_id as string
+}
+
+model File public
+{
+	type as string
+	file as HostedFile
+	external as ExternalFile
+	caption as RichText[]
+}
+
+model TableRow public
+{
+	cells as RichText[][]
+}
+
+model Block public
+{
+	object as string
+	id as string
+	parent as DynamicMap
+	type as string
+	created_time as string
+	created_by as User
+	last_edited_by as User
+	last_edited_time as string
+	archived as boolean
+	has_children as boolean
+	paragraph as Paragraph
+	heading_1 as Paragraph
+	heading_2 as Paragraph
+	heading_3 as Paragraph
+	callout as Callout
+	quote as ListItem
+	bulleted_list_item as ListItem
+	numbered_list_item as ListItem
+	to_do as ToDo
+	// toggle
+	code as Code
+	// child_page
+	// child_database
+	embed as Embed
+	image as File
+	video as File
+	file as File
+	pdf as File
+	bookmark as Bookmark
+	equation as Equation
+	// divider
+	// table_of_contents
+	// breadcrumb
+	// column_list
+	// column
+	// link_preview
+	// template
+	link_to_page as LinkToPage
+	// synced_block
+	// table
+	table_row as TableRow
+}
+
+model BlockGroup public
+{
+	type as string
+	blocks as Block[]
+}
+
+model LinkToPage public
+{
+	page_id as string
+}
+
+model PageResultList public
+{
+	object as string
+	results as Page[]
+	next_cursor as string
+	has_more as boolean
+	type as string
+	page as Page
+}
+
+model BlockResultList public
+{
+	object as string
+	results as Block[]
+	next_cursor as string
+	has_more as boolean
+	type as string
+	block as Block
+}
+
+model Annotations public
+{
+	bold as bool
+	italic as bool
+	strikethrough as bool
+	underline as bool
+	code as bool
+	color as string
+}
+
+model Link public
+{
+	url as string
+}
+
+model TextModel public
+{
+	content as string
+	link as Link
+}
+
+model Date public
+{
+	start as string
+	end as string
+	time_zone as string
+}
+
+model MultiSelect public
+{
+	id as string
+	name as string
+	color as string
+}
+
+model MentionPage public
+{
+	id as string
+}
+
+model Mention public
+{
+	type as string
+	page as MentionPage
+}
+
+model RichText public
+{
+	type as string
+	text as TextModel
+	mention as Mention
+	equation as Equation
+	annotations as Annotations
+	plain_text as string
+	href as string
+}
+
+model Paragraph public
+{
+	rich_text as RichText[]
+	color as string
+}
+
+model Bookmark public
+{
+	caption as RichText[]
+	url as string
+}
+
+model Code public
+{
+	rich_text as RichText[]
+	caption as RichText[]
+	language as string
+}
+
+model ListItem public
+{
+	rich_text as RichText[]
+	color as string
+	children as DynamicMap
+}
+
+model Callout public
+{
+	rich_text as RichText[]
+	icon as Icon
+	color as string
+	children as DynamicMap
+}
+
+model Icon public
+{
+	type as string
+}
+
+model ToDo public
+{
+	rich_text as RichText[]
+	checked as boolean
+	color as string
+	children as DynamicMap
+}
+
+model Equation public
+{
+	expression as string
+}
+
+model MediaBlock public
+{
+	name as string
+	type as string
+	external as ExternalFile
+	caption as RichText[]
+	file as HostedFile
+}
+
+model HostedFile public
+{
+	url as string
+	expiry_time as string
+}
+
+model ExternalFile public
+{
+	url as string
+}
+
+model Embed public
+{
+	caption as RichText[]
+	url as string
+}
+
+prop ctx as LoggingContext
+prop apiBaseUrl as string = "https://api.notion.com/v1"
+prop apiVersion as string = "2022-06-28"
+prop authKey as string
+var rateLimitedUntil as long = 0L
+
+ctor(ctx as LoggingContext, authKey as string)
+{
+	this.ctx = ctx
+	this.authKey = authKey
+}
+
+func onInvalidResponse(response as dynamic):
+	Error.throw("notionInvalidResponse", response)
+
+func toPostBody(data as dynamic) as buffer
+{
+	if data == null:
+		return null
+	if data is JSONObject {
+		var jo = assert (data as! JSONObject).toJsonObject()
+		var jostr = assert JSONEncoder.toString(jo)
+		return String.toUTF8Buffer(jostr)
+	}
+	if data is object {
+		return String.toUTF8Buffer(JSONEncoder.toString(data as! object))
+	}
+	return null
+}
+
+func callToNotion(method as string, path as string, postBody as dynamic) async private as DynamicMap
+{
+	var key = authKey
+	if not key:
+		Error.throw("notionMissingAuthKey", null)
+	if rateLimitedUntil > 0L {
+		var now = SystemClock.asUTCSeconds()
+		if now < rateLimitedUntil:
+			Error.throw("notionRateLimited", String.forLongInteger(rateLimitedUntil - now))
+		rateLimitedUntil = 0L
+	}
+	if String.startsWith(path, "/") == false:
+		Error.throw("notionInvalidApiPath", path)
+	var url = apiBaseUrl .. path
+	var headers = new KeyValueList<string,string>()
+	headers.add("Authorization", "Bearer " .. key)
+	headers.add("Notion-Version", apiVersion)
+	var pb = toPostBody(postBody)
+	if pb {
+		headers.add("accept", "application/json")
+		headers.add("content-type", "application/json")
+	}
+	var responseValue as DynamicMap
+	var retries = 0
+	while not responseValue {
+		if ctx && ctx.isInDebugMode():
+			Log.debug(ctx, "Calling Notion API: `" .. method .. " " .. url .. " ..")
+		var response = await WebClient.instance().executeQuery(ctx, method, url, headers, pb)
+		if not response:
+			Error.throw("notionNoApiResponse", url)
+		var status = response.statusCode
+		var message = response.statusMessage
+		var responseBody as string
+		if response.body:
+			responseBody = response.getBodyAsString()
+		if responseBody && ctx && ctx.isInDebugMode():
+			Log.debug(ctx, "Received from Notion: " .. responseBody)
+		if String.startsWith(status, "2") == false {
+			if String.startsWith(status, "5") {
+				// internal error at Notion
+				retries++
+				if retries > 5:
+					Error.throw("notionInternalError", "retries: " .. String.forInteger(retries) .. ", error: " .. message)
+				Log.warning(ctx, "Received error `" .. status .. "' from Notion API, waiting 5 seconds to retry.")
+				await CurrentThread.sleepSecondsAsync(5)
+				continue
+			}
+			if status == "429" {
+				// rate limited
+				var retryAfter = String.toInteger(response.getHeaderValue("retry-after"))
+				if retryAfter < 1:
+					retryAfter = 60
+				rateLimitedUntil = SystemClock.asUTCSeconds() + retryAfter
+				var retryAfterString = String.forLongInteger(retryAfter)
+				Log.warning(ctx, "Received error `429 rate limited' from Notion. Retry after `" .. retryAfterString .. "'.")
+				Error.throw("notionRateLimited", retryAfterString)
+			}
+			Error.throw("notionApiError", response)
+		}
+		responseValue = JSONParser.parseString(responseBody) as DynamicMap
+	}
+	return responseValue
+}
+
+func createPage(data as Page) async as Page
+{
+	var response = await callToNotion("POST", "/pages/", data)
+	var v = Page.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	return v
+}
+
+func getPage(pageId as string) async as Page
+{
+	var response = await callToNotion("GET", "/pages/" .. pageId, null)
+	var z = Page.forData(response)
+	if not z:
+		onInvalidResponse(response)
+	return z
+}
+
+func updatePage(pageId as string, data as Page) async as Page
+{
+	var response = await callToNotion("PATCH", "/pages/" .. pageId, data)
+	var r = Page.forData(response)
+	if not r:
+		onInvalidResponse(response)
+	return r
+}
+
+func getPropertyItem(databaseId as string, pageId as string, propertyName as string) async as PropertyItem
+{
+	if String.isEmpty(databaseId):
+		Error.throw("missingParameter", "databaseId")
+	if String.isEmpty(pageId):
+		Error.throw("missingParameter", "pageId")
+	if String.isEmpty(propertyName):
+		Error.throw("missingParameter", "propertyName")
+	var properties = await getPropertiesList(databaseId)
+	if not properties:
+		onInvalidResponse(properties)
+	var property = properties.getDynamicMap(propertyName)
+	if not property:
+		Error.throw("propertyNotFound", propertyName)
+	var propertyId = property.getString("id")
+	if not propertyId:
+		Error.throw("noPropertyId", property)
+	var propertyUrl = "/pages/" .. pageId .. "/properties/" .. propertyId
+	var response = await callToNotion("GET", propertyUrl, null)
+	var v = PropertyItem.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	return v
+}
+
+func getPropertiesList(databaseId as string) async as DynamicMap
+{
+	if String.isEmpty(databaseId):
+		Error.throw("missingParameter", "databaseId")
+	var dbDetails = await getDatabaseDetails(databaseId)
+	return dbDetails.properties
+}
+
+func createDatabase(data as Database) async as Database
+{
+	if not data:
+		Error.throw("missingParameter", "data")
+	var createDatabaseUrl = "/databases"
+	var response = await callToNotion("POST", createDatabaseUrl, data)
+	var v = Database.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	return v
+}
+
+func updateDatabase(databaseId as string, data as Database) async as Database
+{
+	if String.isEmpty(databaseId):
+		Error.throw("missingParameter", "databaseId")
+	if not data:
+		Error.throw("missingParameter", "data")
+	var databaseApiUrl = "/databases/" .. databaseId
+	var response = await callToNotion("PATCH", databaseApiUrl, data)
+	var v = Database.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	return v
+}
+
+func getDatabaseDetails(databaseId as string) async as Database
+{
+	if String.isEmpty(databaseId):
+		Error.throw("missingParameter", "databaseId")
+	var databaseApiUrl = "/databases/" .. databaseId
+	var response = await callToNotion("GET", databaseApiUrl, null)
+	var propList = response.get("properties")
+	var v = Database.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	return v
+}
+
+func queryDatabase(databaseId as string, data as DynamicMap) async as PageResultList
+{
+	if String.isEmpty(databaseId):
+		Error.throw("missingParameter", "databaseId")
+	if not data:
+		Error.throw("missingParameter", "data")
+	var queryUrl = "/databases/" .. databaseId .. "/query"
+	var response = await callToNotion("POST", queryUrl, data)
+	var v = PageResultList.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	return v
+}
+
+func queryPageFromDatabase(databaseId as string, key as string, value as string) async as Page
+{
+	if String.isEmpty(databaseId):
+		Error.throw("missingParameter", "databaseId")
+	var s = new map {
+		equals value
+	}
+	var v = new map {
+		property key
+		rich_text s
+	}
+	var filter = new DynamicMap()
+	filter.setObject("filter", v)
+	var queryUrl = "/databases/" .. databaseId .. "/query"
+	var response = await callToNotion("POST", queryUrl, filter)
+	var r = PageResultList.forData(response)
+	if not r:
+		onInvalidResponse(response)
+	return Vector.get(r.results, 0)
+}
+
+func getUser(userId as string) async as User
+{
+	if String.isEmpty(userId):
+		Error.throw("missingParameter", "userId")
+	var userUrl = "/users/" .. userId
+	var response = await callToNotion("GET", userUrl, null)
+	var v = User.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	return v
+}
+
+func getAllUsers async as UsersList
+{
+	var usersListUrl = "/users"
+	var response = await callToNotion("GET", usersListUrl, null)
+	var v = UsersList.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	return v
+}
+
+func getBlock(blockId as string) async as Block
+{
+	if String.isEmpty(blockId):
+		Error.throw("missingParameter", "blockId")
+	var blockUrl = "/blocks/" .. blockId
+	var response = await callToNotion("GET", blockUrl , null)
+	var v = Block.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	return v
+}
+
+func getChildrenBlocks(blockId as string) async as vector<Block>
+{
+	if String.isEmpty(blockId):
+		Error.throw("missingParameter", "blockId")
+	var blockChildren = "/blocks/" .. blockId .. "/children"
+	var response = await callToNotion("GET", blockChildren, null)
+	var v = BlockResultList.forData(response)
+	if not v:
+		onInvalidResponse(response)
+	var b = new vector<Block>
+	foreach block in v.results {
+		b += block
+		if block.has_children {
+			var a = await getChildrenBlocks(block.id)
+			foreach item in a:
+				b += item
+		}
+	}
+	return b
+}

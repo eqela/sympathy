@@ -1,7 +1,7 @@
 
 /*
  * This file is part of Eqela Sympathy
- * Copyright (c) 2020-2022 J42 Pte Ltd
+ * Copyright (c) 2020-2023 J42 Pte Ltd
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -244,7 +244,7 @@ model SmartCollectionRequest public
 	smart_collection as SmartCollection
 }
 
-func forClientIdAndSecret(ctx as LoggingContext, clientId as string, clientSecret) static as this
+func forClientIdAndSecret(ctx as LoggingContext, clientId as string, clientSecret as string) static as this
 {
 	var v = new this(ctx)
 	v.clientId = clientId
