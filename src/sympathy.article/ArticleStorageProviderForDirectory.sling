@@ -1,0 +1,237 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2023 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.fs
+import jk.log
+import jk.time
+import jk.mime
+import jk.template
+
+class is ArticleStorageProvider:
+
+class CachedDocument
+{
+	prop document as RichTextDocument
+	prop timestamp as long
+}
+
+class MyReferenceResolver is RichTextDocumentReferenceResolver
+{
+	prop documentCache as map<string,CachedDocument>
+
+	func getReferenceHref(refid as string) async as string
+	{
+		if refid:
+			return "/" .. refid
+		return null
+	}
+
+	func getReferenceTitle(refid as string) async as string
+	{
+		assert refid
+		if documentCache {
+			var document = Map.get(documentCache, refid)
+			if document {
+				var rtd = document.document
+				if rtd {
+					var metadata = rtd.getAllMetadata()
+					if metadata {
+						var v = metadata.getString("title")
+						if String.isNotEmpty(v):
+							return v
+					}
+				}
+			}
+		}
+		return refid
+	}
+
+	func getContentString(cid as string) async as string:
+		return null
+}
+
+func forDirectory(ctx as LoggingContext, directory as File) static as this
+{
+	var v = new this(ctx)
+	v.articleDirectory = directory
+	v.updateCache()
+	return v
+}
+
+prop articleDirectory as File
+var categoryCache = new map<string,StringSet>
+var documentCache = new map<string,CachedDocument>
+
+func updateCache
+{
+	assert articleDirectory
+	var changed = false
+	var it = articleDirectory.entries()
+	while it {
+		var ff = it.next()
+		if not ff:
+			break
+		if not ff.hasExtension("article"):
+			continue
+		var articleId = ff.getBasenameWithoutExtension()
+		var ffmodified = ff.getLastModifiedTimeStamp()
+		var cached = Map.get(documentCache, articleId)
+		if cached && cached.timestamp == ffmodified:
+			continue
+		Log.info(ctx, "Reading article: `" .. ff.getPath() .. "' ..")
+		var rtd = RichTextDocument.forWikiMarkupFile(ff)
+		if not rtd:
+			continue
+		var cd = new CachedDocument()
+		cd.document = rtd
+		cd.timestamp = ffmodified
+		Map.set(documentCache, articleId, cd)
+		changed = true
+	}
+	if changed {
+		var categoryMap = new map<string,StringSet>
+		foreach articleId in Map.getKeys(documentCache) {
+			var doc = Map.get(documentCache, articleId)
+			if not doc:
+				continue
+			var rtd = doc.document
+			if not rtd:
+				continue
+			var metadata = rtd.getAllMetadata()
+			if not metadata:
+				continue
+			var categories = metadata.getString("categories")
+			if not categories:
+				continue
+			foreach category in String.split(categories, ' ') {
+				var ss = Map.get(categoryMap, category)
+				if not ss {
+					ss = new StringSet()
+					Map.set(categoryMap, category, ss)
+				}
+				ss.add(articleId)
+			}
+		}
+		categoryCache = categoryMap
+	}
+}
+
+func getArticlesMetadataForCategory(categoryId as string) async override as vector<ArticleMetadata>
+{
+	if not categoryId:
+		return null
+	var categoryArticleSet = Map.get(categoryCache, categoryId)
+	if not categoryArticleSet:
+		return null
+	var articles = new vector<ArticleMetadata>
+	foreach articleId in categoryArticleSet.getAll() {
+		var aa as ArticleMetadata
+		var doc = Map.get(documentCache, articleId)
+		if doc {
+			var rtd = doc.document
+			if rtd {
+				var metadata = rtd.getAllMetadata()
+				if metadata:
+					aa = ArticleMetadata.forData(metadata.duplicateMap())
+			}
+		}
+		if not aa:
+			aa = new ArticleMetadata()
+		aa.id = articleId
+		if String.isEmpty(aa.title):
+			aa.title = articleId
+		articles += aa
+	}
+	return articles
+}
+
+func getArticleMetadata(articleId as string) async override as ArticleMetadata
+{
+	assert articleId
+	updateCache()
+	var doc = assert Map.get(documentCache, articleId)
+	var rtd = assert doc.document
+	var metadata = rtd.getAllMetadata()
+	var data = metadata ? metadata.duplicateMap() : new DynamicMap()
+	return ArticleMetadata.forData(data)
+}
+
+func getArticleHtml(article as ArticleMetadata, htmlSettings as ArticleHtmlSettings) async override as string
+{
+	assert article
+	var articleId = assert article.id
+	updateCache()
+	var doc = assert Map.get(documentCache, articleId)
+	var rtd = assert doc.document
+	var html = await rtd.toHtmlWithResolver(new MyReferenceResolver() {
+		documentCache documentCache
+	})
+	return html
+}
+
+func getArticleAttachment(article as ArticleMetadata, attachmentId as string) async override as ArticleAttachment
+{
+	assert article
+	var articleId = assert article.id
+	assert attachmentId
+	assert articleDirectory
+	var ff = articleDirectory.entry(articleId).entry(attachmentId)
+	if not ff.isFile():
+		ff = articleDirectory.entry("data").entry(articleId).entry(attachmentId)
+	if not ff.isFile():
+		return null
+	var data = ff.getContentsBuffer()
+	if not data:
+		return null
+	var type = MimeTypeRegistry.getSharedInstance().getTypeForFile(ff)
+	return new ArticleAttachment() {
+		id attachmentId
+		mimeType type
+		data data
+	}
+}
+
+func getAllArticlesMetadata async override as vector<ArticleMetadata>
+{
+	updateCache()
+	var v = new vector<ArticleMetadata>
+	foreach articleId in Map.getKeys(documentCache) {
+		var dd = await getArticleMetadata(articleId)
+		if dd:
+			v += dd
+	}
+	return v
+}
+
+func getAllArticleAttachments(article as ArticleMetadata) async override as vector<ArticleAttachment>
+{
+	// FIXME: Not implemented
+	return null
+}
+
+func getArticleHtmlWithAttachments(article as ArticleMetadata, htmlSettings as ArticleHtmlSettings) async override as ArticleHtmlWithAttachments
+{
+	// FIXME: Not implemented
+	return null
+}

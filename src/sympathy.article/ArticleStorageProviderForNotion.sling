@@ -1,0 +1,344 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2023 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.fs
+import jk.log
+import jk.env
+import jk.xml
+import jk.time
+import jk.json
+import jk.mime
+import jk.webclient
+import sympathy.notion
+
+class is ArticleStorageProvider:
+
+prop notionClient as NotionClient
+prop notionDatabaseId as string
+
+func getStringFromRichText(str as vector<NotionClient.RichText>) private as string
+{
+	var sb = new StringBuilder()
+	foreach rt in str:
+		sb.appendString(rt.plain_text)
+	return sb.toString()
+}
+
+func getArticleId(properties as DynamicMap) private as string
+{
+	assert properties
+	var pageIdProp = assert NotionClient.PageProperty.forData(properties.getDynamicMap("pageId"))
+	return getStringFromRichText(pageIdProp.rich_text)
+}
+
+func getArticleTitle(properties as DynamicMap) private as string
+{
+	assert properties
+	var pageTitleProp = assert NotionClient.PageProperty.forData(properties.getDynamicMap("Title"))
+	return getStringFromRichText(pageTitleProp.title)
+}
+
+func getIntro(properties as DynamicMap) private as string
+{
+	assert properties
+	var pageIntro = assert NotionClient.PageProperty.forData(properties.getDynamicMap("intro"))
+	return getStringFromRichText(pageIntro.rich_text)
+}
+
+func getModifiedDate(properties as DynamicMap) private as string
+{
+	assert properties
+	var pageModifiedDate = assert NotionClient.PageProperty.forData(properties.getDynamicMap("modifiedDate"))
+	var date = assert pageModifiedDate.date
+	return date.start
+}
+
+func getSelectedBanner(properties as DynamicMap) private as string
+{
+	assert properties
+	var pageBannerProp = assert NotionClient.PageProperty.forData(properties.getDynamicMap("banner"))
+	var selectProp = assert pageBannerProp.select
+	return selectProp.name
+}
+
+func getSlogan(properties as DynamicMap) private as string
+{
+	assert properties
+	var pageSloganProp = assert NotionClient.PageProperty.forData(properties.getDynamicMap("slogan"))
+	return getStringFromRichText(pageSloganProp.rich_text)
+}
+
+func getRedirectPageId(properties as DynamicMap) private as string
+{
+	assert properties
+	var redirectPageId = assert NotionClient.PageProperty.forData(properties.getDynamicMap("redirectPageId"))
+	return getStringFromRichText(redirectPageId.rich_text)
+}
+
+func getArticleCategories(properties as DynamicMap) private as vector<string>
+{
+	var v = new vector<string>
+	var categoryVector = new vector<string>
+	var categoriesProp = NotionClient.PageProperty.forData(properties.getDynamicMap("categories"))
+	if not categoriesProp:
+		return v
+	var categories = categoriesProp.multi_select
+	if not categories:
+		return v
+	foreach ms in categories {
+		var categoryName = ms.name
+		if categoryName:
+			v += categoryName
+	}
+	return v
+}
+
+func resolvePageLink(pageId as string) async as NotionToHtml.PageLink
+{
+	var pd = assert await notionClient.getPage(pageId)
+	assert pd.properties
+	return new NotionToHtml.PageLink() {
+		url "/" .. getArticleId(pd.properties)
+		text getArticleTitle(pd.properties)
+	}
+}
+
+func getArticleHtmlWithAttachments(article as ArticleMetadata, htmlSettings as ArticleHtmlSettings) async override as ArticleHtmlWithAttachments
+{
+	assert article
+	var attachments = new vector<ArticleAttachment>
+	var notionId = article.backendId
+	var articleHtml as string
+	var notionToHtml = new NotionToHtml() {
+		pageLinkResolver func(pageId as string) async as NotionToHtml.PageLink {
+			if htmlSettings {
+				var resolver = htmlSettings.pageLinkResolver
+				if resolver {
+					var result = await resolver(pageId)
+					if result {
+						return new NotionToHtml.PageLink() {
+							url result.url
+							text result.text
+						}
+					}
+				}
+			}
+			return new NotionToHtml.PageLink() {
+				url "#"
+				text pageId
+			}
+		}
+		attachmentLinkResolver func(attachmentId as string, contentUrl as string) async as string {
+			if contentUrl {
+				var response = await WebClient.instance().executeQuery(ctx, "GET", contentUrl, null, null)
+				if response {
+					var ctype = response.getHeaderValue("content-type")
+					if ctype {
+						var id = attachmentId
+						var ext = MimeTypeRegistry.getSharedInstance().getExtension(ctype)
+						if String.isNotEmpty(ext):
+							id = attachmentId .. "." .. ext
+						attachments += new ArticleAttachment() {
+							id id
+							mimeType ctype
+							data response.body
+						}
+						return id
+					}
+				}
+			}
+			return attachmentId
+		}
+		imgTagMaker func(url as string) async as string {
+			return "<div class=\"img75\"><img src=" .. HTMLString.toQuotedString(url) .. " /></div>"
+		}
+		dataTagMaker func(content as string, tag as string) async as string {
+			if tag == "ul":
+				return "<ul class=\"list\">" .. content .. "</ul>"
+			if tag == "li":
+				return "<li><p>" .. content .. "</p></li>"
+			if tag == "code":
+				return "<pre class=\"code\"><code>" .. content .. "</code></pre>"
+			return null
+		}
+		internalLinkTagMaker func(url as string, title as string) async as string {
+			return "<a href=" .. HTMLString.toQuotedString(url) .. " class=\"referenceLink\">" .. HTMLString.sanitize(title) .. "</a>"
+		}
+		internalLinkBlockMaker func(url as string, title as string) async as string {
+			return "<p class=\"reference\"><a href=" .. HTMLString.toQuotedString(url) .. ">" .. HTMLString.sanitize(title) .. "</a></p>"
+		}
+		externalLinkTagMaker func(url as string, title as string) async as string {
+			return "<a href=" .. HTMLString.toQuotedString(url) .. " class=\"urlLink\" target=\"_blank\">" .. HTMLString.sanitize(title) .. "</a>"
+		}
+		externalLinkBlockMaker func(url as string, title as string) async as string {
+			return "<p class=\"link\"><a href=" .. HTMLString.toQuotedString(url) .. " target=\"_blank\">" .. HTMLString.sanitize(title) .. "</a></p>"
+		}
+	}
+	var blocks = await notionClient.getChildrenBlocks(notionId)
+	if blocks && Vector.getSize(blocks) > 0:
+		articleHtml = await notionToHtml.toHtml(blocks)
+	return new ArticleHtmlWithAttachments() {
+		html articleHtml
+		attachments attachments
+	}
+}
+
+func getArticleHtml(article as ArticleMetadata, htmlSettings as ArticleHtmlSettings) async override as string
+{
+	var vv = assert await getArticleHtmlWithAttachments(article, htmlSettings)
+	return vv.html
+}
+
+func createArticleMetadataForPage(page as NotionClient.Page) private as ArticleMetadata
+{
+	var v = new ArticleMetadata()
+	v.backendId = page.id
+	var properties = page.properties
+	if properties {
+		v.id = getArticleId(properties)
+		v.title = getArticleTitle(properties)
+		v.intro = getIntro(properties)
+		v.banner = getSelectedBanner(properties)
+		v.modifiedDate = getModifiedDate(properties)
+		v.slogan = getSlogan(properties)
+		v.categories = null
+		foreach category in getArticleCategories(properties):
+			v.addToCategories(category)
+		v.redirectPageId = getRedirectPageId(properties)
+	}
+	return v
+}
+
+func getAllArticlesMetadata async override as vector<ArticleMetadata>
+{
+	var v = new vector<ArticleMetadata>
+	var filter = new DynamicMap()
+	filter.setObject("filter", new map {
+		property "published"
+		checkbox new map {
+			equals Boolean.asObject(true)
+		}
+	})
+	loop {
+		var articles = await notionClient.queryDatabase(notionDatabaseId, filter)
+		if not articles:
+			break
+		foreach page in articles.results:
+			v += createArticleMetadataForPage(page)
+		if articles.has_more == false:
+			break
+		filter.setObject("start_cursor", articles.next_cursor)
+	}
+	return v
+}
+
+func getArticleCategoryId(articleId as string) private as string
+{
+	if articleId == "index":
+		return "index"
+	if String.endsWith(articleId, "-articles"):
+		return String.getSubString(articleId, 0, String.getLength(articleId)-9)
+	return null
+}
+
+func getArticleCategoryFilterById(categoryId as string) private as DynamicMap
+{
+	var filter = new DynamicMap()
+	var v = new map {
+		property "categories"
+		multi_select new map {
+			contains categoryId
+		}
+	}
+	filter.setObject("filter", v)
+	return filter
+}
+
+func getArticlesMetadataForCategory(categoryId as string) async override as vector<ArticleMetadata>
+{
+	if not categoryId:
+		return null
+	var categoryFilter = getArticleCategoryFilterById(categoryId)
+	var infoVector = new vector<ArticleMetadata>
+	loop {
+		var categoryArticles = await notionClient.queryDatabase(notionDatabaseId, categoryFilter)
+		if not categoryArticles:
+			break
+		foreach page in categoryArticles.results {
+			var info = createArticleMetadataForPage(page)
+			if String.endsWith(info.id, "-articles") == true:
+				continue
+			infoVector += info
+		}
+		if categoryArticles.has_more == false:
+			break
+		categoryFilter.setObject("start_cursor", categoryArticles.next_cursor)
+	}
+	return infoVector
+}
+
+func getArticleMetadata(articleId as string) async override as ArticleMetadata
+{
+	var article = await notionClient.queryPageFromDatabase(notionDatabaseId, "pageId", articleId)
+	if not article:
+		return null
+	return createArticleMetadataForPage(article)
+}
+
+func getArticleAttachment(article as ArticleMetadata, attachmentId as string) async override as ArticleAttachment
+{
+	var block = assert await notionClient.getBlock(attachmentId)
+	if block.type == "image" {
+		var image = assert block.image
+		var url as string
+		if block.image.file:
+			url = block.image.file.url
+		else if block.image.external:
+			url = block.image.external.url
+		assert url
+		if ctx && ctx.isInDebugMode():
+			Log.debug(ctx, "Getting article attachment `" .. attachmentId .. "' from `" .. url .. "' ..")
+		var imgresp = await WebClient.instance().executeQuery(ctx, "GET", url, null, null)
+		if not imgresp:
+			Error.throw("failedToGetAttachment", url)
+		var data = imgresp.body
+		if not data:
+			Error.throw("noAttachmentData", url)
+		var type = imgresp.getHeaderValue("content-type")
+		if String.isEmpty(type):
+			Error.throw("attachentHasNoMimeType", url)
+		return new ArticleAttachment() {
+			id attachmentId
+			mimeType type
+			data data
+		}
+	}
+	return null
+}
+
+func getAllArticleAttachments(article as ArticleMetadata) async override as vector<ArticleAttachment>
+{
+	var v = assert await getArticleHtmlWithAttachments(article, null)
+	return v.attachments
+}

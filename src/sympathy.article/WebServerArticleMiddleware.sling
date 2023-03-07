@@ -1,0 +1,130 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2023 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.fs
+import jk.env
+import jk.url
+import jk.log
+import jk.text
+import jk.json
+import sympathy.webserver
+import sympathy.article
+import sympathy.notion
+
+class is WebServerRouter:
+
+prop articleManager as ArticleManager
+prop articlesAsDirectories as bool = true
+prop articleCacheTtl as int = 0
+prop articleFileCacheTtl as int = 0
+prop contentCacheStaleTtl as int = 0
+
+func applyCacheControlHeader(request as WebServerRequest, contentCacheTtl as int)
+{
+	if contentCacheTtl < 1 && contentCacheStaleTtl < 1:
+		return
+	var sb = new StringBuilder()
+	sb.appendString("public")
+	if contentCacheTtl > 0 {
+		sb.appendString(", max-age=")
+		sb.appendString(String.forInteger(contentCacheTtl))
+	}
+	if contentCacheStaleTtl > 0 {
+		sb.appendString(", stale-if-error=")
+		sb.appendString(String.forInteger(contentCacheStaleTtl))
+	}
+	request.setResponseHeader("Cache-Control", sb.toString())
+}
+
+func handleArticleRequest(request as WebServerRequest, articleId as string) async
+{
+	if articleManager == null:
+		throw WebServerException.forNotFound()
+	var article = await articleManager.getArticleById(articleId)
+	if not article:
+		throw WebServerException.forNotFound()
+	if articlesAsDirectories {
+		if String.endsWith(request.getPath(), "/") == false {
+			var url = URL.forString(request.getPath(), true)
+			var path = url.getPath()
+			url.setPath(path .. "/")
+			var location = url.toString()
+			request.setResponseStatus(303)
+			request.setResponseHeader("Location", location)
+			await request.writeResponseData(String.toUTF8Buffer(location))
+			await request.endResponse()
+			return
+		}
+	}
+	var redirect = article.redirectPageId
+	if String.isNotEmpty(redirect) {
+		request.setResponseStatus(303)
+		request.setResponseHeader("Location", redirect)
+		await request.writeResponseData(String.toUTF8Buffer(redirect))
+		await request.endResponse()
+		return
+	}
+	var html = await articleManager.getArticleHtmlPage(articleId)
+	request.setResponseStatus(200)
+	request.setResponseHeader("Content-Type", "text/html")
+	applyCacheControlHeader(request, articleCacheTtl)
+	if html:
+		request.writeResponseData(String.toUTF8Buffer(html))
+	request.endResponse()
+}
+
+func stripExtension(value as string) private as string
+{
+	assert value
+	var dot = String.getLastIndexOfCharacter(value, '.')
+	if dot < 0:
+		return value
+	return String.getSubString(value, 0, dot)
+}
+
+func initializeRoutes override
+{
+	addRoute("GET", "/", func(request as WebServerRequest, params as DynamicMap) async {
+		await handleArticleRequest(request, "index")
+	})
+	addRoute("GET", "/:articleId", func(request as WebServerRequest, params as DynamicMap) async {
+		var articleId = StringUtil.sanitizeResourceName(params.getString("articleId"))
+		await handleArticleRequest(request, articleId)
+	})
+	addRoute("GET", "/:articleId/:attachmentId", func(request as WebServerRequest, params as DynamicMap) async {
+		if articleManager == null:
+			throw WebServerException.forNotFound()
+		var articleId = StringUtil.sanitizeResourceName(params.getString("articleId"))
+		var rawAttachmentId = StringUtil.sanitizeResourceName(params.getString("attachmentId"))
+		var attachmentId = stripExtension(rawAttachmentId)
+		var data = await articleManager.getArticleAttachment(articleId, attachmentId)
+		if not data:
+			throw WebServerException.forNotFound()
+		request.setResponseStatus(200)
+		request.setResponseHeader("Content-Type", data.mimeType)
+		applyCacheControlHeader(request, articleFileCacheTtl)
+		request.writeResponseData(data.data)
+		request.endResponse()
+	})
+}

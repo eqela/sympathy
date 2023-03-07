@@ -1,0 +1,298 @@
+
+/*
+ * This file is part of Eqela Sympathy
+ * Copyright (c) 2020-2023 J42 Pte Ltd
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+import jk.fs
+import jk.log
+import jk.time
+import jk.json
+import jk.template
+import jk.time.format
+import sympathy.cache
+
+class:
+
+prop templateFile as File
+prop storage as ArticleStorageProvider
+prop articleMetadataCacheTtl as int = 300
+prop htmlPageCache as KeyValueCache
+prop htmlPageCacheTtlSeconds as int = 3600
+prop bannerPathResolver as function<string,string> = func(bannerName as string) as string {
+	return "/" .. bannerName .. ".jpg"
+}
+prop articlePathResolver as function<string,string> = func(articleName as string) as string {
+	return "/" .. articleName .. "/"
+}
+
+var ctx as LoggingContext
+var articleCacheUpdated as long = 0L
+var articleCacheById as map<string,ArticleMetadata>
+var articleCacheByBackendId as map<string,ArticleMetadata>
+var articleCache as vector<ArticleMetadata>
+
+model HtmlPageCacheEntry
+{
+	timestamp as long
+	content as string
+}
+
+ctor(ctx as LoggingContext):
+	this.ctx = ctx
+
+func getArticleById(articleId as string) async as ArticleMetadata
+{
+	await updateArticleMetadataCache()
+	return Map.get(articleCacheById, articleId)
+}
+
+func getAllArticles async as vector<ArticleMetadata>
+{
+	await updateArticleMetadataCache()
+	return articleCache
+}
+
+func updateArticleMetadataCache async
+{
+	var now = SystemClock.asUTCSeconds()
+	if articleCacheUpdated + articleMetadataCacheTtl > now:
+		return
+	var articles = await storage.getAllArticlesMetadata()
+	var byId = new map<string,ArticleMetadata>
+	var byBackendId = new map<string,ArticleMetadata>
+	foreach article in articles {
+		if article.id:
+			Map.set(byId, article.id, article)
+		if article.backendId:
+			Map.set(byBackendId, article.backendId, article)
+	}
+	articleCacheById = byId
+	articleCacheByBackendId = byBackendId
+	articleCache = articles
+	articleCacheUpdated = now
+}
+
+func formatDate(date as string) private as string
+{
+	assert date
+	return VerboseDateTimeString.getDateStringForDateTime(DateTime.forString(date))
+}
+
+func sortArticleCategoriesByDate(articleCategories as vector<ArticleMetadata>) private as DynamicVector
+{
+	if Vector.getSize(articleCategories) > 0 {
+		Vector.sort(articleCategories, func(a as ArticleMetadata, b as ArticleMetadata) as int {
+			if String.isEmpty(a.intro) && String.isNotEmpty(b.intro):
+				return 1
+			if String.isNotEmpty(a.intro) && String.isEmpty(b.intro):
+				return -1
+			if String.isEmpty(a.modifiedDate) && String.isNotEmpty(b.modifiedDate):
+				return 1
+			if String.isNotEmpty(a.modifiedDate) && String.isEmpty(b.modifiedDate):
+				return -1
+			var dateComparison = String.compare(b.modifiedDate, a.modifiedDate)
+			if dateComparison != 0:
+				return dateComparison
+			return 0
+		})
+		var articles = new DynamicVector()
+		foreach a in articleCategories {
+			var aa = a.toDynamicMap()
+			aa.setString("modifiedDateFormatted", formatDate(a.modifiedDate))
+			articles.appendObject(aa)
+		}
+		return articles
+	}
+	return null
+}
+
+func getRelatedCategoryIdForArticleId(articleId as string) private as string
+{
+	if articleId == "index":
+		return "index"
+	if String.endsWith(articleId, "-articles"):
+		return String.getSubString(articleId, 0, String.getLength(articleId)-9)
+	return null
+}
+
+func getRelatedArticles(article as ArticleMetadata) private async as vector<ArticleMetadata>
+{
+	var v = new vector<ArticleMetadata>
+	if not article:
+		return v
+	var categoryId = getRelatedCategoryIdForArticleId(article.id)
+	if not categoryId:
+		return v
+	foreach article in articleCache {
+		foreach acat in article.categories {
+			if acat == categoryId {
+				v += article
+				break
+			}
+		}
+	}
+	return v
+}
+
+func getBannerUrl(banner as string) as string
+{
+	var bannerName = banner
+	var resolver = bannerPathResolver
+	if resolver:
+		bannerName = resolver(banner)
+	return bannerName
+}
+
+func generateArticleHtml(articleId as string, includeAttachments as bool) private async as ArticleHtmlWithAttachments
+{
+	var article = assert await getArticleById(articleId)
+	var settings = new ArticleStorageProvider.ArticleHtmlSettings() {
+		pageLinkResolver func(backendId as string) async as ArticleStorageProvider.PageLinkInfo {
+			await updateArticleMetadataCache()
+			var url as string
+			var text as string
+			var article = Map.get(articleCacheByBackendId, backendId)
+			if article {
+				text = article.title
+				url = article.id
+				var resolver = articlePathResolver
+				if resolver:
+					url = resolver(url)
+			}
+			else {
+				Log.warning(ctx, "Article with backendId `" .. backendId .. "' was not found.")
+			}
+			if String.isEmpty(url):
+				url = "#"
+			if String.isEmpty(text):
+				text = "(not found)"
+			return new ArticleStorageProvider.PageLinkInfo() {
+				url url
+				text text
+			}
+		}
+	}
+	var result as ArticleHtmlWithAttachments
+	if includeAttachments {
+		result = await storage.getArticleHtmlWithAttachments(article, settings)
+	}
+	else {
+		var htmlContent = await storage.getArticleHtml(article, settings)
+		if not htmlContent:
+			htmlContent = ""
+		result = new ArticleHtmlWithAttachments() {
+			html htmlContent
+			attachments null
+		}
+	}
+	if templateFile {
+		var content = new DynamicMap()
+		content.setString("title", article.title)
+		content.setString("intro", article.intro)
+		content.setString("slogan", article.slogan)
+		var banner = article.banner
+		if String.isEmpty(banner):
+			banner = "default"
+		content.setString("banner", getBannerUrl(banner))
+		content.setString("modifiedDateFormatted", formatDate(article.modifiedDate))
+		content.setObject("categories", article.categories)
+		var sortedRelatedArticles as DynamicVector
+		var relatedArticles = await getRelatedArticles(article)
+		if relatedArticles:
+			sortedRelatedArticles = sortArticleCategoriesByDate(relatedArticles)
+		if sortedRelatedArticles && sortedRelatedArticles.getSize() > 0:
+			content.setObject("relatedArticles", sortedRelatedArticles)
+		content.setString("htmlContent", result.html)
+		if not templateFile.isFile():
+			Error.throw("invalidTemplateFile", templateFile)
+		var template = TextTemplate.forHTMLFile(templateFile)
+		if not template:
+			Error.throw("failedToProcessTemplate", templateFile)
+		var vars = new DynamicMap()
+		vars.setObject("content", content)
+		result.html = template.execute(vars)
+	}
+	return result
+}
+
+func getArticleHtmlPage(articleId as string) async as string
+{
+	assert articleId
+	var cacheId = "article-" .. articleId
+	var cachedPage as HtmlPageCacheEntry
+	if htmlPageCache {
+		var cachedData = await htmlPageCache.get(cacheId)
+		if cachedData {
+			var parsedCachedData = JSONParser.parseString(cachedData) as DynamicMap
+			if parsedCachedData:
+				cachedPage = HtmlPageCacheEntry.forData(parsedCachedData)
+		}
+	}
+	if cachedPage && cachedPage.timestamp + htmlPageCacheTtlSeconds > SystemClock.asUTCSeconds() {
+		// always return cached article if within the TTL
+		if ctx && ctx.isInDebugMode():
+			Log.debug(ctx, "Using cached copy of article HTML `" .. articleId .. "'.")
+		return cachedPage.content
+	}
+	try {
+		if ctx && ctx.isInDebugMode():
+			Log.debug(ctx, "Generating article HTML: `" .. articleId .. "' ..")
+		var html as string
+		var pageData = await generateArticleHtml(articleId, false)
+		if pageData:
+			html = pageData.html
+		if htmlPageCache {
+			var cacheEntry = new HtmlPageCacheEntry() {
+				timestamp SystemClock.asUTCSeconds()
+				content html
+			}
+			await htmlPageCache.set(cacheId, JSONEncoder.encode(cacheEntry), 0)
+		}
+		if ctx && ctx.isInDebugMode() {
+			if html {
+				Log.debug(ctx, "Article HTML generated: `" .. articleId .. "'.")
+			}
+			else {
+				Log.debug(ctx, "Article does not exist in storage: `" .. articleId .. "'.")
+			}
+		}
+		return html
+	}
+	catch e {
+		Log.error(ctx, "Failed to generate article HTML: `" .. articleId .. "' (" .. String.asString(e) .. ")")
+		if not cachedPage:
+			throw e
+	}
+	// if we fail to get the most recent version of the article, we return the latest
+	// cached article anyway, even if it has already expired.
+	return cachedPage.content
+}
+
+func getArticleAttachment(articleId as string, attachmentId as string) async as ArticleAttachment
+{
+	assert storage
+	var article = assert await getArticleById(articleId)
+	return await storage.getArticleAttachment(article, attachmentId)
+}
+
+func getArticleHtmlWithAttachments(articleId as string) async as ArticleHtmlWithAttachments:
+	return await generateArticleHtml(articleId, true)
